@@ -11,7 +11,7 @@ from superset.app import create_app
 
 if TYPE_CHECKING:
     from superset.connectors.sqla.models import SqlaTable
-    from superset.dashboards.models import Dashboard
+    from superset.models.dashboard import Dashboard
     from superset.models.core import Database
     from superset.models.slice import Slice
 
@@ -135,7 +135,7 @@ def build_position_json(charts: list[Slice]) -> str:
 
 
 def upsert_dashboard(charts: list[Slice]) -> None:
-    from superset.dashboards.models import Dashboard
+    from superset.models.dashboard import Dashboard
     from superset.extensions import db
 
     dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == DASHBOARD_TITLE).one_or_none()
