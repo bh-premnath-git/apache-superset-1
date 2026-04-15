@@ -71,6 +71,9 @@ if [[ -f /app/seed/import_datasources.yaml ]]; then
   echo "[init] Reconciling sales DB URI to mysql+pymysql for compatibility..."
 python - <<'PY'
 import os
+import sys
+
+from sqlalchemy.engine.url import make_url
 
 from superset.app import create_app
 
@@ -93,12 +96,47 @@ with app.app_context():
     )
     if sales_db is None:
         print("[init] Sales database metadata not found after import; skipping URI reconciliation.")
-    elif sales_db.sqlalchemy_uri != expected_uri:
-        sales_db.sqlalchemy_uri = expected_uri
+        sys.exit(0)
+
+    # `sqlalchemy_uri` is stored with a masked password; the real password lives
+    # in the separate encrypted `password` column. Compare on the driver +
+    # hostname + database portion of the URL so we only rewrite when the stored
+    # URI is missing the `+pymysql` driver suffix (or otherwise drifted).
+    current = make_url(sales_db.sqlalchemy_uri)
+    wanted = make_url(expected_uri)
+
+    needs_update = (
+        current.drivername != wanted.drivername
+        or current.host != wanted.host
+        or (current.port or 3306) != (wanted.port or 3306)
+        or current.database != wanted.database
+        or current.username != wanted.username
+    )
+
+    if needs_update:
+        # Use the official setter so the password is extracted into the
+        # encrypted `password` column and the stored URI keeps the driver
+        # suffix (mysql+pymysql) with a masked password.
+        sales_db.set_sqlalchemy_uri(expected_uri)
         db.session.commit()
-        print("[init] Updated sales database URI to mysql+pymysql.")
+        print(
+            f"[init] Updated sales database URI to {sales_db.sqlalchemy_uri} "
+            "(password stored encrypted)."
+        )
     else:
         print("[init] Sales database URI already uses mysql+pymysql.")
+
+    # Smoke-test the connection so any remaining driver/URI issues surface
+    # during init rather than at first chart render. We resolve the URI
+    # through `sqlalchemy_uri_decrypted` so we exercise the exact same
+    # URL-reassembly path Superset uses when opening connections.
+    from sqlalchemy import create_engine, text
+
+    test_engine = create_engine(sales_db.sqlalchemy_uri_decrypted)
+    with test_engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    test_engine.dispose()
+    print("[init] Verified sales database connectivity via pymysql.")
 PY
 else
   echo "[init] No datasource import file found, skipping."
