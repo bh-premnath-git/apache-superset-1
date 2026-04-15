@@ -55,6 +55,29 @@ def get_table(database_name: str, table_name: str) -> SqlaTable:
     return table
 
 
+def ensure_required_columns(table: SqlaTable, required_columns: set[str]) -> None:
+    """Ensure imported datasets expose the required columns for seeded charts."""
+    from superset.extensions import db
+
+    def column_names() -> set[str]:
+        return {column.column_name for column in table.columns}
+
+    missing_columns = required_columns - column_names()
+    if not missing_columns:
+        return
+
+    table.fetch_metadata()
+    db.session.flush()
+
+    missing_columns = required_columns - column_names()
+    if missing_columns:
+        missing_display = ", ".join(sorted(missing_columns))
+        raise RuntimeError(
+            f"Dataset '{table.table_name}' is missing expected columns after metadata refresh: {missing_display}. "
+            "Verify seed SQL schema and imported datasets."
+        )
+
+
 def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict) -> Slice:
     from superset.extensions import db
     from superset.models.slice import Slice
@@ -168,6 +191,11 @@ def main() -> None:
         customers = get_table("sales", "customers")
         dau = get_table("analytics", "daily_active_users")
 
+        ensure_required_columns(orders, {"order_date", "amount"})
+        ensure_required_columns(products, {"id", "category"})
+        ensure_required_columns(customers, {"id", "country"})
+        ensure_required_columns(dau, {"date", "dau"})
+
         bar_chart = upsert_chart(
             chart_name="Sales Amount by Day (Bar)",
             viz_type="echarts_timeseries_bar",
@@ -211,6 +239,8 @@ def main() -> None:
             table=customers,
             params={
                 "entity": "country",
+                "country_fieldtype": "cca2",
+                "select_country": "world",
                 "metric": simple_metric("id", "COUNT"),
                 "row_limit": 10000,
             },
