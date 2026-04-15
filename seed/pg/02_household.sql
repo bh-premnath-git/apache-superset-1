@@ -1,34 +1,72 @@
 -- Sample household survey schema for Postgres (superset-analytics-db)
 -- Connection URI: postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
--- Synthetic data with segment-aware distribution and weighted sampling
+--
+-- ── Architecture ─────────────────────────────────────────────────────────────
+-- Raw layer       : household          (atomic facts, 200K rows)
+-- Analytical layer: segment_summary, state_summary, income_distribution,
+--                   district_segment_summary, household_monthly_trend
+--
+-- Charts should point at the analytical views (not the raw table) for:
+--   • consistent weighting / bucketing logic
+--   • reusable semantics across dashboards
+--   • smaller payloads and faster render
 
--- ── Schema ───────────────────────────────────────────────────────────────────
+-- ── Raw fact table ───────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS household (
     household_id       BIGSERIAL PRIMARY KEY,
+
+    -- Time dimension (enables monthly / weekly / yearly rollups)
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Geography (name + stable code + coordinates for maps)
     state              TEXT,
+    state_code         TEXT,
     district           TEXT,
-    segment            TEXT, -- R1, R2, R3, R4
-    
+    district_code      TEXT,
+    lat                NUMERIC(8, 4),
+    lon                NUMERIC(8, 4),
+
+    -- Segment (R1 Stable, R2 Aspirant, R3 Disconnected, R4 Constrained)
+    segment            TEXT,
+
+    -- Income & spend
     income             NUMERIC,
     food_spend_pct     NUMERIC,
     edu_spend_pct      NUMERIC,
 
+    -- Digital behaviour
     has_internet       BOOLEAN,
     does_online_purchase BOOLEAN,
 
-    social_category    TEXT, -- SC/ST/OBC/GEN
+    -- Demographics
+    social_category    TEXT,
     hh_size            INT,
 
+    -- Welfare programs
     has_pmay           BOOLEAN,
     has_ayushman       BOOLEAN,
     has_ration_card    BOOLEAN,
 
+    -- Survey weight
     multiplier         NUMERIC
 );
 
 -- ── Fast Bulk Data Generation (200K households) ───────────────────────────────
+-- Row generation is driven by one CTE so state name/code/centroid stay aligned
+-- and the segment probability draw (`r`) is reused across dependent columns.
+WITH gen AS (
+    SELECT
+        random()                                AS r,
+        (floor(random() * 5) + 1)::int          AS state_idx,
+        (floor(random() * 50) + 1)::int         AS district_idx,
+        -- Spread creation dates over the last 365 days for time-series views
+        NOW() - (random() * INTERVAL '365 days') AS created_at
+    FROM generate_series(1, 200000)
+)
 INSERT INTO household (
-    state, district, segment,
+    created_at,
+    state, state_code, district, district_code, lat, lon,
+    segment,
     income, food_spend_pct, edu_spend_pct,
     has_internet, does_online_purchase,
     social_category, hh_size,
@@ -36,9 +74,18 @@ INSERT INTO household (
     multiplier
 )
 SELECT
-    -- State distribution (5 states)
-    (ARRAY['Bihar','MP','Jharkhand','UP','Odisha'])[floor(random()*5)+1],
-    'District_' || (floor(random()*50)+1),
+    created_at,
+
+    -- Geography: name, ISO-like code and jittered centroid for each state
+    (ARRAY['Bihar','MP','Jharkhand','UP','Odisha'])[state_idx]          AS state,
+    (ARRAY['BR','MP','JH','UP','OD'])[state_idx]                        AS state_code,
+    'District_' || district_idx                                         AS district,
+    'D' || LPAD(district_idx::text, 3, '0')                             AS district_code,
+    -- Centroid latitude with ~±1° jitter so map points spread across the state
+    ((ARRAY[25.0961, 23.4733, 23.6102, 26.8467, 20.9517])[state_idx]
+        + (random() - 0.5) * 2)::numeric(8, 4)                          AS lat,
+    ((ARRAY[85.3131, 77.9470, 85.2799, 80.9462, 85.0985])[state_idx]
+        + (random() - 0.5) * 2)::numeric(8, 4)                          AS lon,
 
     -- Segment distribution (approx from survey data)
     CASE
@@ -100,91 +147,132 @@ SELECT
 
     -- Multiplier for weighted analysis (0.5-2.5)
     0.5 + random()*2
+FROM gen;
 
-FROM (
-    SELECT random() AS r
-    FROM generate_series(1, 200000)
-) t;
-
--- ── Indexes for Analytics Performance ───────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_household_segment ON household(segment);
-CREATE INDEX IF NOT EXISTS idx_household_state ON household(state);
-CREATE INDEX IF NOT EXISTS idx_household_income ON household(income);
+-- ── Indexes for Analytics Performance ───────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_household_segment         ON household(segment);
+CREATE INDEX IF NOT EXISTS idx_household_state           ON household(state);
+CREATE INDEX IF NOT EXISTS idx_household_state_code      ON household(state_code);
+CREATE INDEX IF NOT EXISTS idx_household_district_code   ON household(district_code);
+CREATE INDEX IF NOT EXISTS idx_household_income          ON household(income);
 CREATE INDEX IF NOT EXISTS idx_household_social_category ON household(social_category);
-CREATE INDEX IF NOT EXISTS idx_household_has_internet ON household(has_internet);
+CREATE INDEX IF NOT EXISTS idx_household_has_internet    ON household(has_internet);
+CREATE INDEX IF NOT EXISTS idx_household_created_at      ON household(created_at);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+--  Analytical views — point dashboards here, not at the raw table.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── segment_summary: weighted KPIs by segment (R1–R4) ────────────────────────
+-- Chart uses: bar of weighted_income, line of internet_pct across segments, etc.
+CREATE OR REPLACE VIEW segment_summary AS
+SELECT
+    segment,
+    COUNT(*)                                                                  AS households,
+    ROUND((SUM(income * multiplier) / NULLIF(SUM(multiplier), 0))::numeric, 2) AS weighted_income,
+    ROUND(AVG(income)::numeric, 2)                                            AS avg_income,
+    ROUND(AVG(food_spend_pct)::numeric, 2)                                    AS avg_food_spend_pct,
+    ROUND(AVG(edu_spend_pct)::numeric, 2)                                     AS avg_edu_spend_pct,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)                         AS internet_pct,
+    ROUND((AVG(does_online_purchase::int) * 100)::numeric, 2)                 AS online_purchase_pct,
+    ROUND((AVG(has_pmay::int) * 100)::numeric, 2)                             AS pmay_pct,
+    ROUND((AVG(has_ayushman::int) * 100)::numeric, 2)                         AS ayushman_pct,
+    ROUND((AVG(has_ration_card::int) * 100)::numeric, 2)                      AS ration_pct,
+    ROUND(AVG(hh_size)::numeric, 2)                                           AS avg_hh_size
+FROM household
+GROUP BY segment;
+
+-- ── state_summary: weighted KPIs by state (for choropleth / bar) ─────────────
+CREATE OR REPLACE VIEW state_summary AS
+SELECT
+    state,
+    state_code,
+    COUNT(*)                                                                  AS households,
+    ROUND((SUM(income * multiplier) / NULLIF(SUM(multiplier), 0))::numeric, 2) AS weighted_income,
+    ROUND(AVG(income)::numeric, 2)                                            AS avg_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)                         AS internet_pct,
+    ROUND((AVG(does_online_purchase::int) * 100)::numeric, 2)                 AS online_purchase_pct,
+    ROUND(AVG(lat)::numeric, 4)                                               AS centroid_lat,
+    ROUND(AVG(lon)::numeric, 4)                                               AS centroid_lon
+FROM household
+GROUP BY state, state_code;
+
+-- ── income_distribution: fixed-width buckets for histogram / bar chart ───────
+CREATE OR REPLACE VIEW income_distribution AS
+SELECT
+    income_bucket,
+    bucket_order,
+    COUNT(*)                        AS households,
+    ROUND(SUM(multiplier)::numeric, 2) AS weighted_households
+FROM (
+    SELECT
+        multiplier,
+        -- Labels are zero-padded so they sort lexicographically in Superset
+        -- (the bar chart sorts x-axis alphabetically by default).
+        CASE
+            WHEN income < 3000 THEN '0000-2999'
+            WHEN income < 3500 THEN '3000-3499'
+            WHEN income < 4000 THEN '3500-3999'
+            WHEN income < 4500 THEN '4000-4499'
+            WHEN income < 5000 THEN '4500-4999'
+            ELSE '5000+'
+        END AS income_bucket,
+        CASE
+            WHEN income < 3000 THEN 1
+            WHEN income < 3500 THEN 2
+            WHEN income < 4000 THEN 3
+            WHEN income < 4500 THEN 4
+            WHEN income < 5000 THEN 5
+            ELSE 6
+        END AS bucket_order
+    FROM household
+) b
+GROUP BY income_bucket, bucket_order;
+
+-- ── district_segment_summary: state → district → segment hierarchy ───────────
+-- Chart uses: treemap, sunburst, drill-down bar.
+CREATE OR REPLACE VIEW district_segment_summary AS
+SELECT
+    state,
+    state_code,
+    district,
+    district_code,
+    segment,
+    COUNT(*)                                          AS households,
+    ROUND(AVG(income)::numeric, 2)                    AS avg_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2) AS internet_pct
+FROM household
+GROUP BY state, state_code, district, district_code, segment;
+
+-- ── household_monthly_trend: time-series of household creation / KPIs ────────
+CREATE OR REPLACE VIEW household_monthly_trend AS
+SELECT
+    DATE_TRUNC('month', created_at)::DATE                     AS month,
+    COUNT(*)                                                  AS households,
+    ROUND(AVG(income)::numeric, 2)                            AS avg_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)         AS internet_pct,
+    ROUND((AVG(does_online_purchase::int) * 100)::numeric, 2) AS online_purchase_pct
+FROM household
+GROUP BY DATE_TRUNC('month', created_at);
 
 -- ── Validation Queries (run manually to verify data quality) ──────────────────
 -- Segment distribution
--- SELECT segment, COUNT(*) AS count, ROUND(COUNT(*)::NUMERIC / (SELECT COUNT(*) FROM household) * 100, 2) AS pct 
--- FROM household GROUP BY segment ORDER BY segment;
-
--- Weighted income by segment
--- SELECT 
---   segment,
---   ROUND(SUM(income * multiplier) / SUM(multiplier), 2) AS weighted_income,
---   ROUND(AVG(income), 2) AS avg_income
--- FROM household
--- GROUP BY segment ORDER BY segment;
-
--- Internet penetration by segment
--- SELECT 
---   segment,
---   ROUND(AVG(has_internet::int) * 100, 2) AS internet_pct,
---   ROUND(AVG(does_online_purchase::int) * 100, 2) AS online_purchase_pct
--- FROM household
--- GROUP BY segment ORDER BY segment;
-
--- Welfare scheme participation by segment
--- SELECT 
---   segment,
---   ROUND(AVG(has_pmay::int) * 100, 2) AS pmay_pct,
---   ROUND(AVG(has_ayushman::int) * 100, 2) AS ayushman_pct,
---   ROUND(AVG(has_ration_card::int) * 100, 2) AS ration_pct
--- FROM household
--- GROUP BY segment ORDER BY segment;
-
--- Social category distribution
--- SELECT social_category, COUNT(*) AS count FROM household GROUP BY social_category;
+--   SELECT * FROM segment_summary ORDER BY segment;
+--
+-- Weighted income by state
+--   SELECT * FROM state_summary ORDER BY weighted_income DESC;
+--
+-- Income histogram
+--   SELECT income_bucket, households
+--   FROM income_distribution ORDER BY bucket_order;
+--
+-- Monthly trend
+--   SELECT * FROM household_monthly_trend ORDER BY month;
 
 -- ── Optional: Scale to 1M+ rows (uncomment and adjust generate_series) ─────────
 -- Just change generate_series(1, 1000000) in the INSERT statement above
 
--- ── Optional: Partitioning for large datasets (uncomment for production) ───────
--- CREATE TABLE household_partitioned (
---     household_id       BIGSERIAL,
---     state              TEXT,
---     district           TEXT,
---     segment            TEXT,
---     income             NUMERIC,
---     food_spend_pct     NUMERIC,
---     edu_spend_pct      NUMERIC,
---     has_internet       BOOLEAN,
---     does_online_purchase BOOLEAN,
---     social_category    TEXT,
---     hh_size            INT,
---     has_pmay           BOOLEAN,
---     has_ayushman       BOOLEAN,
---     has_ration_card    BOOLEAN,
---     multiplier         NUMERIC
--- ) PARTITION BY LIST (segment);
-
--- CREATE TABLE household_r1 PARTITION OF household_partitioned FOR VALUES IN ('R1');
--- CREATE TABLE household_r2 PARTITION OF household_partitioned FOR VALUES IN ('R2');
--- CREATE TABLE household_r3 PARTITION OF household_partitioned FOR VALUES IN ('R3');
--- CREATE TABLE household_r4 PARTITION OF household_partitioned FOR VALUES IN ('R4');
-
--- ── Optional: Materialized view for segment analytics (uncomment for production) ─
--- CREATE MATERIALIZED VIEW segment_summary AS
--- SELECT
---   segment,
---   COUNT(*) AS households,
---   ROUND(SUM(income * multiplier) / SUM(multiplier), 2) AS weighted_income,
---   ROUND(AVG(food_spend_pct), 2) AS avg_food_spend_pct,
---   ROUND(AVG(edu_spend_pct), 2) AS avg_edu_spend_pct,
---   ROUND(AVG(has_internet::int) * 100, 2) AS internet_pct,
---   ROUND(AVG(does_online_purchase::int) * 100, 2) AS online_purchase_pct
--- FROM household
--- GROUP BY segment;
-
--- CREATE UNIQUE INDEX ON segment_summary (segment);
--- REFRESH MATERIALIZED VIEW CONCURRENTLY segment_summary;
+-- ── Optional: Promote views to MATERIALIZED VIEWs for heavy dashboards ────────
+-- CREATE MATERIALIZED VIEW segment_summary_mv AS SELECT * FROM segment_summary;
+-- CREATE UNIQUE INDEX ON segment_summary_mv (segment);
+-- REFRESH MATERIALIZED VIEW CONCURRENTLY segment_summary_mv;

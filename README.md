@@ -56,31 +56,78 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 4. **MySQL URI reconciliation** — ensures `sales` DB uses `mysql+pymysql://` driver
 5. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
 
-### Seeded databases and tables
+### Seeded databases, tables and views
 
-| Database    | Engine     | Tables                                          | Rows    |
-|-------------|------------|-------------------------------------------------|---------|
-| `sales`     | MySQL 8    | `products`, `customers`, `orders`               | ~35     |
-| `analytics` | Postgres   | `events`, `daily_active_users`                  | ~28     |
-| `analytics` | Postgres   | `household`                                     | 200 000 |
+| Database    | Engine     | Object                              | Kind  | Rows    |
+|-------------|------------|-------------------------------------|-------|---------|
+| `sales`     | MySQL 8    | `products`, `customers`, `orders`   | table | ~35     |
+| `analytics` | Postgres   | `events`, `daily_active_users`      | table | ~28     |
+| `analytics` | Postgres   | `household`                         | table | 200 000 |
+| `analytics` | Postgres   | `segment_summary`                   | view  | 4       |
+| `analytics` | Postgres   | `state_summary`                     | view  | 5       |
+| `analytics` | Postgres   | `income_distribution`               | view  | 6       |
+| `analytics` | Postgres   | `district_segment_summary`          | view  | ~1 000  |
+| `analytics` | Postgres   | `household_monthly_trend`           | view  | 12      |
 
-### Starter Seed Dashboard (7 charts)
+### Starter Seed Dashboard (12 charts)
 
-| Chart                             | Type              | Source              |
-|-----------------------------------|-------------------|---------------------|
-| Sales Amount by Day               | Timeseries bar    | sales.orders        |
-| Products by Category              | Pie               | sales.products      |
-| Customers by Country              | World map         | sales.customers     |
-| Daily Active Users                | Timeseries line   | analytics.daily_active_users |
-| Households by Segment             | Categorical bar   | analytics.household |
-| Households by Social Category     | Pie               | analytics.household |
-| Households by State               | Categorical bar   | analytics.household |
+| Chart                             | Type              | Source                                |
+|-----------------------------------|-------------------|---------------------------------------|
+| Sales Amount by Day               | Timeseries bar    | sales.orders                          |
+| Products by Category              | Pie               | sales.products                        |
+| Customers by Country              | World map         | sales.customers                       |
+| Daily Active Users                | Timeseries line   | analytics.daily_active_users          |
+| Households by Social Category     | Pie               | analytics.household                   |
+| Income Distribution               | Categorical bar   | analytics.income_distribution         |
+| Households by Segment             | Categorical bar   | analytics.segment_summary             |
+| Weighted Income by Segment        | Categorical bar   | analytics.segment_summary             |
+| Internet Penetration by Segment   | Categorical bar   | analytics.segment_summary             |
+| Households by State               | Categorical bar   | analytics.state_summary               |
+| Weighted Income by State          | Categorical bar   | analytics.state_summary               |
+| Monthly Household Creation        | Timeseries line   | analytics.household_monthly_trend     |
+| Monthly Avg Income Trend          | Timeseries line   | analytics.household_monthly_trend     |
+
+---
+
+## Analytical layering — raw tables vs. views
+
+This repo follows a simple two-layer model:
+
+```
+  Raw layer                         Analytical layer (views)
+  ─────────                         ────────────────────────
+  household        ──────►          segment_summary           ◄── weighted KPIs per segment
+  (200K atomic                      state_summary             ◄── geo rollup (lat/lon, state_code)
+   survey rows)                     income_distribution       ◄── fixed-width buckets
+                                    district_segment_summary  ◄── state → district → segment hierarchy
+                                    household_monthly_trend   ◄── time-series (created_at)
+```
+
+**Why views:** business semantics — survey-weighting, bucket edges, geo rollup —
+live in one place (SQL), so every chart that uses a concept gets the same
+numbers. Charts stay thin (just `x_axis` / `metric`) and Python stays dumb
+(the seeder only wires metadata).
+
+**Rules of thumb:**
+
+| Concern                                          | Belongs in           |
+|--------------------------------------------------|----------------------|
+| Weighted aggregates (e.g. `SUM(income*multiplier)/SUM(multiplier)`) | SQL view             |
+| Bucketing / binning / `CASE WHEN`                | SQL view             |
+| Geography rollups, centroids, codes              | SQL view             |
+| Chart title, viz type, x/y, metric, groupby      | `chart_config.yaml`  |
+| Registering a table / view as a Superset dataset | `import_datasources.yaml` |
+| Validation, upsert, dashboard layout             | `seed_dashboard.py`  |
 
 ---
 
 ## Adding new seed data — no code changes needed
 
-The seeding pipeline is fully config-driven. To add a new table + charts:
+The seeding pipeline is fully config-driven. The workflow differs slightly
+depending on whether you're adding a raw fact table or a curated analytical
+view.
+
+### Adding a new raw table
 
 **Step 1 — Drop a SQL seed file**
 
@@ -89,7 +136,10 @@ seed/mysql/NN_name.sql    ← auto-loaded by MySQL on fresh volume
 seed/pg/NN_name.sql       ← auto-loaded by Postgres on fresh volume
 ```
 
-Files are executed alphabetically, so prefix with `01_`, `02_`, etc.
+Files are executed alphabetically, so prefix with `01_`, `02_`, etc. For
+time-series- or geo-aware tables, include `created_at TIMESTAMPTZ` and
+`lat` / `lon` / `state_code` up-front — it is much cheaper to add them now
+than to backfill later.
 
 **Step 2 — Register the table in `seed/import_datasources.yaml`**
 
@@ -100,17 +150,47 @@ Files are executed alphabetically, so prefix with `01_`, `02_`, etc.
     - table_name: my_new_table   # ← add this line
 ```
 
-**Step 3 — Add charts to `seed/chart_config.yaml`**
+### Adding a new analytical view (recommended for charts)
+
+Views own the business semantics — put weighting, bucketing and rollups here,
+not in YAML and not in Python.
+
+**Step 1 — Define the view in the same SQL seed file as its source table**
+
+```sql
+CREATE OR REPLACE VIEW my_new_table_summary AS
+SELECT
+    category,
+    COUNT(*)                                                                  AS rows,
+    ROUND((SUM(value * weight) / NULLIF(SUM(weight), 0))::numeric, 2)         AS weighted_value
+FROM my_new_table
+GROUP BY category;
+```
+
+**Step 2 — Register the view alongside the table**
+
+```yaml
+- database_name: analytics
+  tables:
+    - table_name: my_new_table           # raw
+    - table_name: my_new_table_summary   # view
+```
+
+Superset treats views exactly like tables — no special flag needed.
+
+### Adding a chart
+
+Point it at the view, not the raw table, whenever a business rule applies.
 
 ```yaml
 - database: analytics
-  table: my_new_table
-  name: "My Chart Title"
+  table: my_new_table_summary
+  name: "Weighted Value by Category"
   viz_type: echarts_timeseries_bar  # see chart_config.yaml header for all types
-  required_columns: [col_a]
-  x_axis: col_a
+  required_columns: [category, weighted_value]
+  x_axis: category
   metrics:
-    - {column: col_b, aggregate: SUM}
+    - {column: weighted_value, aggregate: SUM}
   groupby: []
 ```
 
@@ -155,7 +235,11 @@ docker compose up -d --build
     │   └── 01_sales.sql            # sales schema + seed rows
     └── pg/
         ├── 01_analytics.sql        # events + daily_active_users
-        └── 02_household.sql        # household survey 200K rows
+        └── 02_household.sql        # household survey 200K rows +
+                                    # segment_summary, state_summary,
+                                    # income_distribution,
+                                    # district_segment_summary,
+                                    # household_monthly_trend (views)
 ```
 
 ---
