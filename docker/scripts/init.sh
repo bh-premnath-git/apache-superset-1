@@ -71,4 +71,12 @@ else
   echo "[init] No datasource import file found, skipping."
 fi
 
+
+if [[ -f /app/docker/scripts/seed_dashboard.py ]]; then
+  echo "[init] Creating starter dashboard and charts from seed datasets..."
+  python /app/docker/scripts/seed_dashboard.py
+else
+  echo "[init] Seed dashboard script not found, skipping."
+fi
+
 echo "[init] Superset metadata initialization completed."
