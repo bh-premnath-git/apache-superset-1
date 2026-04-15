@@ -74,9 +74,7 @@ fi
 
 if [[ -f /app/docker/scripts/seed_dashboard.py ]]; then
   echo "[init] Creating starter dashboard and charts from seed datasets..."
-  if ! python /app/docker/scripts/seed_dashboard.py; then
-    echo "[init] Seed dashboard creation failed; continuing startup without seeded dashboard."
-  fi
+  python /app/docker/scripts/seed_dashboard.py
 else
   echo "[init] Seed dashboard script not found, skipping."
 fi

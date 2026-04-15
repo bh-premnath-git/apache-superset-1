@@ -4,8 +4,14 @@
 from __future__ import annotations
 
 import json
-import traceback
 import uuid
+
+from superset.app import create_app
+from superset.connectors.sqla.models import SqlaTable
+from superset.dashboards.models import Dashboard
+from superset.extensions import db
+from superset.models.core import Database
+from superset.models.slice import Slice
 
 DASHBOARD_TITLE = "Starter Seed Dashboard"
 
@@ -139,89 +145,63 @@ def upsert_dashboard(charts: list[Slice]) -> None:
 
 
 def main() -> None:
-    try:
-        from superset.app import create_app
-        from superset.connectors.sqla.models import SqlaTable
-        from superset.dashboards.models import Dashboard
-        from superset.extensions import db
-        from superset.models.core import Database
-        from superset.models.slice import Slice
-    except Exception as ex:
-        print(f"[seed-dashboard] Failed to import Superset modules: {ex}")
-        traceback.print_exc()
-        return
+    app = create_app()
+    with app.app_context():
+        orders = get_table("sales", "orders")
+        products = get_table("sales", "products")
+        customers = get_table("sales", "customers")
+        dau = get_table("analytics", "daily_active_users")
 
-    globals().update(
-        {
-            "SqlaTable": SqlaTable,
-            "Dashboard": Dashboard,
-            "db": db,
-            "Database": Database,
-            "Slice": Slice,
-        }
-    )
+        bar_chart = upsert_chart(
+            chart_name="Sales Amount by Day (Bar)",
+            viz_type="echarts_timeseries_bar",
+            table=orders,
+            params={
+                "x_axis": "order_date",
+                "time_grain_sqla": "P1D",
+                "metrics": [simple_metric("amount", "SUM")],
+                "groupby": [],
+                "row_limit": 10000,
+            },
+        )
 
-    try:
-        app = create_app()
-        with app.app_context():
-            orders = get_table("sales", "orders")
-            products = get_table("sales", "products")
-            customers = get_table("sales", "customers")
-            dau = get_table("analytics", "daily_active_users")
+        line_chart = upsert_chart(
+            chart_name="Daily Active Users (Line)",
+            viz_type="echarts_timeseries_line",
+            table=dau,
+            params={
+                "x_axis": "date",
+                "time_grain_sqla": "P1D",
+                "metrics": [simple_metric("dau", "SUM")],
+                "groupby": [],
+                "row_limit": 10000,
+            },
+        )
 
-            bar_chart = upsert_chart(
-                chart_name="Sales Amount by Day (Bar)",
-                viz_type="echarts_timeseries_bar",
-                table=orders,
-                params={
-                    "x_axis": "order_date",
-                    "time_grain_sqla": "P1D",
-                    "metrics": [simple_metric("amount", "SUM")],
-                    "groupby": [],
-                    "row_limit": 10000,
-                },
-            )
+        pie_chart = upsert_chart(
+            chart_name="Products by Category (Pie)",
+            viz_type="pie",
+            table=products,
+            params={
+                "groupby": ["category"],
+                "metric": simple_metric("id", "COUNT"),
+                "row_limit": 10000,
+            },
+        )
 
-            line_chart = upsert_chart(
-                chart_name="Daily Active Users (Line)",
-                viz_type="echarts_timeseries_line",
-                table=dau,
-                params={
-                    "x_axis": "date",
-                    "time_grain_sqla": "P1D",
-                    "metrics": [simple_metric("dau", "SUM")],
-                    "groupby": [],
-                    "row_limit": 10000,
-                },
-            )
+        geo_chart = upsert_chart(
+            chart_name="Customers by Country (Geo)",
+            viz_type="country_map",
+            table=customers,
+            params={
+                "entity": "country",
+                "metric": simple_metric("id", "COUNT"),
+                "row_limit": 10000,
+            },
+        )
 
-            pie_chart = upsert_chart(
-                chart_name="Products by Category (Pie)",
-                viz_type="pie",
-                table=products,
-                params={
-                    "groupby": ["category"],
-                    "metric": simple_metric("id", "COUNT"),
-                    "row_limit": 10000,
-                },
-            )
-
-            geo_chart = upsert_chart(
-                chart_name="Customers by Country (Geo)",
-                viz_type="country_map",
-                table=customers,
-                params={
-                    "entity": "country",
-                    "metric": simple_metric("id", "COUNT"),
-                    "row_limit": 10000,
-                },
-            )
-
-            upsert_dashboard([bar_chart, line_chart, pie_chart, geo_chart])
-            db.session.commit()
-    except Exception as ex:
-        print(f"[seed-dashboard] Failed to create dashboard artifacts: {ex}")
-        traceback.print_exc()
+        upsert_dashboard([bar_chart, line_chart, pie_chart, geo_chart])
+        db.session.commit()
 
 
 if __name__ == "__main__":
