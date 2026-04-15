@@ -19,6 +19,12 @@ if TYPE_CHECKING:
     from superset.models.slice import Slice
 
 CHART_CONFIG_PATH = os.environ.get("CHART_CONFIG_PATH", "/app/seed/chart_config.yaml")
+VIZ_TYPE_ALIASES = {
+    # Legacy NVD3 categorical bar plugin removed in recent Superset releases.
+    "dist_bar": "echarts_timeseries_bar",
+    # Temporary compatibility alias for previously seeded configs.
+    "echarts_bar": "echarts_timeseries_bar",
+}
 
 
 def simple_metric(column_name: str, aggregate: str = "SUM") -> dict:
@@ -90,13 +96,17 @@ def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict)
     from superset.extensions import db
     from superset.models.slice import Slice
 
+    canonical_viz_type = VIZ_TYPE_ALIASES.get(viz_type, viz_type)
+    if canonical_viz_type != viz_type:
+        print(f"[seed-dashboard] Mapping legacy viz_type '{viz_type}' → '{canonical_viz_type}'")
+
     chart = db.session.query(Slice).filter(Slice.slice_name == chart_name).one_or_none()
     payload = dict(params)
-    payload["viz_type"] = viz_type
+    payload["viz_type"] = canonical_viz_type
     payload["datasource"] = f"{table.id}__table"
 
     if chart:
-        chart.viz_type = viz_type
+        chart.viz_type = canonical_viz_type
         chart.datasource_id = table.id
         chart.datasource_type = "table"
         chart.params = json.dumps(payload)
@@ -105,7 +115,7 @@ def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict)
 
     chart = Slice(
         slice_name=chart_name,
-        viz_type=viz_type,
+        viz_type=canonical_viz_type,
         datasource_id=table.id,
         datasource_type="table",
         params=json.dumps(payload),

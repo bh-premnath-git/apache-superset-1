@@ -6,7 +6,7 @@
 #
 # Supported viz_type values:
 #   echarts_timeseries_bar, echarts_timeseries_line  → time-series (needs x_axis + time_grain + metrics[])
-#   echarts_bar                                      → categorical bar (needs x_axis + metrics[])
+#   echarts_timeseries_bar                           → bar chart (time or categorical x_axis; needs x_axis + metrics[])
 #   pie                                              → pie/donut (needs groupby[] + metric{})
 #   world_map                                        → geo map (needs entity + country_fieldtype + metric{})
 #
@@ -68,7 +68,7 @@ dashboards:
       - database: analytics
         table: household
         name: "Households by Segment (Bar)"
-        viz_type: dist_bar
+        viz_type: echarts_timeseries_bar
         required_columns: [household_id, segment]
         x_axis: segment
         metrics:
@@ -86,7 +86,7 @@ dashboards:
       - database: analytics
         table: household
         name: "Households by State (Bar)"
-        viz_type: dist_bar
+        viz_type: echarts_timeseries_bar
         required_columns: [household_id, state]
         x_axis: state
         metrics:

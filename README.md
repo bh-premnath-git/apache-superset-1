@@ -106,7 +106,7 @@ Files are executed alphabetically, so prefix with `01_`, `02_`, etc.
 - database: analytics
   table: my_new_table
   name: "My Chart Title"
-  viz_type: dist_bar             # see chart_config.yaml header for all types
+  viz_type: echarts_timeseries_bar  # see chart_config.yaml header for all types
   required_columns: [col_a]
   x_axis: col_a
   metrics:
@@ -125,9 +125,8 @@ docker compose up -d --build
 
 | `viz_type`                  | Key fields                                      |
 |-----------------------------|-------------------------------------------------|
-| `echarts_timeseries_bar`    | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
+| `echarts_timeseries_bar`    | `x_axis`, `metrics[]`, `groupby` (`time_grain` optional) |
 | `echarts_timeseries_line`   | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
-| `dist_bar`                  | `x_axis`, `metrics[]`, `groupby`                |
 | `pie`                       | `groupby[]`, `metric{}`                         |
 | `world_map`                 | `entity`, `country_fieldtype`, `metric{}`       |
 
