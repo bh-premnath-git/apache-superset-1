@@ -13,6 +13,7 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
 # Copy startup bootstrap script.
 COPY docker/scripts/bootstrap.sh /app/bootstrap.sh
 COPY docker/scripts/init.sh /app/init.sh
+COPY docker/scripts/seed_dashboard.py /app/docker/scripts/seed_dashboard.py
 RUN chmod +x /app/bootstrap.sh
 RUN chmod +x /app/init.sh
 

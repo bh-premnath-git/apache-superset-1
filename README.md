@@ -52,6 +52,11 @@ manual connection setup:
 
 - `sales` (MySQL): `customers`, `orders`, `products`
 - `analytics` (Postgres): `events`, `daily_active_users`
+- `Starter Seed Dashboard` with 4 charts created automatically:
+  - Sales Amount by Day (bar)
+  - Daily Active Users (line)
+  - Products by Category (pie)
+  - Customers by Country (geo map)
 
 If you want to re-import manually, run:
 
