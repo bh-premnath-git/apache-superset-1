@@ -233,15 +233,21 @@ def main() -> None:
             },
         )
 
+        # NOTE: `country_map` is a single-country choropleth and does not
+        # ship a "world" TopoJSON, which causes the front-end to render
+        # "Could not load map data for world". For a world-level view keyed
+        # by ISO country codes we use the `world_map` plugin instead.
         geo_chart = upsert_chart(
             chart_name="Customers by Country (Geo)",
-            viz_type="country_map",
+            viz_type="world_map",
             table=customers,
             params={
                 "entity": "country",
                 "country_fieldtype": "cca2",
-                "select_country": "world",
                 "metric": simple_metric("id", "COUNT"),
+                "show_bubbles": True,
+                "max_bubble_size": "25",
+                "color_by_metric": True,
                 "row_limit": 10000,
             },
         )
