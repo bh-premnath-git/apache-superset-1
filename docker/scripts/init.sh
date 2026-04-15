@@ -67,6 +67,38 @@ if [[ -f /app/seed/import_datasources.yaml ]]; then
   superset import_datasources \
     -p /app/seed/import_datasources.yaml \
     -u "${SUPERSET_ADMIN_USERNAME}"
+
+  echo "[init] Reconciling sales DB URI to mysql+pymysql for compatibility..."
+  python - <<'PY'
+import os
+
+from superset.app import create_app
+from superset.extensions import db
+from superset.models.core import Database
+
+username = os.environ["MYSQL_USER"]
+password = os.environ["MYSQL_PASSWORD"]
+host = os.getenv("MYSQL_DB_HOST", "mysql-db")
+port = os.getenv("MYSQL_DB_PORT", "3306")
+database_name = os.environ["MYSQL_DATABASE"]
+expected_uri = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database_name}"
+
+app = create_app()
+with app.app_context():
+    sales_db = (
+        db.session.query(Database)
+        .filter(Database.database_name == "sales")
+        .one_or_none()
+    )
+    if sales_db is None:
+        print("[init] Sales database metadata not found after import; skipping URI reconciliation.")
+    elif sales_db.sqlalchemy_uri != expected_uri:
+        sales_db.sqlalchemy_uri = expected_uri
+        db.session.commit()
+        print("[init] Updated sales database URI to mysql+pymysql.")
+    else:
+        print("[init] Sales database URI already uses mysql+pymysql.")
+PY
 else
   echo "[init] No datasource import file found, skipping."
 fi

@@ -26,6 +26,11 @@ x-superset-env: &superset-env
   METADATA_DB_PORT:         ${METADATA_DB_PORT}
   REDIS_HOST:               ${REDIS_HOST}
   REDIS_PORT:               ${REDIS_PORT}
+  MYSQL_USER:               ${MYSQL_USER}
+  MYSQL_PASSWORD:           ${MYSQL_PASSWORD}
+  MYSQL_DATABASE:           ${MYSQL_DATABASE}
+  MYSQL_DB_HOST:            ${MYSQL_DB_HOST:-mysql-db}
+  MYSQL_DB_PORT:            ${MYSQL_DB_PORT:-3306}
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
 

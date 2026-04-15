@@ -164,6 +164,38 @@ Then rebuild: `docker compose build superset`.
 
 ---
 
+## Troubleshooting
+
+### `No module named 'MySQLdb'` on MySQL charts
+
+`mysql://...` URLs use SQLAlchemy's default MySQL driver (`MySQLdb` /
+`mysqlclient`). In this project, the seeded MySQL connection is standardized to
+`mysql+pymysql://...` during init so chart queries don't depend on `MySQLdb`.
+
+If you still see the error, rebuild and re-run initialization:
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+To verify the stored URI inside Superset metadata:
+
+```bash
+docker compose exec superset python - <<'PY'
+from superset.app import create_app
+from superset.extensions import db
+from superset.models.core import Database
+
+app = create_app()
+with app.app_context():
+    row = db.session.query(Database).filter(Database.database_name == "sales").one()
+    print(row.sqlalchemy_uri)
+PY
+```
+
+---
+
 ## Production checklist
 
 - [ ] Set `SUPERSET_SECRET_KEY` to a strong random value
