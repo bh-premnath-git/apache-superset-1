@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import TYPE_CHECKING
 
 from superset.app import create_app
-from superset.connectors.sqla.models import SqlaTable
-from superset.dashboards.models import Dashboard
-from superset.extensions import db
-from superset.models.core import Database
-from superset.models.slice import Slice
+
+if TYPE_CHECKING:
+    from superset.connectors.sqla.models import SqlaTable
+    from superset.dashboards.models import Dashboard
+    from superset.models.core import Database
+    from superset.models.slice import Slice
 
 DASHBOARD_TITLE = "Starter Seed Dashboard"
 
@@ -29,6 +31,9 @@ def simple_metric(column_name: str, aggregate: str = "SUM") -> dict:
 
 
 def get_database(database_name: str) -> Database:
+    from superset.extensions import db
+    from superset.models.core import Database
+
     database = db.session.query(Database).filter(Database.database_name == database_name).one_or_none()
     if not database:
         raise RuntimeError(f"Database '{database_name}' not found. Ensure import_datasources ran first.")
@@ -36,6 +41,9 @@ def get_database(database_name: str) -> Database:
 
 
 def get_table(database_name: str, table_name: str) -> SqlaTable:
+    from superset.connectors.sqla.models import SqlaTable
+    from superset.extensions import db
+
     database = get_database(database_name)
     table = (
         db.session.query(SqlaTable)
@@ -48,6 +56,9 @@ def get_table(database_name: str, table_name: str) -> SqlaTable:
 
 
 def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict) -> Slice:
+    from superset.extensions import db
+    from superset.models.slice import Slice
+
     chart = db.session.query(Slice).filter(Slice.slice_name == chart_name).one_or_none()
     payload = dict(params)
     payload["viz_type"] = viz_type
@@ -124,6 +135,9 @@ def build_position_json(charts: list[Slice]) -> str:
 
 
 def upsert_dashboard(charts: list[Slice]) -> None:
+    from superset.dashboards.models import Dashboard
+    from superset.extensions import db
+
     dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == DASHBOARD_TITLE).one_or_none()
     if dashboard:
         dashboard.slices = charts
@@ -147,6 +161,8 @@ def upsert_dashboard(charts: list[Slice]) -> None:
 def main() -> None:
     app = create_app()
     with app.app_context():
+        from superset.extensions import db
+
         orders = get_table("sales", "orders")
         products = get_table("sales", "products")
         customers = get_table("sales", "customers")
