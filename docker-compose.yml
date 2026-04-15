@@ -77,12 +77,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mysql-db:
+        condition: service_healthy
+      analytics-db:
+        condition: service_healthy
     environment:
       <<: *superset-env
     entrypoint: ["/app/init.sh"]
     volumes:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+      - ./seed:/app/seed:ro
     networks:
       - superset-net
 

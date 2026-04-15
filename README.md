@@ -44,9 +44,23 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 
 ---
 
-## Connecting sample databases in Superset
+## Seed connections and datasets (auto-imported)
 
-Go to **Settings → Database Connections → + Database** and use these URIs:
+On first startup, `superset-init` now imports `/app/seed/import_datasources.yaml`,
+so both sample databases and their tables are available in the UI without any
+manual connection setup:
+
+- `sales` (MySQL): `customers`, `orders`, `products`
+- `analytics` (Postgres): `events`, `daily_active_users`
+
+If you want to re-import manually, run:
+
+```bash
+docker compose exec superset \
+  superset import_datasources -p /app/seed/import_datasources.yaml -u admin
+```
+
+If you prefer to create them manually, use these URIs:
 
 **MySQL — sales**
 ```
@@ -85,6 +99,7 @@ postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
 │   └── scripts/
 │       └── bootstrap.sh     # DB migrate + admin create + gunicorn
 └── seed/
+    ├── import_datasources.yaml
     ├── mysql_sales.sql
     └── pg_analytics.sql
 ```
