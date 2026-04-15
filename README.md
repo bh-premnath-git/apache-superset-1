@@ -168,14 +168,27 @@ Then rebuild: `docker compose build superset`.
 
 ### `No module named 'MySQLdb'` on MySQL charts
 
-`mysql://...` URLs use SQLAlchemy's default MySQL driver (`MySQLdb` /
-`mysqlclient`). In this project, the seeded MySQL connection is standardized to
-`mysql+pymysql://...` during init so chart queries don't depend on `MySQLdb`.
+`mysql://...` URLs default to SQLAlchemy's `MySQLdb` / `mysqlclient` driver,
+which is not shipped in the upstream Superset image. This project addresses
+the issue on two layers:
 
-If you still see the error, rebuild and re-run initialization:
+1. **`superset_config.py` calls `pymysql.install_as_MySQLdb()` at startup**,
+   which aliases the pure-Python `pymysql` driver as `MySQLdb` in
+   `sys.modules`. Any `import MySQLdb` performed by SQLAlchemy therefore
+   resolves to `pymysql`, so both `mysql://` and `mysql+pymysql://` URIs work.
+   See [PyMySQL docs](https://pymysql.readthedocs.io/en/latest/modules/index.html).
+2. **`docker/scripts/init.sh` reconciles the stored `sales` DB URI** to
+   `mysql+pymysql://...` using `Database.set_sqlalchemy_uri()` (the official
+   setter that also stores the password in the encrypted `password` column),
+   and smoke-tests the connection during init so driver problems surface
+   early instead of at first chart render.
+
+If you still see the error (for example, on an old volume created before this
+fix shipped), rebuild and wipe the Superset metadata volume so init re-runs
+against a clean slate:
 
 ```bash
-docker compose down
+docker compose down -v
 docker compose up -d --build
 ```
 
@@ -190,8 +203,16 @@ from superset.models.core import Database
 app = create_app()
 with app.app_context():
     row = db.session.query(Database).filter(Database.database_name == "sales").one()
-    print(row.sqlalchemy_uri)
+    print("stored   :", row.sqlalchemy_uri)            # password is masked
+    print("decrypted:", row.sqlalchemy_uri_decrypted)  # real URI used at query time
 PY
+```
+
+Expected output — both lines should start with `mysql+pymysql://`:
+
+```
+stored   : mysql+pymysql://sample_user:XXXXXXXXXX@mysql-db:3306/sales
+decrypted: mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
 ```
 
 ---

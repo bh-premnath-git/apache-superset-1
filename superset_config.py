@@ -4,6 +4,25 @@ Mounted into the container at /app/pythonpath/superset_config.py.
 """
 import os
 
+# ── MySQL driver compatibility ────────────────────────────────────────────────
+# The upstream Superset image ships without the `MySQLdb` / `mysqlclient`
+# driver. SQLAlchemy URIs of the form `mysql://...` (no explicit driver) fall
+# back to `MySQLdb` and then raise `No module named 'MySQLdb'` at query time.
+#
+# PyMySQL is a pure-Python drop-in replacement for MySQLdb. Calling
+# `install_as_MySQLdb()` registers it in `sys.modules` so any `import MySQLdb`
+# elsewhere in SQLAlchemy transparently resolves to PyMySQL. This makes both
+# `mysql://` and `mysql+pymysql://` URIs work end-to-end, regardless of how a
+# connection URI was persisted.
+#
+# Docs: https://pymysql.readthedocs.io/en/latest/modules/index.html
+try:
+    import pymysql
+
+    pymysql.install_as_MySQLdb()
+except ImportError:  # pragma: no cover - pymysql is installed via Dockerfile
+    pass
+
 
 # ── Secret key ────────────────────────────────────────────────────────────────
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
