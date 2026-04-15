@@ -54,6 +54,7 @@ class CeleryConfig:
     result_backend = f"redis://{_REDIS_HOST}:{_REDIS_PORT}/5"
     worker_prefetch_multiplier = 1
     task_acks_late = True
+    broker_connection_retry_on_startup = True
 
 
 CELERY_CONFIG = CeleryConfig
@@ -69,10 +70,14 @@ FEATURE_FLAGS = {
 # ── Other settings ────────────────────────────────────────────────────────────
 APP_NAME = os.getenv("SUPERSET_APP_NAME", "Premdash")
 APP_ICON = os.getenv("SUPERSET_APP_ICON", "/static/assets/images/premdash-logo.svg")
+APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", APP_ICON)
+FAVICONS = [{"href": APP_FAVICON}]
 WTF_CSRF_ENABLED = True
 TALISMAN_ENABLED = False          # set True behind a real TLS terminator
+CONTENT_SECURITY_POLICY_WARNING = False
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False     # set True when behind HTTPS
 ENABLE_PROXY_FIX = True
 ROW_LIMIT = 5_000
 VIZ_ROW_LIMIT = 10_000
+RATELIMIT_STORAGE_URI = f"redis://{_REDIS_HOST}:{_REDIS_PORT}/6"
