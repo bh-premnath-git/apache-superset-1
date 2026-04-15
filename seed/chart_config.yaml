@@ -1,0 +1,94 @@
+# ── Dashboard & Chart Definitions ─────────────────────────────────────────────
+# To add a new table's charts:
+#   1. Drop a seed SQL file in seed/pg/ or seed/mysql/
+#   2. Register the table in seed/import_datasources.yaml
+#   3. Add chart entries below — no Python changes needed.
+#
+# Supported viz_type values:
+#   echarts_timeseries_bar, echarts_timeseries_line  → time-series (needs x_axis + time_grain + metrics[])
+#   echarts_bar                                      → categorical bar (needs x_axis + metrics[])
+#   pie                                              → pie/donut (needs groupby[] + metric{})
+#   world_map                                        → geo map (needs entity + country_fieldtype + metric{})
+#
+# Optional per-chart fields:
+#   required_columns: [col1, col2]  → validated before chart creation
+#   row_limit: 10000                → default 10000
+
+dashboards:
+
+  - title: "Starter Seed Dashboard"
+    slug: starter-seed-dashboard
+    charts:
+
+      # ── Sales (MySQL) ────────────────────────────────────────────────────────
+      - database: sales
+        table: orders
+        name: "Sales Amount by Day (Bar)"
+        viz_type: echarts_timeseries_bar
+        required_columns: [order_date, amount]
+        x_axis: order_date
+        time_grain: P1D
+        metrics:
+          - {column: amount, aggregate: SUM}
+        groupby: []
+
+      - database: sales
+        table: products
+        name: "Products by Category (Pie)"
+        viz_type: pie
+        required_columns: [id, category]
+        groupby: [category]
+        metric: {column: id, aggregate: COUNT}
+
+      - database: sales
+        table: customers
+        name: "Customers by Country (Geo)"
+        viz_type: world_map
+        required_columns: [id, country]
+        entity: country
+        country_fieldtype: cca2
+        metric: {column: id, aggregate: COUNT}
+        show_bubbles: true
+        max_bubble_size: "25"
+        color_by_metric: true
+
+      # ── Analytics (Postgres) ─────────────────────────────────────────────────
+      - database: analytics
+        table: daily_active_users
+        name: "Daily Active Users (Line)"
+        viz_type: echarts_timeseries_line
+        required_columns: [date, dau]
+        x_axis: date
+        time_grain: P1D
+        metrics:
+          - {column: dau, aggregate: SUM}
+        groupby: []
+
+      # ── Household Survey (Postgres) ──────────────────────────────────────────
+      - database: analytics
+        table: household
+        name: "Households by Segment (Bar)"
+        viz_type: dist_bar
+        required_columns: [household_id, segment]
+        x_axis: segment
+        metrics:
+          - {column: household_id, aggregate: COUNT}
+        groupby: []
+
+      - database: analytics
+        table: household
+        name: "Households by Social Category (Pie)"
+        viz_type: pie
+        required_columns: [household_id, social_category]
+        groupby: [social_category]
+        metric: {column: household_id, aggregate: COUNT}
+
+      - database: analytics
+        table: household
+        name: "Households by State (Bar)"
+        viz_type: dist_bar
+        required_columns: [household_id, state]
+        x_axis: state
+        metrics:
+          - {column: household_id, aggregate: COUNT}
+        groupby: []

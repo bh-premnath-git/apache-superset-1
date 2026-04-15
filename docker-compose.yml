@@ -31,6 +31,8 @@ x-superset-env: &superset-env
   MYSQL_DATABASE:           ${MYSQL_DATABASE}
   MYSQL_DB_HOST:            ${MYSQL_DB_HOST:-mysql-db}
   MYSQL_DB_PORT:            ${MYSQL_DB_PORT:-3306}
+  ANALYTICS_DB_HOST:        ${ANALYTICS_DB_HOST:-analytics-db}
+  ANALYTICS_DB_PORT:        ${ANALYTICS_DB_PORT:-5432}
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
 
@@ -168,7 +170,7 @@ services:
       MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./seed/mysql_sales.sql:/docker-entrypoint-initdb.d/01_seed.sql:ro
+      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
              "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
@@ -189,7 +191,7 @@ services:
       POSTGRES_DB:       ${ANALYTICS_DB_NAME}
     volumes:
       - analytics-db-data:/var/lib/postgresql/data
-      - ./seed/pg_analytics.sql:/docker-entrypoint-initdb.d/01_seed.sql:ro
+      - ./seed/pg:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME}"]
       interval: 10s

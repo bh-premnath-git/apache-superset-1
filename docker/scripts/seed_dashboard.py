@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Create a starter dashboard with seed charts for local Superset environments."""
+"""Config-driven dashboard seeder — reads seed/chart_config.yaml; no code changes needed for new tables."""
 
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from typing import TYPE_CHECKING
+
+import yaml
 
 from superset.app import create_app
 
@@ -15,7 +18,7 @@ if TYPE_CHECKING:
     from superset.models.core import Database
     from superset.models.slice import Slice
 
-DASHBOARD_TITLE = "Starter Seed Dashboard"
+CHART_CONFIG_PATH = os.environ.get("CHART_CONFIG_PATH", "/app/seed/chart_config.yaml")
 
 
 def simple_metric(column_name: str, aggregate: str = "SUM") -> dict:
@@ -30,21 +33,14 @@ def simple_metric(column_name: str, aggregate: str = "SUM") -> dict:
     }
 
 
-def get_database(database_name: str) -> Database:
+def get_table(database_name: str, table_name: str) -> SqlaTable:
+    from superset.connectors.sqla.models import SqlaTable
     from superset.extensions import db
     from superset.models.core import Database
 
     database = db.session.query(Database).filter(Database.database_name == database_name).one_or_none()
     if not database:
         raise RuntimeError(f"Database '{database_name}' not found. Ensure import_datasources ran first.")
-    return database
-
-
-def get_table(database_name: str, table_name: str) -> SqlaTable:
-    from superset.connectors.sqla.models import SqlaTable
-    from superset.extensions import db
-
-    database = get_database(database_name)
     table = (
         db.session.query(SqlaTable)
         .filter(SqlaTable.database_id == database.id, SqlaTable.table_name == table_name)
@@ -55,27 +51,39 @@ def get_table(database_name: str, table_name: str) -> SqlaTable:
     return table
 
 
-def ensure_required_columns(table: SqlaTable, required_columns: set[str]) -> None:
-    """Ensure imported datasets expose the required columns for seeded charts."""
+def ensure_columns(table: SqlaTable, required: list[str]) -> None:
     from superset.extensions import db
 
-    def column_names() -> set[str]:
-        return {column.column_name for column in table.columns}
-
-    missing_columns = required_columns - column_names()
-    if not missing_columns:
+    existing = {col.column_name for col in table.columns}
+    missing = set(required) - existing
+    if not missing:
         return
-
     table.fetch_metadata()
     db.session.flush()
-
-    missing_columns = required_columns - column_names()
-    if missing_columns:
-        missing_display = ", ".join(sorted(missing_columns))
+    missing = set(required) - {col.column_name for col in table.columns}
+    if missing:
         raise RuntimeError(
-            f"Dataset '{table.table_name}' is missing expected columns after metadata refresh: {missing_display}. "
-            "Verify seed SQL schema and imported datasets."
+            f"Dataset '{table.table_name}' missing columns after refresh: {', '.join(sorted(missing))}."
         )
+
+
+def build_params(spec: dict) -> dict:
+    params: dict = {}
+    if "x_axis" in spec:
+        params["x_axis"] = spec["x_axis"]
+    if "time_grain" in spec:
+        params["time_grain_sqla"] = spec["time_grain"]
+    if "metrics" in spec:
+        params["metrics"] = [simple_metric(m["column"], m["aggregate"]) for m in spec["metrics"]]
+    if "metric" in spec:
+        params["metric"] = simple_metric(spec["metric"]["column"], spec["metric"]["aggregate"])
+    if "groupby" in spec:
+        params["groupby"] = spec["groupby"]
+    for key in ("entity", "country_fieldtype", "show_bubbles", "max_bubble_size", "color_by_metric"):
+        if key in spec:
+            params[key] = spec[key]
+    params["row_limit"] = spec.get("row_limit", 10000)
+    return params
 
 
 def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict) -> Slice:
@@ -109,12 +117,27 @@ def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict)
 
 
 def build_position_json(charts: list[Slice]) -> str:
-    row_1 = charts[:2]
-    row_2 = charts[2:]
+    row_ids: list[str] = []
+    row_nodes: dict = {}
+    chart_nodes: dict = {}
 
-    def chart_node(node_id: str, chart: Slice, row_id: str) -> dict:
-        return {
-            "id": node_id,
+    for i, chart in enumerate(charts):
+        chart_id = f"CHART-{i + 1}"
+        row_id = f"ROW-{i // 2 + 1}"
+
+        if row_id not in row_nodes:
+            row_ids.append(row_id)
+            row_nodes[row_id] = {
+                "id": row_id,
+                "type": "ROW",
+                "children": [],
+                "parents": ["ROOT_ID", "GRID_ID"],
+                "meta": {"background": "BACKGROUND_TRANSPARENT"},
+            }
+
+        row_nodes[row_id]["children"].append(chart_id)
+        chart_nodes[chart_id] = {
+            "id": chart_id,
             "type": "CHART",
             "children": [],
             "parents": ["ROOT_ID", "GRID_ID", row_id],
@@ -132,128 +155,68 @@ def build_position_json(charts: list[Slice]) -> str:
         "GRID_ID": {
             "id": "GRID_ID",
             "type": "GRID",
-            "children": ["ROW-1", "ROW-2"],
+            "children": row_ids,
             "parents": ["ROOT_ID"],
         },
-        "ROW-1": {
-            "id": "ROW-1",
-            "type": "ROW",
-            "children": ["CHART-1", "CHART-2"],
-            "parents": ["ROOT_ID", "GRID_ID"],
-            "meta": {"background": "BACKGROUND_TRANSPARENT"},
-        },
-        "ROW-2": {
-            "id": "ROW-2",
-            "type": "ROW",
-            "children": ["CHART-3", "CHART-4"],
-            "parents": ["ROOT_ID", "GRID_ID"],
-            "meta": {"background": "BACKGROUND_TRANSPARENT"},
-        },
-        "CHART-1": chart_node("CHART-1", row_1[0], "ROW-1"),
-        "CHART-2": chart_node("CHART-2", row_1[1], "ROW-1"),
-        "CHART-3": chart_node("CHART-3", row_2[0], "ROW-2"),
-        "CHART-4": chart_node("CHART-4", row_2[1], "ROW-2"),
+        **row_nodes,
+        **chart_nodes,
     }
     return json.dumps(layout)
 
 
-def upsert_dashboard(charts: list[Slice]) -> None:
+def upsert_dashboard(title: str, slug: str, charts: list[Slice]) -> None:
     from superset.models.dashboard import Dashboard
     from superset.extensions import db
 
-    dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == DASHBOARD_TITLE).one_or_none()
+    position = build_position_json(charts)
+    dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == title).one_or_none()
     if dashboard:
         dashboard.slices = charts
-        dashboard.position_json = build_position_json(charts)
+        dashboard.position_json = position
         dashboard.published = True
-        print(f"[seed-dashboard] Updated dashboard: {DASHBOARD_TITLE}")
+        print(f"[seed-dashboard] Updated dashboard: {title}")
         return
 
     dashboard = Dashboard(
-        dashboard_title=DASHBOARD_TITLE,
-        slug="starter-seed-dashboard",
-        position_json=build_position_json(charts),
+        dashboard_title=title,
+        slug=slug,
+        position_json=position,
         json_metadata=json.dumps({"timed_refresh_immune_slices": []}),
         published=True,
     )
     dashboard.slices = charts
     db.session.add(dashboard)
-    print(f"[seed-dashboard] Created dashboard: {DASHBOARD_TITLE}")
+    print(f"[seed-dashboard] Created dashboard: {title}")
 
 
 def main() -> None:
+    if not os.path.exists(CHART_CONFIG_PATH):
+        print(f"[seed-dashboard] Config not found at {CHART_CONFIG_PATH}, skipping.")
+        return
+
+    with open(CHART_CONFIG_PATH) as f:
+        config = yaml.safe_load(f)
+
     app = create_app()
     with app.app_context():
         from superset.extensions import db
 
-        orders = get_table("sales", "orders")
-        products = get_table("sales", "products")
-        customers = get_table("sales", "customers")
-        dau = get_table("analytics", "daily_active_users")
+        for dashboard_spec in config.get("dashboards", []):
+            title = dashboard_spec["title"]
+            slug = dashboard_spec.get("slug", title.lower().replace(" ", "-"))
+            charts: list = []
 
-        ensure_required_columns(orders, {"order_date", "amount"})
-        ensure_required_columns(products, {"id", "category"})
-        ensure_required_columns(customers, {"id", "country"})
-        ensure_required_columns(dau, {"date", "dau"})
+            for chart_spec in dashboard_spec.get("charts", []):
+                table = get_table(chart_spec["database"], chart_spec["table"])
+                if required := chart_spec.get("required_columns"):
+                    ensure_columns(table, required)
+                params = build_params(chart_spec)
+                chart = upsert_chart(chart_spec["name"], chart_spec["viz_type"], table, params)
+                charts.append(chart)
 
-        bar_chart = upsert_chart(
-            chart_name="Sales Amount by Day (Bar)",
-            viz_type="echarts_timeseries_bar",
-            table=orders,
-            params={
-                "x_axis": "order_date",
-                "time_grain_sqla": "P1D",
-                "metrics": [simple_metric("amount", "SUM")],
-                "groupby": [],
-                "row_limit": 10000,
-            },
-        )
-
-        line_chart = upsert_chart(
-            chart_name="Daily Active Users (Line)",
-            viz_type="echarts_timeseries_line",
-            table=dau,
-            params={
-                "x_axis": "date",
-                "time_grain_sqla": "P1D",
-                "metrics": [simple_metric("dau", "SUM")],
-                "groupby": [],
-                "row_limit": 10000,
-            },
-        )
-
-        pie_chart = upsert_chart(
-            chart_name="Products by Category (Pie)",
-            viz_type="pie",
-            table=products,
-            params={
-                "groupby": ["category"],
-                "metric": simple_metric("id", "COUNT"),
-                "row_limit": 10000,
-            },
-        )
-
-        # NOTE: `country_map` is a single-country choropleth and does not
-        # ship a "world" TopoJSON, which causes the front-end to render
-        # "Could not load map data for world". For a world-level view keyed
-        # by ISO country codes we use the `world_map` plugin instead.
-        geo_chart = upsert_chart(
-            chart_name="Customers by Country (Geo)",
-            viz_type="world_map",
-            table=customers,
-            params={
-                "entity": "country",
-                "country_fieldtype": "cca2",
-                "metric": simple_metric("id", "COUNT"),
-                "show_bubbles": True,
-                "max_bubble_size": "25",
-                "color_by_metric": True,
-                "row_limit": 10000,
-            },
-        )
-
-        upsert_dashboard([bar_chart, line_chart, pie_chart, geo_chart])
-        db.session.commit()
+            upsert_dashboard(title, slug, charts)
+            db.session.commit()
+            print(f"[seed-dashboard] Done — '{title}' ({len(charts)} charts).")
 
 
 if __name__ == "__main__":

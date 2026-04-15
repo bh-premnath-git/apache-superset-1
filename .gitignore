@@ -1,5 +1,26 @@
+# Secrets
 .env
+
+# Python
 *.pyc
+*.pyo
+*.pyd
 __pycache__/
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Windsurf / AI assistants
 .codex
 .claude
+.windsurf

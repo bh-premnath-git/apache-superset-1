@@ -88,9 +88,9 @@ FEATURE_FLAGS = {
 }
 
 # ── Other settings ────────────────────────────────────────────────────────────
-APP_NAME = os.getenv("SUPERSET_APP_NAME", "Premdash")
-APP_ICON = os.getenv("SUPERSET_APP_ICON", "/static/assets/images/premdash-logo.svg")
-APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", "/static/assets/images/premdash-logo.svg")
+APP_NAME = os.getenv("SUPERSET_APP_NAME", "BigHammer")
+APP_ICON = os.getenv("SUPERSET_APP_ICON", "/static/assets/images/logo.svg")
+APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg")
 FAVICONS = [{"href": APP_FAVICON, "type": "image/svg+xml"}]
 WTF_CSRF_ENABLED = True
 TALISMAN_ENABLED = False          # set True behind a real TLS terminator
