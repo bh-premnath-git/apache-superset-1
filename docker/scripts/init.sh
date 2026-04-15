@@ -69,12 +69,10 @@ if [[ -f /app/seed/import_datasources.yaml ]]; then
     -u "${SUPERSET_ADMIN_USERNAME}"
 
   echo "[init] Reconciling sales DB URI to mysql+pymysql for compatibility..."
-  python - <<'PY'
+python - <<'PY'
 import os
 
 from superset.app import create_app
-from superset.extensions import db
-from superset.models.core import Database
 
 username = os.environ["MYSQL_USER"]
 password = os.environ["MYSQL_PASSWORD"]
@@ -85,6 +83,9 @@ expected_uri = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database_n
 
 app = create_app()
 with app.app_context():
+    from superset.extensions import db
+    from superset.models.core import Database
+
     sales_db = (
         db.session.query(Database)
         .filter(Database.database_name == "sales")
