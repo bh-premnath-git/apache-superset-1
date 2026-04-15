@@ -67,6 +67,8 @@ FEATURE_FLAGS = {
 }
 
 # ── Other settings ────────────────────────────────────────────────────────────
+APP_NAME = os.getenv("SUPERSET_APP_NAME", "Premdash")
+APP_ICON = os.getenv("SUPERSET_APP_ICON", "/static/assets/images/premdash-logo.svg")
 WTF_CSRF_ENABLED = True
 TALISMAN_ENABLED = False          # set True behind a real TLS terminator
 SESSION_COOKIE_HTTPONLY = True

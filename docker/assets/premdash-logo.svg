@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="32" viewBox="0 0 180 32" fill="none">
+  <rect width="180" height="32" rx="8" fill="#132E5B"/>
+  <path d="M18 8L11 12V20L18 24L25 20V12L18 8Z" fill="#22C55E"/>
+  <path d="M18 12L15 13.75V18.25L18 20L21 18.25V13.75L18 12Z" fill="#0B1220"/>
+  <text x="34" y="21" fill="white" font-size="14" font-family="Arial, Helvetica, sans-serif" font-weight="700">Premdash</text>
+</svg>
