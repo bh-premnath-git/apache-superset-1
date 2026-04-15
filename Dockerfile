@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir \
 COPY docker/scripts/bootstrap.sh /app/bootstrap.sh
 RUN chmod +x /app/bootstrap.sh
 
+# Copy custom branding assets.
+COPY docker/assets/premdash-logo.svg /app/superset/static/assets/images/premdash-logo.svg
+
 USER superset
 
 ENTRYPOINT ["/app/bootstrap.sh"]
