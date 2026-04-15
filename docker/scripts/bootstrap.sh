@@ -3,9 +3,21 @@ set -euo pipefail
 
 # ── Wait for metadata DB to be ready ─────────────────────────────────────────
 echo "[bootstrap] Waiting for metadata DB at ${METADATA_DB_HOST}:${METADATA_DB_PORT}..."
-until pg_isready -h "${METADATA_DB_HOST}" -p "${METADATA_DB_PORT}" -U "${METADATA_DB_USER}" -q; do
-  sleep 2
-done
+python - <<'PY'
+import os
+import socket
+import time
+
+host = os.environ["METADATA_DB_HOST"]
+port = int(os.environ["METADATA_DB_PORT"])
+
+while True:
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            break
+    except OSError:
+        time.sleep(2)
+PY
 echo "[bootstrap] Metadata DB is ready."
 
 # ── Run DB migrations ─────────────────────────────────────────────────────────
