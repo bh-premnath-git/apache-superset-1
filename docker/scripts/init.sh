@@ -21,6 +21,32 @@ while True:
 PY
 echo "[init] Metadata DB is ready."
 
+wait_for_tcp() {
+  local host="$1"
+  local port="$2"
+  local label="$3"
+  echo "[init] Waiting for ${label} at ${host}:${port}..."
+  python - "$host" "$port" <<'PY'
+import socket
+import sys
+import time
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+while True:
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            break
+    except OSError:
+        time.sleep(2)
+PY
+  echo "[init] ${label} is ready."
+}
+
+wait_for_tcp "${MYSQL_DB_HOST:-mysql-db}" "${MYSQL_DB_PORT:-3306}" "seed MySQL DB"
+wait_for_tcp "${ANALYTICS_DB_HOST:-analytics-db}" "${ANALYTICS_DB_PORT:-5432}" "seed analytics DB"
+
 echo "[init] Running database migrations..."
 superset db upgrade
 
@@ -35,5 +61,14 @@ superset fab create-admin \
 
 echo "[init] Initializing roles and permissions..."
 superset init
+
+if [[ -f /app/seed/import_datasources.yaml ]]; then
+  echo "[init] Importing preconfigured seed connections and datasets..."
+  superset import_datasources \
+    -p /app/seed/import_datasources.yaml \
+    -u "${SUPERSET_ADMIN_USERNAME}"
+else
+  echo "[init] No datasource import file found, skipping."
+fi
 
 echo "[init] Superset metadata initialization completed."

@@ -1,0 +1,17 @@
+databases:
+  - database_name: sales
+    sqlalchemy_uri: mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
+    expose_in_sqllab: true
+    allow_run_async: true
+    tables:
+      - table_name: customers
+      - table_name: orders
+      - table_name: products
+
+  - database_name: analytics
+    sqlalchemy_uri: postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
+    expose_in_sqllab: true
+    allow_run_async: true
+    tables:
+      - table_name: daily_active_users
+      - table_name: events
