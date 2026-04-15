@@ -13,6 +13,16 @@ databases:
     expose_in_sqllab: true
     allow_run_async: true
     tables:
+      # ── Product analytics ─────────────────────────────────────────────────
       - table_name: daily_active_users
       - table_name: events
+
+      # ── Household survey: raw fact table ──────────────────────────────────
       - table_name: household
+
+      # ── Household survey: analytical views (preferred for charts) ─────────
+      - table_name: segment_summary
+      - table_name: state_summary
+      - table_name: income_distribution
+      - table_name: district_segment_summary
+      - table_name: household_monthly_trend
