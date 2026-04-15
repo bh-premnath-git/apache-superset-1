@@ -18,6 +18,9 @@ RUN chmod +x /app/init.sh
 
 # Copy custom branding assets.
 COPY docker/assets/premdash-logo.svg /app/superset/static/assets/images/premdash-logo.svg
+# Replace the default Superset favicon so browsers that request favicon.png
+# directly (or fall back from /favicon.ico) also get the custom icon.
+COPY docker/assets/premdash-logo.svg /app/superset/static/assets/images/favicon.png
 
 USER superset
 
