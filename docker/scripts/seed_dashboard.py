@@ -235,13 +235,14 @@ def main() -> None:
 
         geo_chart = upsert_chart(
             chart_name="Customers by Country (Geo)",
-            viz_type="country_map",
+            viz_type="world_map",
             table=customers,
             params={
                 "entity": "country",
                 "country_fieldtype": "cca2",
-                "select_country": "world",
                 "metric": simple_metric("id", "COUNT"),
+                "show_bubbles": True,
+                "max_bubble_size": "25",
                 "row_limit": 10000,
             },
         )

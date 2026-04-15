@@ -40,7 +40,7 @@ INSERT INTO products (name, category, unit_price) VALUES
 
 INSERT INTO customers (first_name, last_name, country, signup_date) VALUES
   ('Alice',   'Johnson', 'US',  '2023-01-15'),
-  ('Bob',     'Smith',   'UK',  '2023-03-20'),
+  ('Bob',     'Smith',   'GB',  '2023-03-20'),
   ('Carlos',  'García',  'MX',  '2023-05-10'),
   ('Diana',   'Lee',     'CA',  '2023-07-01'),
   ('Evan',    'Brown',   'AU',  '2023-08-22'),

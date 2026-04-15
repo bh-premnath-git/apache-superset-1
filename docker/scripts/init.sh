@@ -135,6 +135,21 @@ with app.app_context():
     test_engine = create_engine(sales_db.sqlalchemy_uri_decrypted)
     with test_engine.connect() as conn:
         conn.execute(text("SELECT 1"))
+
+        # The `world_map` viz expects ISO 3166-1 alpha-2 codes. The standard
+        # alpha-2 for the United Kingdom is `GB`, not `UK`. Earlier seed data
+        # used `UK`, which the world map plugin could not resolve. This
+        # idempotent rewrite repairs already-populated MySQL volumes so the
+        # UK customer renders on the world map without a volume wipe.
+        result = conn.execute(
+            text("UPDATE customers SET country = 'GB' WHERE country = 'UK'")
+        )
+        if result.rowcount:
+            conn.commit()
+            print(
+                f"[init] Normalized {result.rowcount} customers.country "
+                "value(s) from 'UK' to ISO 3166-1 alpha-2 'GB'."
+            )
     test_engine.dispose()
     print("[init] Verified sales database connectivity via pymysql.")
 PY

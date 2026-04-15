@@ -215,6 +215,24 @@ stored   : mysql+pymysql://sample_user:XXXXXXXXXX@mysql-db:3306/sales
 decrypted: mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
 ```
 
+### `Could not load map data for world` on the Geo chart
+
+The `country_map` viz type in Superset ships per-country GeoJSON files only
+(USA, UK, France, …) and has no `world` option — see
+[apache/superset …/country-map/src/countries.ts](https://github.com/apache/superset/blob/master/superset-frontend/plugins/legacy-plugin-chart-country-map/src/countries.ts).
+The starter dashboard therefore uses `world_map` (from
+`@superset-ui/legacy-plugin-chart-world-map`) with `country_fieldtype: cca2`.
+
+Two follow-on gotchas to know about:
+
+- The UK's official ISO 3166-1 alpha-2 code is `GB`, not `UK`. The seed SQL
+  now stores `GB`, and `init.sh` idempotently rewrites any residual `UK`
+  rows in an already-populated MySQL volume so the UK customer renders on
+  the world map.
+- If you see `country_map` lingering after a re-deploy, the chart is
+  re-upserted by `docker/scripts/seed_dashboard.py` each time `init.sh`
+  runs, so a `docker compose up -d --build` will flip it to `world_map`.
+
 ---
 
 ## Production checklist
