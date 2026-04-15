@@ -4,6 +4,7 @@ Mounted into the container at /app/pythonpath/superset_config.py.
 """
 import os
 
+
 # ── Secret key ────────────────────────────────────────────────────────────────
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
 
