@@ -1,0 +1,174 @@
+version: "3.9"
+
+# ── Shared network ────────────────────────────────────────────────────────────
+networks:
+  superset-net:
+    driver: bridge
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  metadata-db-data:
+  redis-data:
+  mysql-data:
+  analytics-db-data:
+  superset-home:
+
+# ── Re-usable anchor for Superset env vars ────────────────────────────────────
+x-superset-env: &superset-env
+  SUPERSET_SECRET_KEY:      ${SUPERSET_SECRET_KEY}
+  SUPERSET_ADMIN_USERNAME:  ${SUPERSET_ADMIN_USERNAME}
+  SUPERSET_ADMIN_PASSWORD:  ${SUPERSET_ADMIN_PASSWORD}
+  SUPERSET_ADMIN_EMAIL:     ${SUPERSET_ADMIN_EMAIL}
+  METADATA_DB_USER:         ${METADATA_DB_USER}
+  METADATA_DB_PASS:         ${METADATA_DB_PASS}
+  METADATA_DB_NAME:         ${METADATA_DB_NAME}
+  METADATA_DB_HOST:         ${METADATA_DB_HOST}
+  METADATA_DB_PORT:         ${METADATA_DB_PORT}
+  REDIS_HOST:               ${REDIS_HOST}
+  REDIS_PORT:               ${REDIS_PORT}
+  SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
+  PYTHONPATH:               /app/pythonpath
+
+services:
+
+  # ── Superset metadata DB ───────────────────────────────────────────────────
+  metadata-db:
+    image: postgres:16-alpine
+    container_name: superset-metadata-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${METADATA_DB_USER}
+      POSTGRES_PASSWORD: ${METADATA_DB_PASS}
+      POSTGRES_DB:       ${METADATA_DB_NAME}
+    volumes:
+      - metadata-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${METADATA_DB_USER} -d ${METADATA_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superset-net
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: superset-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superset-net
+
+  # ── Superset web ───────────────────────────────────────────────────────────
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset-app
+    restart: unless-stopped
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *superset-env
+    ports:
+      - "8088:8088"
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    networks:
+      - superset-net
+
+  # ── Celery worker ──────────────────────────────────────────────────────────
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset-celery-worker
+    restart: unless-stopped
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *superset-env
+    entrypoint: ["celery", "--app=superset.tasks.celery_app:app", "worker",
+                 "--loglevel=info", "--pool=prefork", "--max-tasks-per-child=128"]
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    networks:
+      - superset-net
+
+  # ── Celery beat (scheduled tasks) ─────────────────────────────────────────
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset-celery-beat
+    restart: unless-stopped
+    depends_on:
+      metadata-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *superset-env
+    entrypoint: ["celery", "--app=superset.tasks.celery_app:app", "beat",
+                 "--loglevel=info", "--schedule=/app/superset_home/celerybeat-schedule"]
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    networks:
+      - superset-net
+
+  # ── Sample MySQL DB (sales) ────────────────────────────────────────────────
+  mysql-db:
+    image: mysql:8.0
+    container_name: superset-mysql-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      ${MYSQL_DATABASE}
+      MYSQL_USER:          ${MYSQL_USER}
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./seed/mysql_sales.sql:/docker-entrypoint-initdb.d/01_seed.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superset-net
+
+  # ── Sample Analytics Postgres DB ───────────────────────────────────────────
+  analytics-db:
+    image: postgres:16-alpine
+    container_name: superset-analytics-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${ANALYTICS_DB_USER}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASS}
+      POSTGRES_DB:       ${ANALYTICS_DB_NAME}
+    volumes:
+      - analytics-db-data:/var/lib/postgresql/data
+      - ./seed/pg_analytics.sql:/docker-entrypoint-initdb.d/01_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superset-net
