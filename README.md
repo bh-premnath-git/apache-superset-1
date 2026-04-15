@@ -91,6 +91,21 @@ postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
 
 ---
 
+
+## Why this is workable (and what was fixed)
+
+- The image installs **pure-Python DB drivers** (`pymysql`, `psycopg2-binary`) so local builds are less likely to fail due to missing compiler/system packages.
+- Bootstrap now waits for the metadata DB with a Python TCP check, avoiding reliance on `pg_isready` being present inside the Superset image.
+- `docker-compose.yml` uses project-root build context so `docker/scripts/bootstrap.sh` is available during image build.
+
+---
+
+## Reference docs
+
+- Superset Docker Compose setup: https://superset.apache.org/docs/installation/docker-compose
+- Superset configuration guide: https://superset.apache.org/docs/configuration/configuring-superset
+- SQLAlchemy database URLs: https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls
+
 ## Common commands
 
 ```bash
