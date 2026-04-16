@@ -87,10 +87,37 @@ FEATURE_FLAGS = {
     "ENABLE_TEMPLATE_PROCESSING": True,
 }
 
+MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY", "")
+
 # ── Other settings ────────────────────────────────────────────────────────────
 APP_NAME = os.getenv("SUPERSET_APP_NAME", "BigHammer")
 APP_ICON = os.getenv("SUPERSET_APP_ICON", "/static/assets/images/logo.svg")
 APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg")
+THEME_DEFAULT = {
+    "algorithm": "default",
+    "token": {
+        "brandLogoUrl": APP_ICON,
+        "brandLogoAlt": APP_NAME,
+        "brandLogoHref": "/",
+    },
+}
+THEME_DARK = {
+    "algorithm": "dark",
+    "token": {
+        "brandLogoUrl": APP_ICON,
+        "brandLogoAlt": APP_NAME,
+        "brandLogoHref": "/",
+    },
+}
+
+
+def COMMON_BOOTSTRAP_OVERRIDES_FUNC(bootstrap_data: dict) -> dict:
+    return {
+        "appName": APP_NAME,
+        "appIcon": APP_ICON,
+    }
+
+
 FAVICONS = [{"href": APP_FAVICON, "type": "image/svg+xml"}]
 WTF_CSRF_ENABLED = True
 TALISMAN_ENABLED = False          # set True behind a real TLS terminator

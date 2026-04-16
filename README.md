@@ -68,8 +68,14 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | `analytics` | Postgres   | `income_distribution`               | view  | 6       |
 | `analytics` | Postgres   | `district_segment_summary`          | view  | ~1 000  |
 | `analytics` | Postgres   | `household_monthly_trend`           | view  | 12      |
+| `analytics` | Postgres   | `household_headlines`               | view  | 1       |
+| `analytics` | Postgres   | `household_size_distribution`       | view  | ~7      |
+| `analytics` | Postgres   | `household_joint_distribution`      | view  | ~42     |
+| `analytics` | Postgres   | `household_segment_monthly_trend`   | view  | ~48     |
+| `analytics` | Postgres   | `household_geo_points`              | view  | 200 000 |
+| `analytics` | Postgres   | `household_path_summary`            | view  | ~250    |
 
-### Starter Seed Dashboard (12 charts)
+### Starter Seed Dashboard (15 charts)
 
 | Chart                             | Type              | Source                                |
 |-----------------------------------|-------------------|---------------------------------------|
@@ -79,6 +85,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | Daily Active Users                | Timeseries line   | analytics.daily_active_users          |
 | Households by Social Category     | Pie               | analytics.household                   |
 | Income Distribution               | Categorical bar   | analytics.income_distribution         |
+| Household Size Distribution       | Categorical bar   | analytics.household_size_distribution |
 | Households by Segment             | Categorical bar   | analytics.segment_summary             |
 | Weighted Income by Segment        | Categorical bar   | analytics.segment_summary             |
 | Internet Penetration by Segment   | Categorical bar   | analytics.segment_summary             |
@@ -86,6 +93,19 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | Weighted Income by State          | Categorical bar   | analytics.state_summary               |
 | Monthly Household Creation        | Timeseries line   | analytics.household_monthly_trend     |
 | Monthly Avg Income Trend          | Timeseries line   | analytics.household_monthly_trend     |
+| Segment Household Creation Trend  | Timeseries line   | analytics.household_segment_monthly_trend |
+
+In the current image build, `chart_config.yaml` can use the verified
+`visualization_type` labels wired into the Python seeder, including
+`Bar Chart`, `Line Chart`, `Pie Chart`, `World Map`, `Big Number`,
+`Big Number with Trendline`, `Histogram`, `Heatmap`, `Treemap`, `Sunburst`,
+`Sankey`, `MapBox`, `Scatter Plot`, `deck.gl Scatterplot`,
+`deck.gl Heatmap`, and `deck.gl Polygon`.
+The Python seeder maps those labels to the internal Superset `viz_type` keys
+required by the API.
+For categorical comparisons such as segment/state bars, this repo intentionally
+uses the `Bar Chart` visualization type with a categorical `x_axis`, because that is the
+registered bar-capable plugin available in the running Superset build.
 
 ---
 
@@ -99,8 +119,14 @@ This repo follows a simple two-layer model:
   household        ──────►          segment_summary           ◄── weighted KPIs per segment
   (200K atomic                      state_summary             ◄── geo rollup (lat/lon, state_code)
    survey rows)                     income_distribution       ◄── fixed-width buckets
+                                    household_size_distribution ◄── household-size frequency bins
+                                    household_headlines       ◄── single-row KPI headline metrics
+                                    household_joint_distribution ◄── income × hh_size joint matrix
                                     district_segment_summary  ◄── state → district → segment hierarchy
                                     household_monthly_trend   ◄── time-series (created_at)
+                                    household_segment_monthly_trend ◄── segment trends over time
+                                    household_geo_points      ◄── point-level geo coordinates
+                                    household_path_summary    ◄── source → target flow edges
 ```
 
 **Why views:** business semantics — survey-weighting, bucket edges, geo rollup —
@@ -118,6 +144,25 @@ numbers. Charts stay thin (just `x_axis` / `metric`) and Python stays dumb
 | Chart title, viz type, x/y, metric, groupby      | `chart_config.yaml`  |
 | Registering a table / view as a Superset dataset | `import_datasources.yaml` |
 | Validation, upsert, dashboard layout             | `seed_dashboard.py`  |
+
+### Household visualization pattern coverage
+
+The household seed now models the following visualization families at the SQL
+view layer:
+
+| Pattern family | Seeded dataset(s) | Notes |
+|---|---|---|
+| Headlines | `household_headlines` | Ready for big-number style cards when that plugin is enabled |
+| Distributions | `income_distribution`, `household_size_distribution` | Works today with bar charts; ready for histogram-like visuals |
+| Comparisons | `segment_summary`, `state_summary` | Works today with bar charts |
+| Trends / time series | `household_monthly_trend`, `household_segment_monthly_trend` | Works today with line charts |
+| Joint distributions | `household_joint_distribution` | Ready for heatmap / bubble / scatter style plugins |
+| Hierarchical maps | `district_segment_summary` | Ready for treemap / sunburst style plugins |
+| Path maps | `household_path_summary` | Ready for sankey / path-style plugins |
+| Geo point maps | `household_geo_points`, `state_summary` | Ready for Mapbox / deck.gl style plugins |
+
+The current image build still renders only the verified plugin subset described
+below, so some of these datasets are modeled now for future chart expansion.
 
 ---
 
@@ -186,7 +231,7 @@ Point it at the view, not the raw table, whenever a business rule applies.
 - database: analytics
   table: my_new_table_summary
   name: "Weighted Value by Category"
-  viz_type: echarts_timeseries_bar  # see chart_config.yaml header for all types
+  visualization_type: Bar Chart     # see chart_config.yaml header for all types
   required_columns: [category, weighted_value]
   x_axis: category
   metrics:
@@ -201,14 +246,36 @@ docker compose down -v
 docker compose up -d --build
 ```
 
-### Supported `viz_type` values
+### Supported `visualization_type` values
 
-| `viz_type`                  | Key fields                                      |
-|-----------------------------|-------------------------------------------------|
-| `echarts_timeseries_bar`    | `x_axis`, `metrics[]`, `groupby` (`time_grain` optional) |
-| `echarts_timeseries_line`   | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
-| `pie`                       | `groupby[]`, `metric{}`                         |
-| `world_map`                 | `entity`, `country_fieldtype`, `metric{}`       |
+These are the human-facing visualization labels used in `chart_config.yaml`.
+The Python seeder maps them to the internal keys required by the Superset API.
+
+| `visualization_type`        | Mapped internal key         | Key fields |
+|-----------------------------|-----------------------------|------------|
+| `Bar Chart`                 | `echarts_timeseries_bar`    | `x_axis`, `metrics[]`, `groupby` (`time_grain` optional) |
+| `Line Chart`                | `echarts_timeseries_line`   | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
+| `Pie Chart`                 | `pie`                       | `groupby[]`, `metric{}` |
+| `World Map`                 | `world_map`                 | `entity`, `country_fieldtype`, `metric{}` |
+| `Big Number`                | `big_number_total`          | `metric{}` or `metrics[]` |
+| `Big Number with Trendline` | `big_number`                | `metric{}` or `metrics[]` |
+| `Histogram`                 | `histogram_v2`              | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
+| `Heatmap`                   | `heatmap_v2`                | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
+| `Treemap`                   | `treemap_v2`                | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
+| `Sunburst`                  | `sunburst_v2`               | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
+| `Sankey`                    | `sankey_v2`                 | `source`, `target`, `metric{}` or `metrics[]` |
+| `MapBox`                    | `mapbox`                    | `longitude`, `latitude`, optional map params, `MAPBOX_API_KEY` |
+| `Scatter Plot`              | `deck_scatter`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
+| `deck.gl Scatterplot`       | `deck_scatter`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
+| `deck.gl Heatmap`           | `deck_heatmap`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
+| `deck.gl Polygon`           | `deck_polygon`              | polygon/geojson columns, optional metrics, `MAPBOX_API_KEY` |
+
+The Python seeder validates chart configs against this supported set and also
+accepts legacy `viz_type` aliases `dist_bar` and `echarts_bar`, mapping both
+to the internal bar plugin for backward compatibility.
+
+Mapbox and deck.gl charts require a valid public `MAPBOX_API_KEY` in your
+environment and Docker Compose config.
 
 ---
 

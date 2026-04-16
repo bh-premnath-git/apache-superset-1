@@ -1,5 +1,5 @@
 # Custom Superset image with common SQLAlchemy DB drivers.
-FROM apache/superset:5.0.0
+FROM apache/superset:6.0.0
 
 USER root
 

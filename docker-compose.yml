@@ -33,6 +33,7 @@ x-superset-env: &superset-env
   MYSQL_DB_PORT:            ${MYSQL_DB_PORT:-3306}
   ANALYTICS_DB_HOST:        ${ANALYTICS_DB_HOST:-analytics-db}
   ANALYTICS_DB_PORT:        ${ANALYTICS_DB_PORT:-5432}
+  MAPBOX_API_KEY:           ${MAPBOX_API_KEY:-}
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
 

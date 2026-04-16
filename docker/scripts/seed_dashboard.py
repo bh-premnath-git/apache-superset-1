@@ -19,11 +19,46 @@ if TYPE_CHECKING:
     from superset.models.slice import Slice
 
 CHART_CONFIG_PATH = os.environ.get("CHART_CONFIG_PATH", "/app/seed/chart_config.yaml")
+VISUALIZATION_TYPE_MAP = {
+    "Bar Chart": "echarts_timeseries_bar",
+    "Line Chart": "echarts_timeseries_line",
+    "Pie Chart": "pie",
+    "World Map": "world_map",
+    "Big Number": "big_number_total",
+    "Big Number with Trendline": "big_number",
+    "Histogram": "histogram_v2",
+    "Heatmap": "heatmap_v2",
+    "Treemap": "treemap_v2",
+    "Sunburst": "sunburst_v2",
+    "Sankey": "sankey_v2",
+    "MapBox": "mapbox",
+    "Scatter Plot": "deck_scatter",
+    "deck.gl Scatterplot": "deck_scatter",
+    "deck.gl Heatmap": "deck_heatmap",
+    "deck.gl Polygon": "deck_polygon",
+}
 VIZ_TYPE_ALIASES = {
     # Legacy NVD3 categorical bar plugin removed in recent Superset releases.
     "dist_bar": "echarts_timeseries_bar",
     # Temporary compatibility alias for previously seeded configs.
     "echarts_bar": "echarts_timeseries_bar",
+}
+SUPPORTED_VIZ_TYPES = {
+    "echarts_timeseries_bar",
+    "echarts_timeseries_line",
+    "pie",
+    "world_map",
+    "big_number_total",
+    "big_number",
+    "histogram_v2",
+    "heatmap_v2",
+    "treemap_v2",
+    "sunburst_v2",
+    "sankey_v2",
+    "mapbox",
+    "deck_scatter",
+    "deck_heatmap",
+    "deck_polygon",
 }
 
 
@@ -85,11 +120,136 @@ def build_params(spec: dict) -> dict:
         params["metric"] = simple_metric(spec["metric"]["column"], spec["metric"]["aggregate"])
     if "groupby" in spec:
         params["groupby"] = spec["groupby"]
-    for key in ("entity", "country_fieldtype", "show_bubbles", "max_bubble_size", "color_by_metric"):
+    for key in (
+        "entity",
+        "country_fieldtype",
+        "show_bubbles",
+        "max_bubble_size",
+        "color_by_metric",
+        "all_columns_x",
+        "all_columns_y",
+        "all_columns",
+        "series",
+        "adhoc_filters",
+        "filters",
+        "columns",
+        "group_by",
+        "granularity_sqla",
+        "since",
+        "until",
+        "metric_2",
+        "size",
+        "size_encoding",
+        "x",
+        "y",
+        "value",
+        "sort_x_axis",
+        "sort_y_axis",
+        "normalize_across",
+        "longitude",
+        "latitude",
+        "spatial",
+        "js_columns",
+        "mapbox_style",
+        "viewport",
+        "line_column",
+        "categorical_columns",
+        "primary_metric",
+        "secondary_metric",
+        "time_range",
+        "comparison_type",
+        "source",
+        "target",
+    ):
         if key in spec:
             params[key] = spec[key]
     params["row_limit"] = spec.get("row_limit", 10000)
     return params
+
+
+def resolve_viz_type(spec: dict) -> str:
+    if "visualization_type" in spec:
+        visualization_type = spec["visualization_type"]
+        if visualization_type not in VISUALIZATION_TYPE_MAP:
+            supported = ", ".join(sorted(VISUALIZATION_TYPE_MAP))
+            raise RuntimeError(
+                f"Chart '{spec.get('name', '<unnamed>')}' uses unsupported visualization_type "
+                f"'{visualization_type}'. Supported visualization types in this build: {supported}."
+            )
+        return VISUALIZATION_TYPE_MAP[visualization_type]
+
+    if "viz_type" not in spec:
+        raise RuntimeError(f"Chart '{spec.get('name', '<unnamed>')}' must define 'visualization_type' or 'viz_type'.")
+
+    return VIZ_TYPE_ALIASES.get(spec["viz_type"], spec["viz_type"])
+
+
+def validate_chart_spec(spec: dict) -> str:
+    chart_name = spec.get("name", "<unnamed>")
+    missing_top_level = [key for key in ("database", "table", "name") if key not in spec]
+    if missing_top_level:
+        raise RuntimeError(
+            f"Chart '{chart_name}' missing required keys: {', '.join(missing_top_level)}."
+        )
+
+    canonical_viz_type = resolve_viz_type(spec)
+    if canonical_viz_type not in SUPPORTED_VIZ_TYPES:
+        supported = ", ".join(sorted(SUPPORTED_VIZ_TYPES))
+        raise RuntimeError(
+            f"Chart '{chart_name}' uses unsupported viz_type '{spec.get('viz_type', spec.get('visualization_type'))}' "
+            f"(canonical: '{canonical_viz_type}'). Supported viz types in this build: {supported}."
+        )
+
+    if canonical_viz_type in {"echarts_timeseries_bar", "echarts_timeseries_line"}:
+        if "x_axis" not in spec:
+            raise RuntimeError(f"Chart '{chart_name}' must define 'x_axis'.")
+        if not spec.get("metrics"):
+            raise RuntimeError(f"Chart '{chart_name}' must define non-empty 'metrics'.")
+
+    if canonical_viz_type == "pie":
+        if not spec.get("groupby"):
+            raise RuntimeError(f"Chart '{chart_name}' must define non-empty 'groupby'.")
+        if "metric" not in spec:
+            raise RuntimeError(f"Chart '{chart_name}' must define 'metric'.")
+
+    if canonical_viz_type == "world_map":
+        missing_world_map = [key for key in ("entity", "country_fieldtype", "metric") if key not in spec]
+        if missing_world_map:
+            raise RuntimeError(
+                f"Chart '{chart_name}' missing world_map keys: {', '.join(missing_world_map)}."
+            )
+
+    if canonical_viz_type in {"big_number_total", "big_number"}:
+        if "metric" not in spec and not spec.get("metrics"):
+            raise RuntimeError(f"Chart '{chart_name}' must define 'metric' or 'metrics' for big number charts.")
+
+    if canonical_viz_type in {"histogram_v2", "heatmap_v2", "treemap_v2", "sunburst_v2"}:
+        if not spec.get("groupby") and not spec.get("columns") and "x_axis" not in spec:
+            raise RuntimeError(
+                f"Chart '{chart_name}' must define grouping columns for '{canonical_viz_type}'."
+            )
+        if "metric" not in spec and not spec.get("metrics"):
+            raise RuntimeError(
+                f"Chart '{chart_name}' must define 'metric' or 'metrics' for '{canonical_viz_type}'."
+            )
+
+    if canonical_viz_type == "sankey_v2":
+        missing_sankey = [key for key in ("source", "target") if key not in spec]
+        if missing_sankey:
+            raise RuntimeError(
+                f"Chart '{chart_name}' missing sankey keys: {', '.join(missing_sankey)}."
+            )
+        if "metric" not in spec and not spec.get("metrics"):
+            raise RuntimeError(f"Chart '{chart_name}' must define 'metric' or 'metrics' for sankey charts.")
+
+    if canonical_viz_type in {"mapbox", "deck_scatter", "deck_heatmap", "deck_polygon"}:
+        missing_geo = [key for key in ("longitude", "latitude") if key not in spec and key != "deck_polygon"]
+        if canonical_viz_type != "deck_polygon" and missing_geo:
+            raise RuntimeError(
+                f"Chart '{chart_name}' missing geo keys: {', '.join(missing_geo)}."
+            )
+
+    return canonical_viz_type
 
 
 def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict) -> Slice:
@@ -217,11 +377,12 @@ def main() -> None:
             charts: list = []
 
             for chart_spec in dashboard_spec.get("charts", []):
+                canonical_viz_type = validate_chart_spec(chart_spec)
                 table = get_table(chart_spec["database"], chart_spec["table"])
                 if required := chart_spec.get("required_columns"):
                     ensure_columns(table, required)
                 params = build_params(chart_spec)
-                chart = upsert_chart(chart_spec["name"], chart_spec["viz_type"], table, params)
+                chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
                 charts.append(chart)
 
             upsert_dashboard(title, slug, charts)

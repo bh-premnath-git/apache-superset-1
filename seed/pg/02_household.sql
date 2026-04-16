@@ -255,6 +255,104 @@ SELECT
 FROM household
 GROUP BY DATE_TRUNC('month', created_at);
 
+-- ── household_headlines: single-row KPIs for headline / big-number cards ──────
+CREATE OR REPLACE VIEW household_headlines AS
+SELECT
+    COUNT(*)                                                                  AS households,
+    ROUND((SUM(income * multiplier) / NULLIF(SUM(multiplier), 0))::numeric, 2) AS weighted_income,
+    ROUND(AVG(income)::numeric, 2)                                            AS avg_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)                         AS internet_pct,
+    ROUND((AVG(does_online_purchase::int) * 100)::numeric, 2)                 AS online_purchase_pct,
+    ROUND(AVG(hh_size)::numeric, 2)                                           AS avg_hh_size
+FROM household;
+
+-- ── household_size_distribution: household-size frequency distribution ────────
+CREATE OR REPLACE VIEW household_size_distribution AS
+SELECT
+    hh_size,
+    COUNT(*)                        AS households,
+    ROUND(SUM(multiplier)::numeric, 2) AS weighted_households
+FROM household
+GROUP BY hh_size;
+
+-- ── household_joint_distribution: income × household-size matrix ──────────────
+CREATE OR REPLACE VIEW household_joint_distribution AS
+SELECT
+    income_bucket,
+    bucket_order,
+    hh_size,
+    COUNT(*)                                                                  AS households,
+    ROUND((SUM(income * multiplier) / NULLIF(SUM(multiplier), 0))::numeric, 2) AS weighted_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)                         AS internet_pct
+FROM (
+    SELECT
+        hh_size,
+        income,
+        has_internet,
+        multiplier,
+        CASE
+            WHEN income < 3000 THEN '0000-2999'
+            WHEN income < 3500 THEN '3000-3499'
+            WHEN income < 4000 THEN '3500-3999'
+            WHEN income < 4500 THEN '4000-4499'
+            WHEN income < 5000 THEN '4500-4999'
+            ELSE '5000+'
+        END AS income_bucket,
+        CASE
+            WHEN income < 3000 THEN 1
+            WHEN income < 3500 THEN 2
+            WHEN income < 4000 THEN 3
+            WHEN income < 4500 THEN 4
+            WHEN income < 5000 THEN 5
+            ELSE 6
+        END AS bucket_order
+    FROM household
+) b
+GROUP BY income_bucket, bucket_order, hh_size;
+
+-- ── household_segment_monthly_trend: segment-level trend dataset ───────────────
+CREATE OR REPLACE VIEW household_segment_monthly_trend AS
+SELECT
+    DATE_TRUNC('month', created_at)::DATE                     AS month,
+    segment,
+    COUNT(*)                                                  AS households,
+    ROUND(AVG(income)::numeric, 2)                            AS avg_income,
+    ROUND((AVG(has_internet::int) * 100)::numeric, 2)         AS internet_pct,
+    ROUND((AVG(does_online_purchase::int) * 100)::numeric, 2) AS online_purchase_pct
+FROM household
+GROUP BY DATE_TRUNC('month', created_at), segment;
+
+-- ── household_geo_points: point-level geo dataset for map visualizations ───────
+CREATE OR REPLACE VIEW household_geo_points AS
+SELECT
+    household_id,
+    created_at::DATE                 AS created_date,
+    state,
+    state_code,
+    district,
+    district_code,
+    lat,
+    lon,
+    segment,
+    income,
+    hh_size,
+    has_internet,
+    does_online_purchase,
+    multiplier
+FROM household;
+
+-- ── household_path_summary: source-target style dataset for path/sankey use ────
+CREATE OR REPLACE VIEW household_path_summary AS
+SELECT
+    state_code                       AS source,
+    district_code                    AS target,
+    state,
+    district,
+    COUNT(*)                         AS households,
+    ROUND(SUM(multiplier)::numeric, 2) AS weighted_households
+FROM household
+GROUP BY state_code, district_code, state, district;
+
 -- ── Validation Queries (run manually to verify data quality) ──────────────────
 -- Segment distribution
 --   SELECT * FROM segment_summary ORDER BY segment;

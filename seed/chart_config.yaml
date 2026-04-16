@@ -10,11 +10,56 @@
 # state_summary, income_distribution, …) rather than the raw fact table. Views
 # own the business semantics, so charts stay thin and consistent.
 #
-# Supported viz_type values:
-#   echarts_timeseries_bar, echarts_timeseries_line  → time-series (needs x_axis + time_grain + metrics[])
-#   echarts_timeseries_bar                           → bar chart (time or categorical x_axis; needs x_axis + metrics[])
-#   pie                                              → pie/donut (needs groupby[] + metric{})
-#   world_map                                        → geo map (needs entity + country_fieldtype + metric{})
+# This file uses human-facing `visualization_type` labels. The Python seeder
+# maps them to the internal Superset `viz_type` keys required by the API.
+#
+# Supported `visualization_type` values in the current build:
+#   Bar Chart                → internal key: echarts_timeseries_bar
+#                               works here for time or categorical x_axis;
+#                               requires x_axis + metrics[]
+#   Line Chart               → internal key: echarts_timeseries_line
+#                               typically time-series; requires x_axis + metrics[]
+#   Pie Chart                → internal key: pie
+#                               requires groupby[] + metric{}
+#   World Map                → internal key: world_map
+#                               requires entity + country_fieldtype + metric{}
+#   Big Number               → internal key: big_number_total
+#                               requires metric{} or metrics[]
+#   Big Number with Trendline → internal key: big_number
+#                               requires metric{} or metrics[]
+#   Histogram                → internal key: histogram_v2
+#                               requires groupby/columns/x_axis + metric{}
+#   Heatmap                  → internal key: heatmap_v2
+#                               requires groupby/columns/x_axis + metric{}
+#   Treemap                  → internal key: treemap_v2
+#                               requires groupby/columns/x_axis + metric{}
+#   Sunburst                 → internal key: sunburst_v2
+#                               requires groupby/columns/x_axis + metric{}
+#   Sankey                   → internal key: sankey_v2
+#                               requires source + target + metric{}
+#   MapBox                   → internal key: mapbox
+#                               requires longitude + latitude and MAPBOX_API_KEY
+#   Scatter Plot             → internal key: deck_scatter
+#                               requires longitude + latitude and MAPBOX_API_KEY
+#   deck.gl Scatterplot      → internal key: deck_scatter
+#                               requires longitude + latitude and MAPBOX_API_KEY
+#   deck.gl Heatmap          → internal key: deck_heatmap
+#                               requires longitude + latitude and MAPBOX_API_KEY
+#   deck.gl Polygon          → internal key: deck_polygon
+#                               typically requires geojson/polygon columns and MAPBOX_API_KEY
+#
+# Legacy aliases still accepted by the Python seeder for backward compatibility:
+#   viz_type: dist_bar, echarts_bar    → mapped to echarts_timeseries_bar
+#
+# Additional household pattern datasets are also modeled in SQL for future chart
+# families beyond the current image build:
+#   household_headlines              → headline / big-number metrics
+#   household_size_distribution      → size distributions / histogram-style bars
+#   household_joint_distribution     → joint distributions / heatmaps / bubbles
+#   household_segment_monthly_trend  → segment trend comparisons over time
+#   household_geo_points             → Mapbox / deck.gl point maps
+#   household_path_summary           → path / sankey style source-target flows
+#   district_segment_summary         → hierarchy views such as treemap/sunburst
 #
 # Optional per-chart fields:
 #   required_columns: [col1, col2]  → validated before chart creation
@@ -30,7 +75,7 @@ dashboards:
       - database: sales
         table: orders
         name: "Sales Amount by Day (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [order_date, amount]
         x_axis: order_date
         time_grain: P1D
@@ -41,7 +86,7 @@ dashboards:
       - database: sales
         table: products
         name: "Products by Category (Pie)"
-        viz_type: pie
+        visualization_type: Pie Chart
         required_columns: [id, category]
         groupby: [category]
         metric: {column: id, aggregate: COUNT}
@@ -49,7 +94,7 @@ dashboards:
       - database: sales
         table: customers
         name: "Customers by Country (Geo)"
-        viz_type: world_map
+        visualization_type: World Map
         required_columns: [id, country]
         entity: country
         country_fieldtype: cca2
@@ -62,7 +107,7 @@ dashboards:
       - database: analytics
         table: daily_active_users
         name: "Daily Active Users (Line)"
-        viz_type: echarts_timeseries_line
+        visualization_type: Line Chart
         required_columns: [date, dau]
         x_axis: date
         time_grain: P1D
@@ -75,7 +120,7 @@ dashboards:
       - database: analytics
         table: household
         name: "Households by Social Category (Pie)"
-        viz_type: pie
+        visualization_type: Pie Chart
         required_columns: [household_id, social_category]
         groupby: [social_category]
         metric: {column: household_id, aggregate: COUNT}
@@ -84,9 +129,19 @@ dashboards:
       - database: analytics
         table: income_distribution
         name: "Income Distribution (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [income_bucket, households]
         x_axis: income_bucket
+        metrics:
+          - {column: households, aggregate: SUM}
+        groupby: []
+
+      - database: analytics
+        table: household_size_distribution
+        name: "Household Size Distribution (Bar)"
+        visualization_type: Bar Chart
+        required_columns: [hh_size, households]
+        x_axis: hh_size
         metrics:
           - {column: households, aggregate: SUM}
         groupby: []
@@ -95,7 +150,7 @@ dashboards:
       - database: analytics
         table: segment_summary
         name: "Households by Segment (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [segment, households]
         x_axis: segment
         metrics:
@@ -105,7 +160,7 @@ dashboards:
       - database: analytics
         table: segment_summary
         name: "Weighted Income by Segment (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [segment, weighted_income]
         x_axis: segment
         metrics:
@@ -115,7 +170,7 @@ dashboards:
       - database: analytics
         table: segment_summary
         name: "Internet Penetration by Segment (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [segment, internet_pct]
         x_axis: segment
         metrics:
@@ -126,7 +181,7 @@ dashboards:
       - database: analytics
         table: state_summary
         name: "Households by State (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [state, households]
         x_axis: state
         metrics:
@@ -136,7 +191,7 @@ dashboards:
       - database: analytics
         table: state_summary
         name: "Weighted Income by State (Bar)"
-        viz_type: echarts_timeseries_bar
+        visualization_type: Bar Chart
         required_columns: [state, weighted_income]
         x_axis: state
         metrics:
@@ -147,7 +202,7 @@ dashboards:
       - database: analytics
         table: household_monthly_trend
         name: "Monthly Household Creation (Line)"
-        viz_type: echarts_timeseries_line
+        visualization_type: Line Chart
         required_columns: [month, households]
         x_axis: month
         time_grain: P1M
@@ -158,10 +213,21 @@ dashboards:
       - database: analytics
         table: household_monthly_trend
         name: "Monthly Avg Income Trend (Line)"
-        viz_type: echarts_timeseries_line
+        visualization_type: Line Chart
         required_columns: [month, avg_income]
         x_axis: month
         time_grain: P1M
         metrics:
           - {column: avg_income, aggregate: SUM}
         groupby: []
+
+      - database: analytics
+        table: household_segment_monthly_trend
+        name: "Segment Household Creation Trend (Line)"
+        visualization_type: Line Chart
+        required_columns: [month, segment, households]
+        x_axis: month
+        time_grain: P1M
+        metrics:
+          - {column: households, aggregate: SUM}
+        groupby: [segment]

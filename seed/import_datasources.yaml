@@ -26,3 +26,9 @@ databases:
       - table_name: income_distribution
       - table_name: district_segment_summary
       - table_name: household_monthly_trend
+      - table_name: household_headlines
+      - table_name: household_size_distribution
+      - table_name: household_joint_distribution
+      - table_name: household_segment_monthly_trend
+      - table_name: household_geo_points
+      - table_name: household_path_summary
