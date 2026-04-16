@@ -14,6 +14,15 @@ CREATE TABLE IF NOT EXISTS eth_txn (
     value     BIGINT  NOT NULL
 );
 
+-- psql runs /docker-entrypoint-initdb.d scripts in autocommit mode, so each
+-- statement is its own transaction block. A bare `CREATE TEMP TABLE ...
+-- ON COMMIT DROP` would be dropped the instant its CREATE commits — before
+-- the subsequent COPY could populate it — leaving `eth_txn` empty and every
+-- downstream chart showing "No results". Wrap the staging load in an
+-- explicit transaction so ON COMMIT DROP fires only after INSERT consumes
+-- the staged rows, and the load is atomic.
+BEGIN;
+
 CREATE TEMP TABLE _eth_txn_staging (
     txn_date_str TEXT,
     unix_ts      BIGINT,
@@ -28,5 +37,7 @@ INSERT INTO eth_txn (txn_date, unix_ts, value)
 SELECT TO_DATE(txn_date_str, 'MM/DD/YYYY'), unix_ts, value
 FROM _eth_txn_staging
 ON CONFLICT (txn_date) DO NOTHING;
+
+COMMIT;
 
 CREATE INDEX IF NOT EXISTS idx_eth_txn_date ON eth_txn (txn_date);
