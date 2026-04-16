@@ -105,6 +105,26 @@ dashboards:
         metric: {column: ayushman_rate, aggregate: AVG}
 
       - database: analytics
+        table: vw_state_choropleth
+        name: "India State Choropleth"
+        visualization_type: deck.gl Polygon
+        required_columns: [geojson, hh_count, state_name]
+        line_column: geojson
+        line_type: json
+        metric: {column: hh_count, aggregate: SUM}
+        # Option A: No base tiles (cleanest, no external dependencies)
+        # Option B: OpenStreetMap via CartoDB (no API key):
+        # mapbox_style: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        viewport:
+          longitude: 78.9629
+          latitude: 22.5937
+          zoom: 4
+          bearing: 0
+          pitch: 0
+        emit_filter: true
+        row_limit: 50
+
+      - database: analytics
         table: hh_master
         name: "Households by State"
         visualization_type: Bar Chart

@@ -748,3 +748,29 @@ SELECT
     ROUND(AVG(NULLIF(regexp_replace("Online_purchase_education", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_education_rate
 FROM hh_master
 GROUP BY "State_label", "Sector_label";
+
+-- State-level GeoJSON for choropleth (aggregated from district boundaries)
+-- Note: The GeoJSON file must be loaded via external script or COPY
+-- This view assumes a india_state_geo table exists with state boundaries
+
+CREATE TABLE IF NOT EXISTS india_state_boundaries (
+    state_name TEXT PRIMARY KEY,
+    geojson JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create view joining state boundaries with survey metrics
+CREATE OR REPLACE VIEW vw_state_choropleth AS
+SELECT
+    b.state_name,
+    b.geojson,
+    COALESCE(s.hh_count, 0) AS hh_count,
+    COALESCE(s.avg_hh_size, 0) AS avg_hh_size,
+    COALESCE(s.internet_rate, 0) AS internet_rate,
+    COALESCE(s.ayushman_rate, 0) AS ayushman_rate,
+    COALESCE(s.lpg_subsidy_rate, 0) AS lpg_subsidy_rate,
+    COALESCE(s.ration_coverage, 0) AS ration_coverage,
+    COALESCE(s.mobile_ownership_rate, 0) AS mobile_ownership_rate,
+    COALESCE(s.car_ownership_rate, 0) AS car_ownership_rate
+FROM india_state_boundaries b
+LEFT JOIN vw_state_summary s ON LOWER(b.state_name) = LOWER(s.state);

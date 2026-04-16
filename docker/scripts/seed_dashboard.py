@@ -155,6 +155,7 @@ def build_params(spec: dict) -> dict:
         "mapbox_style",
         "viewport",
         "line_column",
+        "line_type",
         "categorical_columns",
         "primary_metric",
         "secondary_metric",
@@ -281,12 +282,16 @@ def validate_chart_spec(spec: dict) -> str:
         if "metric" not in spec and not spec.get("metrics"):
             raise RuntimeError(f"Chart '{chart_name}' must define 'metric' or 'metrics' for sankey charts.")
 
-    if canonical_viz_type in {"mapbox", "deck_scatter", "deck_heatmap", "deck_polygon"}:
-        missing_geo = [key for key in ("longitude", "latitude") if key not in spec and key != "deck_polygon"]
-        if canonical_viz_type != "deck_polygon" and missing_geo:
+    if canonical_viz_type in {"mapbox", "deck_scatter", "deck_heatmap"}:
+        missing_geo = [key for key in ("longitude", "latitude") if key not in spec]
+        if missing_geo:
             raise RuntimeError(
                 f"Chart '{chart_name}' missing geo keys: {', '.join(missing_geo)}."
             )
+
+    if canonical_viz_type == "deck_polygon":
+        if "line_column" not in spec:
+            raise RuntimeError(f"Chart '{chart_name}' must define 'line_column' for deck_polygon.")
 
     return canonical_viz_type
 

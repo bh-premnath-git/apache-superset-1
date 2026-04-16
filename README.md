@@ -244,8 +244,10 @@ environment and Docker Compose config.
     ├── import_datasources.yaml     # DB connections + table registrations
     ├── chart_config.yaml           # dashboard + chart definitions (YAML-only)
     └── pg/
-        ├── 01_hh_master.sql        # CSV loader into analytics.hh_master
-        └── HH.master.csv           # source household master data
+        ├── 01_hh_master.sql        # CSV loader + views for hh_master
+        ├── HH.master.csv           # source household master data
+        ├── india_states.geojson    # India state boundaries for choropleth
+        └── load_geojson.py         # GeoJSON loader script
 ```
 
 ---
@@ -336,6 +338,55 @@ no longer points charts at CSV paths through it — doing so failed at chart
 render time because (a) shillelagh's CSV adapter is disabled under its default
 safe mode, and (b) `./seed` is only mounted into the one-shot init container,
 not into the long-running `superset` / `celery-worker` services.
+
+### India State Choropleth Map
+
+The LCA Dashboard includes a deck.gl Polygon choropleth for state-level exploration.
+To enable it, you must load the India state boundaries into Postgres after the
+analytics DB is initialized.
+
+**Step 1: Download the GeoJSON (already in repo)**
+```bash
+# The file is already at seed/pg/india_states.geojson
+```
+
+**Step 2: Load boundaries into Postgres** (run once after DB init):
+```bash
+docker compose exec analytics-db python /docker-entrypoint-initdb.d/load_geojson.py
+```
+
+Or from host with Python:
+```bash
+cd seed/pg
+python3 load_geojson.py
+```
+
+**Step 3: Verify the choropleth view**
+- The view `vw_state_choropleth` joins state boundaries with survey metrics
+- Chart: "India State Choropleth" uses deck.gl Polygon visualization
+- Click any state to filter other charts (cross-filter is enabled)
+
+**Note**: The GeoJSON file uses district-level boundaries that are aggregated
+to state level by the loader script. State name matching is case-insensitive.
+
+**Mapbox API Key Alternatives**
+By default, the choropleth renders colored polygons **without base tiles** (no API key needed).
+
+To add a base map, you have two options:
+
+1. **OpenStreetMap via CartoDB** (no API key, edit `chart_config.yaml`):
+   ```yaml
+   mapbox_style: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+   ```
+
+2. **Mapbox** (requires free API key):
+   ```bash
+   # Add to .env
+   MAPBOX_API_KEY=pk.your_token_here
+   ```
+   ```yaml
+   mapbox_style: "mapbox://styles/mapbox/light-v9"
+   ```
 
 ### Notes for document and non-SQL databases
 
