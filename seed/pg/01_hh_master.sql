@@ -574,13 +574,19 @@ CREATE INDEX IF NOT EXISTS idx_hh_master_state_label ON hh_master ("State_label"
 CREATE INDEX IF NOT EXISTS idx_hh_master_sector_label ON hh_master ("Sector_label");
 CREATE INDEX IF NOT EXISTS idx_hh_master_questionnaire_no ON hh_master ("Questionnaire_No");
 
-CREATE OR REPLACE VIEW vw_state_summary AS
-SELECT
-    "State_label" AS state,
-    -- ISO 3166-2 code, matches the ISO property in Superset's bundled India
-    -- country_map GeoJSON. Keep this in sync with
-    -- superset-frontend/plugins/legacy-plugin-chart-country-map/src/countries/india.geojson
-    CASE UPPER(TRIM("State_label"))
+-- ── State label → ISO 3166-2 code mapping ────────────────────────────────────
+-- Single source of truth for the label-to-ISO conversion. Every analytical
+-- view that exposes `iso_code` calls this function so the cross-filter from
+-- the country_map plugin (which emits the `iso_code` column) lines up across
+-- views without having to keep multiple CASE expressions in sync.
+--
+-- Keep the mapping aligned with the ISO property in Superset's bundled India
+-- country_map GeoJSON. Covers all 28 states and 8 UTs, plus legacy labels
+-- (Orissa/Pondicherry/Uttaranchal) and pre-2020 split UT names that still
+-- appear in NSS extracts.
+CREATE OR REPLACE FUNCTION state_to_iso(state_label TEXT) RETURNS TEXT
+LANGUAGE SQL IMMUTABLE AS $$
+    SELECT CASE UPPER(TRIM(state_label))
         WHEN 'ANDAMAN AND NICOBAR ISLANDS'         THEN 'IN-AN'
         WHEN 'ANDAMAN & NICOBAR ISLANDS'           THEN 'IN-AN'
         WHEN 'ANDAMAN AND NICOBAR'                 THEN 'IN-AN'
@@ -627,7 +633,13 @@ SELECT
         WHEN 'UTTARAKHAND'                         THEN 'IN-UT'
         WHEN 'UTTARANCHAL'                         THEN 'IN-UT'
         WHEN 'WEST BENGAL'                         THEN 'IN-WB'
-    END AS iso_code,
+    END
+$$;
+
+CREATE OR REPLACE VIEW vw_state_summary AS
+SELECT
+    "State_label" AS state,
+    state_to_iso("State_label") AS iso_code,
     COUNT("HHID") AS hh_count,
     AVG(NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_hh_size,
     AVG(NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_edu_years,
@@ -746,54 +758,7 @@ GROUP BY state, asset;
 CREATE OR REPLACE VIEW vw_district_summary AS
 SELECT
     "State_label" AS state,
-    CASE UPPER(TRIM("State_label"))
-        WHEN 'ANDAMAN AND NICOBAR ISLANDS' THEN 'IN-AN'
-        WHEN 'ANDAMAN & NICOBAR ISLANDS' THEN 'IN-AN'
-        WHEN 'ANDAMAN AND NICOBAR' THEN 'IN-AN'
-        WHEN 'ANDHRA PRADESH' THEN 'IN-AP'
-        WHEN 'ARUNACHAL PRADESH' THEN 'IN-AR'
-        WHEN 'ASSAM' THEN 'IN-AS'
-        WHEN 'BIHAR' THEN 'IN-BR'
-        WHEN 'CHANDIGARH' THEN 'IN-CH'
-        WHEN 'CHHATTISGARH' THEN 'IN-CT'
-        WHEN 'CHATTISGARH' THEN 'IN-CT'
-        WHEN 'DADRA AND NAGAR HAVELI AND DAMAN AND DIU' THEN 'IN-DH'
-        WHEN 'DADRA AND NAGAR HAVELI' THEN 'IN-DH'
-        WHEN 'DAMAN AND DIU' THEN 'IN-DH'
-        WHEN 'DELHI' THEN 'IN-DL'
-        WHEN 'NCT OF DELHI' THEN 'IN-DL'
-        WHEN 'GOA' THEN 'IN-GA'
-        WHEN 'GUJARAT' THEN 'IN-GJ'
-        WHEN 'HARYANA' THEN 'IN-HR'
-        WHEN 'HIMACHAL PRADESH' THEN 'IN-HP'
-        WHEN 'JAMMU AND KASHMIR' THEN 'IN-JK'
-        WHEN 'JAMMU & KASHMIR' THEN 'IN-JK'
-        WHEN 'JHARKHAND' THEN 'IN-JH'
-        WHEN 'KARNATAKA' THEN 'IN-KA'
-        WHEN 'KERALA' THEN 'IN-KL'
-        WHEN 'LADAKH' THEN 'IN-LA'
-        WHEN 'LAKSHADWEEP' THEN 'IN-LD'
-        WHEN 'MADHYA PRADESH' THEN 'IN-MP'
-        WHEN 'MAHARASHTRA' THEN 'IN-MH'
-        WHEN 'MANIPUR' THEN 'IN-MN'
-        WHEN 'MEGHALAYA' THEN 'IN-ML'
-        WHEN 'MIZORAM' THEN 'IN-MZ'
-        WHEN 'NAGALAND' THEN 'IN-NL'
-        WHEN 'ODISHA' THEN 'IN-OR'
-        WHEN 'ORISSA' THEN 'IN-OR'
-        WHEN 'PUDUCHERRY' THEN 'IN-PY'
-        WHEN 'PONDICHERRY' THEN 'IN-PY'
-        WHEN 'PUNJAB' THEN 'IN-PB'
-        WHEN 'RAJASTHAN' THEN 'IN-RJ'
-        WHEN 'SIKKIM' THEN 'IN-SK'
-        WHEN 'TAMIL NADU' THEN 'IN-TN'
-        WHEN 'TELANGANA' THEN 'IN-TG'
-        WHEN 'TRIPURA' THEN 'IN-TR'
-        WHEN 'UTTAR PRADESH' THEN 'IN-UP'
-        WHEN 'UTTARAKHAND' THEN 'IN-UT'
-        WHEN 'UTTARANCHAL' THEN 'IN-UT'
-        WHEN 'WEST BENGAL' THEN 'IN-WB'
-    END AS iso_code,
+    state_to_iso("State_label") AS iso_code,
     "District" AS district,
     COUNT("HHID") AS hh_count,
     ROUND(AVG(NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_hh_size,
@@ -818,10 +783,13 @@ SELECT
 FROM hh_master
 GROUP BY "State_label", "District", "Sector_label", "Social_Group_of_HH_Head_label", "Religion_of_HH_Head_label", "Year";
 
--- Welfare summary view
+-- Welfare summary view. `iso_code` is exposed so the country_map's
+-- cross-filter (which emits {col: 'iso_code', op: 'IN', val: ['IN-XX']})
+-- can target this view as a state drill-down receiver.
 CREATE OR REPLACE VIEW vw_welfare_summary AS
 SELECT
     "State_label" AS state,
+    state_to_iso("State_label") AS iso_code,
     COUNT("HHID") AS hh_count,
     ROUND(AVG(NULLIF(regexp_replace("Ayushman_beneficiary", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ayushman_rate,
     ROUND(AVG(NULLIF(regexp_replace("LPG_subsidy_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS lpg_subsidy_rate,
@@ -833,10 +801,30 @@ SELECT
 FROM hh_master
 GROUP BY "State_label";
 
--- Digital adoption summary
+-- Welfare KPI view in long form for the "Selected State Welfare Coverage" bar
+-- chart. One row per (iso_code, scheme) so a single bar chart with x_axis =
+-- scheme will draw side-by-side bars for the cross-filtered state.
+CREATE OR REPLACE VIEW vw_welfare_kpis_long AS
+SELECT iso_code, state, 'Ayushman'           AS scheme, ayushman_rate         AS coverage_rate FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'LPG Subsidy',                  lpg_subsidy_rate                       FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'Free Electricity',             free_electricity_rate                  FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'Ration (last 30d)',            ration_rate                            FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'School Attendance',            school_attendance_rate                 FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'Free Textbooks',               free_textbooks_rate                    FROM vw_welfare_summary
+UNION ALL
+SELECT iso_code, state, 'Fee Waiver',                   fee_waiver_rate                        FROM vw_welfare_summary;
+
+-- Digital adoption summary. `iso_code` is exposed so the country_map's
+-- cross-filter targets this view as a state drill-down receiver.
 CREATE OR REPLACE VIEW vw_digital_adoption AS
 SELECT
     "State_label" AS state,
+    state_to_iso("State_label") AS iso_code,
     "Sector_label" AS sector,
     COUNT("HHID") AS hh_count,
     ROUND(AVG(NULLIF(regexp_replace("any_internet", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS internet_rate,
@@ -848,7 +836,56 @@ SELECT
 FROM hh_master
 GROUP BY "State_label", "Sector_label";
 
+-- Digital adoption KPI view in long form for the "Selected State Digital
+-- Adoption" bar chart. One row per (iso_code, channel) so a single bar chart
+-- with x_axis = channel will draw side-by-side bars for the cross-filtered
+-- state, weight-averaged across sectors using hh_count.
+CREATE OR REPLACE VIEW vw_digital_kpis_long AS
+WITH agg AS (
+    SELECT
+        iso_code,
+        state,
+        SUM(hh_count) AS hh_count,
+        ROUND((SUM(internet_rate         * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS internet_rate,
+        ROUND((SUM(online_grocery_rate   * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS online_grocery_rate,
+        ROUND((SUM(online_milk_rate      * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS online_milk_rate,
+        ROUND((SUM(online_veg_rate       * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS online_veg_rate,
+        ROUND((SUM(online_medicine_rate  * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS online_medicine_rate,
+        ROUND((SUM(online_education_rate * hh_count) / NULLIF(SUM(hh_count), 0))::NUMERIC, 4) AS online_education_rate
+    FROM vw_digital_adoption
+    GROUP BY iso_code, state
+)
+SELECT iso_code, state, 'Any Internet'        AS channel, internet_rate         AS adoption_rate FROM agg
+UNION ALL
+SELECT iso_code, state, 'Online Groceries',              online_grocery_rate                    FROM agg
+UNION ALL
+SELECT iso_code, state, 'Online Milk',                   online_milk_rate                       FROM agg
+UNION ALL
+SELECT iso_code, state, 'Online Vegetables',             online_veg_rate                        FROM agg
+UNION ALL
+SELECT iso_code, state, 'Online Medicine',               online_medicine_rate                   FROM agg
+UNION ALL
+SELECT iso_code, state, 'Online Education',              online_education_rate                  FROM agg;
+
+-- Per-state sector mix for the "Selected State Sector Mix" pie. iso_code is
+-- exposed so the cross-filter from the choropleth narrows the pie to the
+-- clicked state.
+CREATE OR REPLACE VIEW vw_state_sector_summary AS
+SELECT
+    "State_label" AS state,
+    state_to_iso("State_label") AS iso_code,
+    "Sector_label" AS sector,
+    COUNT("HHID") AS hh_count
+FROM hh_master
+GROUP BY "State_label", "Sector_label";
+
 -- State-level choropleth is rendered via Superset's built-in country_map
 -- plugin, which ships the India GeoJSON and matches rows by ISO 3166-2
 -- code. See vw_state_summary.iso_code above — no boundary table or
 -- external GeoJSON loader is needed.
+--
+-- All "Selected State *" detail charts are wired to receive the cross-filter
+-- the choropleth emits on `iso_code`. Every view they read from exposes that
+-- column via state_to_iso(). See seed/chart_config.yaml for the wiring and
+-- docker/scripts/seed_dashboard.py for the chart_configuration that scopes
+-- the cross-filter to those receivers only.

@@ -59,6 +59,28 @@
 # Optional per-chart fields:
 #   required_columns: [col1, col2]  → validated before chart creation
 #   row_limit: 10000                → default 10000
+#
+# Cross-filter wiring (drill-down):
+#   cross_filter_source: true         → this chart emits cross-filters when
+#                                       clicked (Superset's default once
+#                                       cross_filters_enabled is on at the
+#                                       dashboard level, but declaring it here
+#                                       lets the seeder build an explicit
+#                                       chart_configuration scope so the
+#                                       emission only narrows the matched
+#                                       receivers).
+#   cross_filter_target: <chart-name> → this chart receives cross-filters from
+#                                       the named source chart and ONLY from
+#                                       that source. Charts without this key
+#                                       are excluded from the source's scope,
+#                                       which keeps country-wide KPIs from
+#                                       collapsing to a single state when the
+#                                       map is clicked.
+#
+# Layout headers:
+#   Insert `- header: "..."` items between charts to draw a full-width section
+#   header in the dashboard. Headers don't have charts; they break the current
+#   row and start a fresh one underneath.
 
 dashboards:
 
@@ -85,6 +107,7 @@ dashboards:
         targets: [hh_master]
     charts:
 
+      # ── Row 1: National KPI strip ─────────────────────────────────────────
       - database: analytics
         table: vw_state_summary
         name: "Total Households"
@@ -122,6 +145,12 @@ dashboards:
         width: 3
         height: 16
 
+      # ── Row 2: India choropleth ───────────────────────────────────────────
+      # Click any state → emits a cross-filter on `iso_code` that drives the
+      # entire "Selected State Detail" block below. The cross-filter scope is
+      # restricted (in seed_dashboard.py) to charts marked
+      # cross_filter_target: "India State Choropleth", so the country-wide
+      # KPIs and bars stay at country totals while the user explores a state.
       - database: analytics
         table: vw_state_summary
         name: "India State Choropleth"
@@ -132,10 +161,13 @@ dashboards:
         metric: {column: hh_count, aggregate: SUM}
         linear_color_scheme: blue_white_yellow
         number_format: SMART_NUMBER
-        emit_filter: true
+        cross_filter_source: true
         row_limit: 50
-        width: 8
-        height: 44
+        width: 12
+        height: 56
+
+      # ── Row 3+: Selected State Detail (drill-down receivers) ─────────────
+      - header: "Selected State Detail — click any state on the map above to drill in"
 
       - database: analytics
         table: vw_district_summary
@@ -146,9 +178,53 @@ dashboards:
         metrics:
           - {column: hh_count, aggregate: SUM}
         groupby: []
-        row_limit: 40
+        cross_filter_target: "India State Choropleth"
+        row_limit: 75
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_welfare_kpis_long
+        name: "Selected State Welfare Coverage"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, scheme, coverage_rate]
+        x_axis: scheme
+        metrics:
+          - {column: coverage_rate, aggregate: AVG}
+        groupby: []
+        cross_filter_target: "India State Choropleth"
+        row_limit: 50
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_state_sector_summary
+        name: "Selected State Sector Mix"
+        visualization_type: Pie Chart
+        required_columns: [iso_code, sector, hh_count]
+        groupby: [sector]
+        metric: {column: hh_count, aggregate: SUM}
+        cross_filter_target: "India State Choropleth"
+        row_limit: 50
         width: 4
         height: 44
+
+      - database: analytics
+        table: vw_digital_kpis_long
+        name: "Selected State Digital Adoption"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, channel, adoption_rate]
+        x_axis: channel
+        metrics:
+          - {column: adoption_rate, aggregate: AVG}
+        groupby: []
+        cross_filter_target: "India State Choropleth"
+        row_limit: 50
+        width: 8
+        height: 44
+
+      # ── Row N: National comparison views ─────────────────────────────────
+      - header: "National Comparison"
 
       - database: analytics
         table: vw_state_summary
@@ -156,7 +232,6 @@ dashboards:
         visualization_type: Bar Chart
         required_columns: [iso_code, state, hh_count]
         x_axis: state
-        emit_filter: true
         metrics:
           - {column: hh_count, aggregate: SUM}
         groupby: []
@@ -168,7 +243,6 @@ dashboards:
         visualization_type: Bar Chart
         required_columns: [District, HHID]
         x_axis: District
-        emit_filter: true
         metrics:
           - {column: HHID, aggregate: COUNT}
         groupby: []
@@ -203,7 +277,6 @@ dashboards:
         visualization_type: Bar Chart
         required_columns: [Social_Group_of_HH_Head_label, HHID]
         x_axis: Social_Group_of_HH_Head_label
-        emit_filter: true
         metrics:
           - {column: HHID, aggregate: COUNT}
         groupby: []
