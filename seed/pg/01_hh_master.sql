@@ -577,6 +577,57 @@ CREATE INDEX IF NOT EXISTS idx_hh_master_questionnaire_no ON hh_master ("Questio
 CREATE OR REPLACE VIEW vw_state_summary AS
 SELECT
     "State_label" AS state,
+    -- ISO 3166-2 code, matches the ISO property in Superset's bundled India
+    -- country_map GeoJSON. Keep this in sync with
+    -- superset-frontend/plugins/legacy-plugin-chart-country-map/src/countries/india.geojson
+    CASE UPPER(TRIM("State_label"))
+        WHEN 'ANDAMAN AND NICOBAR ISLANDS'         THEN 'IN-AN'
+        WHEN 'ANDAMAN & NICOBAR ISLANDS'           THEN 'IN-AN'
+        WHEN 'ANDAMAN AND NICOBAR'                 THEN 'IN-AN'
+        WHEN 'ANDHRA PRADESH'                      THEN 'IN-AP'
+        WHEN 'ARUNACHAL PRADESH'                   THEN 'IN-AR'
+        WHEN 'ASSAM'                               THEN 'IN-AS'
+        WHEN 'BIHAR'                               THEN 'IN-BR'
+        WHEN 'CHANDIGARH'                          THEN 'IN-CH'
+        WHEN 'CHHATTISGARH'                        THEN 'IN-CT'
+        WHEN 'CHATTISGARH'                         THEN 'IN-CT'
+        WHEN 'DADRA AND NAGAR HAVELI AND DAMAN AND DIU' THEN 'IN-DH'
+        WHEN 'DADRA AND NAGAR HAVELI'              THEN 'IN-DH'
+        WHEN 'DAMAN AND DIU'                       THEN 'IN-DH'
+        WHEN 'DELHI'                               THEN 'IN-DL'
+        WHEN 'NCT OF DELHI'                        THEN 'IN-DL'
+        WHEN 'GOA'                                 THEN 'IN-GA'
+        WHEN 'GUJARAT'                             THEN 'IN-GJ'
+        WHEN 'HARYANA'                             THEN 'IN-HR'
+        WHEN 'HIMACHAL PRADESH'                    THEN 'IN-HP'
+        WHEN 'JAMMU AND KASHMIR'                   THEN 'IN-JK'
+        WHEN 'JAMMU & KASHMIR'                     THEN 'IN-JK'
+        WHEN 'JHARKHAND'                           THEN 'IN-JH'
+        WHEN 'KARNATAKA'                           THEN 'IN-KA'
+        WHEN 'KERALA'                              THEN 'IN-KL'
+        WHEN 'LADAKH'                              THEN 'IN-LA'
+        WHEN 'LAKSHADWEEP'                         THEN 'IN-LD'
+        WHEN 'MADHYA PRADESH'                      THEN 'IN-MP'
+        WHEN 'MAHARASHTRA'                         THEN 'IN-MH'
+        WHEN 'MANIPUR'                             THEN 'IN-MN'
+        WHEN 'MEGHALAYA'                           THEN 'IN-ML'
+        WHEN 'MIZORAM'                             THEN 'IN-MZ'
+        WHEN 'NAGALAND'                            THEN 'IN-NL'
+        WHEN 'ODISHA'                              THEN 'IN-OR'
+        WHEN 'ORISSA'                              THEN 'IN-OR'
+        WHEN 'PUDUCHERRY'                          THEN 'IN-PY'
+        WHEN 'PONDICHERRY'                         THEN 'IN-PY'
+        WHEN 'PUNJAB'                              THEN 'IN-PB'
+        WHEN 'RAJASTHAN'                           THEN 'IN-RJ'
+        WHEN 'SIKKIM'                              THEN 'IN-SK'
+        WHEN 'TAMIL NADU'                          THEN 'IN-TN'
+        WHEN 'TELANGANA'                           THEN 'IN-TG'
+        WHEN 'TRIPURA'                             THEN 'IN-TR'
+        WHEN 'UTTAR PRADESH'                       THEN 'IN-UP'
+        WHEN 'UTTARAKHAND'                         THEN 'IN-UT'
+        WHEN 'UTTARANCHAL'                         THEN 'IN-UT'
+        WHEN 'WEST BENGAL'                         THEN 'IN-WB'
+    END AS iso_code,
     COUNT("HHID") AS hh_count,
     AVG(NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_hh_size,
     AVG(NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_edu_years,
@@ -749,28 +800,7 @@ SELECT
 FROM hh_master
 GROUP BY "State_label", "Sector_label";
 
--- State-level GeoJSON for choropleth (aggregated from district boundaries)
--- Note: The GeoJSON file must be loaded via external script or COPY
--- This view assumes a india_state_geo table exists with state boundaries
-
-CREATE TABLE IF NOT EXISTS india_state_boundaries (
-    state_name TEXT PRIMARY KEY,
-    geojson JSONB NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Create view joining state boundaries with survey metrics
-CREATE OR REPLACE VIEW vw_state_choropleth AS
-SELECT
-    b.state_name,
-    b.geojson,
-    COALESCE(s.hh_count, 0) AS hh_count,
-    COALESCE(s.avg_hh_size, 0) AS avg_hh_size,
-    COALESCE(s.internet_rate, 0) AS internet_rate,
-    COALESCE(s.ayushman_rate, 0) AS ayushman_rate,
-    COALESCE(s.lpg_subsidy_rate, 0) AS lpg_subsidy_rate,
-    COALESCE(s.ration_coverage, 0) AS ration_coverage,
-    COALESCE(s.mobile_ownership_rate, 0) AS mobile_ownership_rate,
-    COALESCE(s.car_ownership_rate, 0) AS car_ownership_rate
-FROM india_state_boundaries b
-LEFT JOIN vw_state_summary s ON LOWER(b.state_name) = LOWER(s.state);
+-- State-level choropleth is rendered via Superset's built-in country_map
+-- plugin, which ships the India GeoJSON and matches rows by ISO 3166-2
+-- code. See vw_state_summary.iso_code above — no boundary table or
+-- external GeoJSON loader is needed.
