@@ -338,19 +338,40 @@ render time because (a) shillelagh's CSV adapter is disabled under its default
 safe mode, and (b) `./seed` is only mounted into the one-shot init container,
 not into the long-running `superset` / `celery-worker` services.
 
-### India State Choropleth Map
+### India State Choropleth Map + Selected State drill-down
 
 The LCA Dashboard's "India State Choropleth" uses Superset's built-in
 `country_map` plugin. It ships an India GeoJSON inside Superset itself,
 renders without Mapbox or any API key, and needs no external boundary
 file or loader script.
 
-Matching is done on ISO 3166-2 codes (`IN-KL`, `IN-MH`, …). The
-`vw_state_summary` view derives `iso_code` from `State_label` via a
-case-insensitive `CASE` expression covering all 28 states and 8 UTs,
-and the chart's `entity: iso_code` + `select_country: india` wire it
-up. Click any state to filter the rest of the dashboard (cross-filter
-is enabled).
+State matching is done on ISO 3166-2 codes (`IN-KL`, `IN-MH`, …). The
+single SQL function `state_to_iso(text)` in `seed/pg/01_hh_master.sql`
+maps every `State_label` value (including legacy/alternate spellings
+like Orissa/Pondicherry/Uttaranchal and the merged Dadra/Daman UT) to
+its ISO code. Every analytical view that participates in the drill-down
+exposes `iso_code` via this function so a single cross-filter column
+lines up across all of them.
+
+**Drill-down behavior.** Click any state on the choropleth and a
+dedicated "Selected State Detail" block updates in place — no popups
+or page navigation needed:
+
+| Receiver chart                          | Source view              | Shows for the clicked state                |
+|-----------------------------------------|--------------------------|--------------------------------------------|
+| Selected State District Breakdown       | `vw_district_summary`    | Households per district                    |
+| Selected State Welfare Coverage         | `vw_welfare_kpis_long`   | Ayushman / LPG / Ration / school KPIs      |
+| Selected State Sector Mix               | `vw_state_sector_summary`| Rural vs Urban household share             |
+| Selected State Digital Adoption         | `vw_digital_kpis_long`   | Internet + online channel adoption rates   |
+
+The cross-filter scope is configured in the dashboard's
+`chart_configuration` (built by `docker/scripts/seed_dashboard.py`
+from the `cross_filter_source` / `cross_filter_target` keys in
+`seed/chart_config.yaml`) so that clicking the map only drills the
+"Selected State *" charts. The country-wide KPIs and "Households by
+State" bar stay at country totals, which keeps the national context
+visible while exploring one state. Click an empty area of the map (or
+re-click the same state) to clear the filter.
 
 ### Notes for document and non-SQL databases
 

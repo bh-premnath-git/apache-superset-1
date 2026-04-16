@@ -14,4 +14,7 @@ databases:
       - table_name: vw_district_summary
       - table_name: vw_geo_hierarchy
       - table_name: vw_welfare_summary
+      - table_name: vw_welfare_kpis_long
       - table_name: vw_digital_adoption
+      - table_name: vw_digital_kpis_long
+      - table_name: vw_state_sector_summary

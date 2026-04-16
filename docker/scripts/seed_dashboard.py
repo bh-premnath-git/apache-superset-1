@@ -124,6 +124,8 @@ def build_params(spec: dict) -> dict:
         params["groupby"] = spec["groupby"]
     if "emit_filter" in spec:
         params["emit_filter"] = spec["emit_filter"]
+    # Cross-filter wiring (cross_filter_source / cross_filter_target) is purely
+    # dashboard-level metadata; do not leak it into per-chart form data.
     for key in (
         "entity",
         "country_fieldtype",
@@ -343,51 +345,78 @@ def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict)
     return chart
 
 
-def build_position_json(charts: list[dict]) -> str:
-    row_ids: list[str] = []
+def build_position_json(items: list[dict]) -> str:
+    """Build dashboard position JSON from a list of layout items.
+
+    Items are either charts ({"slice": Slice, "width": int, "height": int})
+    or layout headers ({"header": "<text>"}). Headers force a row break and
+    render as a full-width HEADER component; charts pack into 12-col rows.
+    """
+    grid_children: list[str] = []
     row_nodes: dict = {}
     chart_nodes: dict = {}
+    header_nodes: dict = {}
 
-    current_row_index = 1
+    current_row_index = 0
+    current_row_id: str | None = None
     current_row_width = 0
-    row_id = f"ROW-{current_row_index}"
+    chart_counter = 0
+    header_counter = 0
 
-    for i, chart_meta in enumerate(charts):
-        chart = chart_meta["slice"]
-        chart_width = max(1, min(int(chart_meta.get("width", 6)), 12))
-        chart_height = chart_meta.get("height", 36)
-        chart_id = f"CHART-{i + 1}"
+    def open_row() -> str:
+        nonlocal current_row_index, current_row_id, current_row_width
+        current_row_index += 1
+        current_row_id = f"ROW-{current_row_index}"
+        current_row_width = 0
+        grid_children.append(current_row_id)
+        row_nodes[current_row_id] = {
+            "id": current_row_id,
+            "type": "ROW",
+            "children": [],
+            "parents": ["ROOT_ID", "GRID_ID"],
+            "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        }
+        return current_row_id
 
-        if row_id not in row_nodes:
-            row_ids.append(row_id)
-            row_nodes[row_id] = {
-                "id": row_id,
-                "type": "ROW",
-                "children": [],
-                "parents": ["ROOT_ID", "GRID_ID"],
-                "meta": {"background": "BACKGROUND_TRANSPARENT"},
-            }
-
-        if current_row_width + chart_width > 12 and row_nodes[row_id]["children"]:
-            current_row_index += 1
-            row_id = f"ROW-{current_row_index}"
+    for item in items:
+        if "header" in item:
+            # Headers always sit on their own line; close the open row first.
+            current_row_id = None
             current_row_width = 0
-            row_ids.append(row_id)
-            row_nodes[row_id] = {
-                "id": row_id,
-                "type": "ROW",
+            header_counter += 1
+            header_id = f"HEADER-{header_counter}"
+            grid_children.append(header_id)
+            header_nodes[header_id] = {
+                "id": header_id,
+                "type": "HEADER",
                 "children": [],
                 "parents": ["ROOT_ID", "GRID_ID"],
-                "meta": {"background": "BACKGROUND_TRANSPARENT"},
+                "meta": {
+                    "text": item["header"],
+                    "headerSize": item.get("header_size", "MEDIUM_HEADER"),
+                    "background": "BACKGROUND_TRANSPARENT",
+                },
             }
+            continue
 
-        row_nodes[row_id]["children"].append(chart_id)
+        chart = item["slice"]
+        chart_width = max(1, min(int(item.get("width", 6)), 12))
+        chart_height = item.get("height", 36)
+        chart_counter += 1
+        chart_id = f"CHART-{chart_counter}"
+
+        if current_row_id is None or (
+            current_row_width + chart_width > 12 and row_nodes[current_row_id]["children"]
+        ):
+            open_row()
+
+        row_nodes[current_row_id]["children"].append(chart_id)
         current_row_width += chart_width
         chart_nodes[chart_id] = {
             "id": chart_id,
             "type": "CHART",
             "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", row_id],
+            "parents": ["ROOT_ID", "GRID_ID", current_row_id],
             "meta": {
                 "chartId": chart.id,
                 "height": chart_height,
@@ -402,33 +431,82 @@ def build_position_json(charts: list[dict]) -> str:
         "GRID_ID": {
             "id": "GRID_ID",
             "type": "GRID",
-            "children": row_ids,
+            "children": grid_children,
             "parents": ["ROOT_ID"],
         },
         **row_nodes,
         **chart_nodes,
+        **header_nodes,
     }
     return json.dumps(layout)
 
 
-def upsert_dashboard(title: str, slug: str, charts: list[dict], native_filters: list[dict] | None = None) -> None:
+def build_chart_configuration(items: list[dict]) -> tuple[dict, dict]:
+    """Build dashboard cross-filter scoping.
+
+    For every chart item with `cross_filter_source: true`, restrict its
+    cross-filter scope to charts that declare `cross_filter_target: <source>`.
+    All other charts are excluded from that source's scope so country-wide
+    KPIs don't collapse to the clicked region.
+
+    Returns (chart_configuration, global_chart_configuration).
+    """
+    chart_items = [item for item in items if "slice" in item]
+    all_chart_ids = [item["slice"].id for item in chart_items]
+
+    chart_configuration: dict = {}
+    for item in chart_items:
+        spec = item["spec"]
+        if not spec.get("cross_filter_source"):
+            continue
+        source_id = item["slice"].id
+        source_name = spec["name"]
+        target_ids = [
+            other["slice"].id
+            for other in chart_items
+            if other["spec"].get("cross_filter_target") == source_name
+        ]
+        if not target_ids:
+            # No declared receivers — leave the source on default global scope.
+            continue
+        excluded = [cid for cid in all_chart_ids if cid not in target_ids and cid != source_id]
+        chart_configuration[str(source_id)] = {
+            "id": source_id,
+            "crossFilters": {
+                "scope": {"rootPath": ["ROOT_ID"], "excluded": excluded},
+                "chartsInScope": target_ids,
+            },
+        }
+
+    global_chart_configuration = {
+        "scope": {"rootPath": ["ROOT_ID"], "excluded": []},
+        "chartsInScope": all_chart_ids,
+    }
+    return chart_configuration, global_chart_configuration
+
+
+def upsert_dashboard(title: str, slug: str, items: list[dict], native_filters: list[dict] | None = None) -> None:
     from superset.models.dashboard import Dashboard
     from superset.extensions import db
 
-    position = build_position_json(charts)
+    position = build_position_json(items)
+    chart_items = [item for item in items if "slice" in item]
     deduped_slices: list = []
     seen_slice_ids: set[int] = set()
-    for chart in charts:
+    for chart in chart_items:
         slice_obj = chart["slice"]
         if slice_obj.id in seen_slice_ids:
             continue
         seen_slice_ids.add(slice_obj.id)
         deduped_slices.append(slice_obj)
+    chart_configuration, global_chart_configuration = build_chart_configuration(items)
     json_metadata = json.dumps(
         {
             "timed_refresh_immune_slices": [],
             "native_filter_configuration": native_filters or [],
             "cross_filters_enabled": True,
+            "chart_configuration": chart_configuration,
+            "global_chart_configuration": global_chart_configuration,
         }
     )
     dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == title).one_or_none()
@@ -469,28 +547,34 @@ def main() -> None:
         for dashboard_spec in config.get("dashboards", []):
             title = dashboard_spec["title"]
             slug = dashboard_spec.get("slug", title.lower().replace(" ", "-"))
-            charts: list = []
+            items: list = []
 
             for chart_spec in dashboard_spec.get("charts", []):
+                if "header" in chart_spec:
+                    # Layout-only HEADER component, not a chart.
+                    items.append({"header": chart_spec["header"], "header_size": chart_spec.get("header_size", "MEDIUM_HEADER")})
+                    continue
                 canonical_viz_type = validate_chart_spec(chart_spec)
                 table = get_table(chart_spec["database"], chart_spec["table"])
                 if required := chart_spec.get("required_columns"):
                     ensure_columns(table, required)
                 params = build_params(chart_spec)
                 chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
-                charts.append(
+                items.append(
                     {
                         "slice": chart,
                         "table": chart_spec["table"],
                         "width": chart_spec.get("width", 6),
                         "height": chart_spec.get("height", 36),
+                        "spec": chart_spec,
                     }
                 )
 
-            native_filters = build_native_filter_configuration(charts, dashboard_spec.get("native_filters", []))
-            upsert_dashboard(title, slug, charts, native_filters)
+            chart_items = [item for item in items if "slice" in item]
+            native_filters = build_native_filter_configuration(chart_items, dashboard_spec.get("native_filters", []))
+            upsert_dashboard(title, slug, items, native_filters)
             db.session.commit()
-            print(f"[seed-dashboard] Done — '{title}' ({len(charts)} charts).")
+            print(f"[seed-dashboard] Done — '{title}' ({len(chart_items)} charts).")
 
 
 if __name__ == "__main__":
