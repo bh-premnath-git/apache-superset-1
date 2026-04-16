@@ -74,7 +74,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | `analytics`    | Postgres      | `household_segment_monthly_trend`   | view  | ~48     |
 | `analytics`    | Postgres      | `household_geo_points`              | view  | 200 000 |
 | `analytics`    | Postgres      | `household_path_summary`            | view  | ~250    |
-| `csv_datasets` | shillelagh    | `eth_txn.csv`                       | CSV   | ~3 900  |
+| `analytics`    | Postgres      | `eth_txn`                           | table | ~3 900  |
 
 ### Starter Seed Dashboard (18 charts)
 
@@ -95,9 +95,9 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | Monthly Household Creation        | Timeseries line   | analytics.household_monthly_trend     |
 | Monthly Avg Income Trend          | Timeseries line   | analytics.household_monthly_trend     |
 | Segment Household Creation Trend  | Timeseries line   | analytics.household_segment_monthly_trend |
-| ETH Transaction Value Over Time | Timeseries line   | csv_datasets.eth_txn.csv              |
-| ETH Transaction Volume          | Big number        | csv_datasets.eth_txn.csv              |
-| ETH Daily Transactions          | Timeseries bar    | csv_datasets.eth_txn.csv              |
+| ETH Transaction Value Over Time | Timeseries line   | analytics.eth_txn                     |
+| ETH Transaction Volume          | Big number        | analytics.eth_txn                     |
+| ETH Daily Transactions          | Timeseries bar    | analytics.eth_txn                     |
 
 In the current image build, `chart_config.yaml` can use the verified
 `visualization_type` labels wired into the Python seeder, including
@@ -384,21 +384,28 @@ dialect and Python driver installed in the image.
 | **CSV Files** | **`shillelagh`** | **`shillelagh://`** (query with `SELECT * FROM "/path/to/file.csv"`) |
 | Google Sheets | `shillelagh[gsheetsapi]` | `gsheets://` |
 
-### CSV files as databases
+### CSV files as seeded tables
 
-This project includes **`shillelagh`** — a SQLAlchemy adapter that lets you query CSV files
-(and other formats) directly using SQL:
-
-```sql
-SELECT * FROM "/app/seed/eth_txn.csv";
-```
+CSV-sourced datasets are loaded into the analytics Postgres DB at init time,
+not queried in-place by shillelagh. The `./seed/pg` directory is mounted into
+the `analytics-db` container at `/docker-entrypoint-initdb.d`, so any CSV
+placed there is visible to server-side `COPY ... FROM`.
 
 **To add a new CSV dataset:**
-1. Place your CSV file in the `seed/` directory
-2. Register it in `seed/import_datasources.yaml` under the `csv_datasets` database
-3. Add charts pointing to the file path as the table name
+1. Drop the CSV into `seed/pg/` (alongside the SQL loaders).
+2. Add a numbered SQL file in `seed/pg/` that `CREATE TABLE`s the target and
+   `COPY`s the CSV into a staging table (see `seed/pg/03_eth_txn.sql` for a
+   worked example that also parses an M/D/YYYY date column).
+3. Register the new table in `seed/import_datasources.yaml` under the
+   `analytics` database.
+4. Add chart entries in `seed/chart_config.yaml` pointing at the new table.
 
-See `eth_txn.csv` in this repo for a working example with 3 charts (line, bar, big number).
+The `shillelagh` driver is still installed and usable for ad-hoc SQL Lab
+queries against external sources such as Google Sheets, but the seed pipeline
+no longer points charts at CSV paths through it — doing so failed at chart
+render time because (a) shillelagh's CSV adapter is disabled under its default
+safe mode, and (b) `./seed` is only mounted into the one-shot init container,
+not into the long-running `superset` / `celery-worker` services.
 
 ### Notes for document and non-SQL databases
 
