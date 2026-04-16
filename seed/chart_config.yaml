@@ -87,10 +87,13 @@ dashboards:
 
       - database: analytics
         table: vw_state_summary
-        name: "Total Households Surveyed"
+        name: "Total Households"
         visualization_type: Big Number
         required_columns: [hh_count]
         metric: {column: hh_count, aggregate: SUM}
+        number_format: ".3s"
+        width: 3
+        height: 16
 
       - database: analytics
         table: vw_state_summary
@@ -98,6 +101,8 @@ dashboards:
         visualization_type: Big Number
         required_columns: [avg_hh_size]
         metric: {column: avg_hh_size, aggregate: AVG}
+        width: 3
+        height: 16
 
       - database: analytics
         table: vw_state_summary
@@ -105,6 +110,8 @@ dashboards:
         visualization_type: Big Number
         required_columns: [internet_rate]
         metric: {column: internet_rate, aggregate: AVG}
+        width: 3
+        height: 16
 
       - database: analytics
         table: vw_state_summary
@@ -112,6 +119,8 @@ dashboards:
         visualization_type: Big Number
         required_columns: [ayushman_rate]
         metric: {column: ayushman_rate, aggregate: AVG}
+        width: 3
+        height: 16
 
       - database: analytics
         table: vw_state_summary
@@ -125,16 +134,31 @@ dashboards:
         number_format: SMART_NUMBER
         emit_filter: true
         row_limit: 50
+        width: 8
+        height: 44
 
       - database: analytics
-        table: hh_master
+        table: vw_district_summary
+        name: "Selected State District Breakdown"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, district, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: []
+        row_limit: 40
+        width: 4
+        height: 44
+
+      - database: analytics
+        table: vw_state_summary
         name: "Households by State"
         visualization_type: Bar Chart
-        required_columns: [State_label, HHID]
-        x_axis: State_label
+        required_columns: [iso_code, state, hh_count]
+        x_axis: state
         emit_filter: true
         metrics:
-          - {column: HHID, aggregate: COUNT}
+          - {column: hh_count, aggregate: SUM}
         groupby: []
         row_limit: 50
 

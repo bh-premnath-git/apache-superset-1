@@ -343,14 +343,20 @@ def upsert_chart(chart_name: str, viz_type: str, table: SqlaTable, params: dict)
     return chart
 
 
-def build_position_json(charts: list[Slice]) -> str:
+def build_position_json(charts: list[dict]) -> str:
     row_ids: list[str] = []
     row_nodes: dict = {}
     chart_nodes: dict = {}
 
-    for i, chart in enumerate(charts):
+    current_row_index = 1
+    current_row_width = 0
+    row_id = f"ROW-{current_row_index}"
+
+    for i, chart_meta in enumerate(charts):
+        chart = chart_meta["slice"]
+        chart_width = max(1, min(int(chart_meta.get("width", 6)), 12))
+        chart_height = chart_meta.get("height", 36)
         chart_id = f"CHART-{i + 1}"
-        row_id = f"ROW-{i // 2 + 1}"
 
         if row_id not in row_nodes:
             row_ids.append(row_id)
@@ -362,7 +368,21 @@ def build_position_json(charts: list[Slice]) -> str:
                 "meta": {"background": "BACKGROUND_TRANSPARENT"},
             }
 
+        if current_row_width + chart_width > 12 and row_nodes[row_id]["children"]:
+            current_row_index += 1
+            row_id = f"ROW-{current_row_index}"
+            current_row_width = 0
+            row_ids.append(row_id)
+            row_nodes[row_id] = {
+                "id": row_id,
+                "type": "ROW",
+                "children": [],
+                "parents": ["ROOT_ID", "GRID_ID"],
+                "meta": {"background": "BACKGROUND_TRANSPARENT"},
+            }
+
         row_nodes[row_id]["children"].append(chart_id)
+        current_row_width += chart_width
         chart_nodes[chart_id] = {
             "id": chart_id,
             "type": "CHART",
@@ -370,8 +390,8 @@ def build_position_json(charts: list[Slice]) -> str:
             "parents": ["ROOT_ID", "GRID_ID", row_id],
             "meta": {
                 "chartId": chart.id,
-                "height": 50,
-                "width": 6,
+                "height": chart_height,
+                "width": chart_width,
                 "sliceName": chart.slice_name,
                 "uuid": str(uuid.uuid4()),
             },
@@ -391,11 +411,19 @@ def build_position_json(charts: list[Slice]) -> str:
     return json.dumps(layout)
 
 
-def upsert_dashboard(title: str, slug: str, charts: list[Slice], native_filters: list[dict] | None = None) -> None:
+def upsert_dashboard(title: str, slug: str, charts: list[dict], native_filters: list[dict] | None = None) -> None:
     from superset.models.dashboard import Dashboard
     from superset.extensions import db
 
     position = build_position_json(charts)
+    deduped_slices: list = []
+    seen_slice_ids: set[int] = set()
+    for chart in charts:
+        slice_obj = chart["slice"]
+        if slice_obj.id in seen_slice_ids:
+            continue
+        seen_slice_ids.add(slice_obj.id)
+        deduped_slices.append(slice_obj)
     json_metadata = json.dumps(
         {
             "timed_refresh_immune_slices": [],
@@ -405,7 +433,9 @@ def upsert_dashboard(title: str, slug: str, charts: list[Slice], native_filters:
     )
     dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == title).one_or_none()
     if dashboard:
-        dashboard.slices = charts
+        dashboard.slices = []
+        db.session.flush()
+        dashboard.slices = deduped_slices
         dashboard.position_json = position
         dashboard.json_metadata = json_metadata
         dashboard.published = True
@@ -419,7 +449,7 @@ def upsert_dashboard(title: str, slug: str, charts: list[Slice], native_filters:
         json_metadata=json_metadata,
         published=True,
     )
-    dashboard.slices = charts
+    dashboard.slices = deduped_slices
     db.session.add(dashboard)
     print(f"[seed-dashboard] Created dashboard: {title}")
 
@@ -448,10 +478,17 @@ def main() -> None:
                     ensure_columns(table, required)
                 params = build_params(chart_spec)
                 chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
-                charts.append({"slice": chart, "table": chart_spec["table"]})
+                charts.append(
+                    {
+                        "slice": chart,
+                        "table": chart_spec["table"],
+                        "width": chart_spec.get("width", 6),
+                        "height": chart_spec.get("height", 36),
+                    }
+                )
 
             native_filters = build_native_filter_configuration(charts, dashboard_spec.get("native_filters", []))
-            upsert_dashboard(title, slug, [chart["slice"] for chart in charts], native_filters)
+            upsert_dashboard(title, slug, charts, native_filters)
             db.session.commit()
             print(f"[seed-dashboard] Done — '{title}' ({len(charts)} charts).")
 
