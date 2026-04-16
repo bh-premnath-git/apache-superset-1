@@ -4,6 +4,8 @@ Mounted into the container at /app/pythonpath/superset_config.py.
 """
 import os
 
+from cachelib.redis import RedisCache
+
 
 # ── Secret key ────────────────────────────────────────────────────────────────
 SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
@@ -48,6 +50,13 @@ EXPLORE_FORM_DATA_CACHE_CONFIG = {
     "CACHE_KEY_PREFIX": "superset_explore_",
     "CACHE_REDIS_URL": f"redis://{_REDIS_HOST}:{_REDIS_PORT}/3",
 }
+
+RESULTS_BACKEND = RedisCache(
+    host=_REDIS_HOST,
+    port=int(_REDIS_PORT),
+    db=7,
+    key_prefix="superset_results_",
+)
 
 # ── Celery (async queries) ────────────────────────────────────────────────────
 class CeleryConfig:
