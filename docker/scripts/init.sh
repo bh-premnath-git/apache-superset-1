@@ -68,7 +68,7 @@ if [[ -f /app/seed/import_datasources.yaml ]]; then
     -p /app/seed/import_datasources.yaml \
     -u "${SUPERSET_ADMIN_USERNAME}"
 
-  echo "[init] Reconciling sales DB URI to mysql+pymysql for compatibility..."
+  echo "[init] Reconciling sales DB URI to mysql:// using mysqlclient..."
 python - <<'PY'
 import os
 import sys
@@ -82,7 +82,7 @@ password = os.environ["MYSQL_PASSWORD"]
 host = os.getenv("MYSQL_DB_HOST", "mysql-db")
 port = os.getenv("MYSQL_DB_PORT", "3306")
 database_name = os.environ["MYSQL_DATABASE"]
-expected_uri = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database_name}"
+expected_uri = f"mysql://{username}:{password}@{host}:{port}/{database_name}"
 
 app = create_app()
 with app.app_context():
@@ -101,7 +101,7 @@ with app.app_context():
     # `sqlalchemy_uri` is stored with a masked password; the real password lives
     # in the separate encrypted `password` column. Compare on the driver +
     # hostname + database portion of the URL so we only rewrite when the stored
-    # URI is missing the `+pymysql` driver suffix (or otherwise drifted).
+    # URI does not match the expected mysqlclient-backed mysql URL.
     current = make_url(sales_db.sqlalchemy_uri)
     wanted = make_url(expected_uri)
 
@@ -116,7 +116,7 @@ with app.app_context():
     if needs_update:
         # Use the official setter so the password is extracted into the
         # encrypted `password` column and the stored URI keeps the driver
-        # suffix (mysql+pymysql) with a masked password.
+        # name with a masked password.
         sales_db.set_sqlalchemy_uri(expected_uri)
         db.session.commit()
         print(
@@ -124,7 +124,7 @@ with app.app_context():
             "(password stored encrypted)."
         )
     else:
-        print("[init] Sales database URI already uses mysql+pymysql.")
+        print("[init] Sales database URI already uses mysql://.")
 
     # Smoke-test the connection so any remaining driver/URI issues surface
     # during init rather than at first chart render. We resolve the URI
@@ -136,7 +136,7 @@ with app.app_context():
     with test_engine.connect() as conn:
         conn.execute(text("SELECT 1"))
     test_engine.dispose()
-    print("[init] Verified sales database connectivity via pymysql.")
+    print("[init] Verified sales database connectivity via mysqlclient.")
 PY
 else
   echo "[init] No datasource import file found, skipping."

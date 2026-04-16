@@ -5,9 +5,28 @@ USER root
 
 # Install drivers into Superset's bundled virtualenv. In the base image `uv`
 # is global, while the app runtime uses `/app/.venv/bin/python`.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
-    pymysql \
+    mysqlclient \
     psycopg2-binary \
+    snowflake-sqlalchemy \
+    sqlalchemy-bigquery \
+    cx_Oracle \
+    pymssql \
+    sqlalchemy-redshift \
+    "pyathena[pandas]" \
+    trino \
+    pyhive \
+    impyla \
+    clickhouse-connect \
+    pydruid \
+    elasticsearch-dbapi \
+    shillelagh \
     cryptography
 
 # Copy startup bootstrap script.

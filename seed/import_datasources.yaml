@@ -1,6 +1,6 @@
 databases:
   - database_name: sales
-    sqlalchemy_uri: mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
+    sqlalchemy_uri: mysql://sample_user:sample_pass@mysql-db:3306/sales
     expose_in_sqllab: true
     allow_run_async: true
     tables:
@@ -32,3 +32,11 @@ databases:
       - table_name: household_segment_monthly_trend
       - table_name: household_geo_points
       - table_name: household_path_summary
+
+  # ── CSV Files via shillelagh ────────────────────────────────────────────
+  - database_name: csv_datasets
+    sqlalchemy_uri: shillelagh://
+    expose_in_sqllab: true
+    allow_run_async: false
+    tables:
+      - table_name: "/app/seed/eth_txn.csv"

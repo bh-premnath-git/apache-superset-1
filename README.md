@@ -3,7 +3,7 @@
 A Docker Compose setup for running Apache Superset locally with pre-seeded sample databases,
 auto-imported datasets, and a config-driven dashboard seeder.
 
-- **Superset 5.0.0** — custom image with extra DB drivers + custom branding
+- **Superset 6.0.0** — custom image with extra DB drivers + custom branding
 - **PostgreSQL 16** — Superset metadata DB
 - **Redis 7** — cache + Celery broker/backend
 - **Celery worker + beat** — async queries and scheduled alerts/reports
@@ -53,29 +53,30 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 1. **DB migrations** (`superset db upgrade`)
 2. **Admin user** creation
 3. **Datasource import** from `seed/import_datasources.yaml` — registers both sample DBs and all tables in the Superset UI
-4. **MySQL URI reconciliation** — ensures `sales` DB uses `mysql+pymysql://` driver
+4. **MySQL URI reconciliation** — ensures `sales` DB uses the Superset 6.0.0 recommended `mysql://` / `mysqlclient` driver
 5. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
 
 ### Seeded databases, tables and views
 
-| Database    | Engine     | Object                              | Kind  | Rows    |
-|-------------|------------|-------------------------------------|-------|---------|
-| `sales`     | MySQL 8    | `products`, `customers`, `orders`   | table | ~35     |
-| `analytics` | Postgres   | `events`, `daily_active_users`      | table | ~28     |
-| `analytics` | Postgres   | `household`                         | table | 200 000 |
-| `analytics` | Postgres   | `segment_summary`                   | view  | 4       |
-| `analytics` | Postgres   | `state_summary`                     | view  | 5       |
-| `analytics` | Postgres   | `income_distribution`               | view  | 6       |
-| `analytics` | Postgres   | `district_segment_summary`          | view  | ~1 000  |
-| `analytics` | Postgres   | `household_monthly_trend`           | view  | 12      |
-| `analytics` | Postgres   | `household_headlines`               | view  | 1       |
-| `analytics` | Postgres   | `household_size_distribution`       | view  | ~7      |
-| `analytics` | Postgres   | `household_joint_distribution`      | view  | ~42     |
-| `analytics` | Postgres   | `household_segment_monthly_trend`   | view  | ~48     |
-| `analytics` | Postgres   | `household_geo_points`              | view  | 200 000 |
-| `analytics` | Postgres   | `household_path_summary`            | view  | ~250    |
+| Database       | Engine        | Object                              | Kind  | Rows    |
+|----------------|---------------|-------------------------------------|-------|---------|
+| `sales`        | MySQL 8       | `products`, `customers`, `orders` | table | ~35     |
+| `analytics`    | Postgres      | `events`, `daily_active_users`      | table | ~28     |
+| `analytics`    | Postgres      | `household`                         | table | 200 000 |
+| `analytics`    | Postgres      | `segment_summary`                   | view  | 4       |
+| `analytics`    | Postgres      | `state_summary`                     | view  | 5       |
+| `analytics`    | Postgres      | `income_distribution`               | view  | 6       |
+| `analytics`    | Postgres      | `district_segment_summary`          | view  | ~1 000  |
+| `analytics`    | Postgres      | `household_monthly_trend`           | view  | 12      |
+| `analytics`    | Postgres      | `household_headlines`               | view  | 1       |
+| `analytics`    | Postgres      | `household_size_distribution`       | view  | ~7      |
+| `analytics`    | Postgres      | `household_joint_distribution`      | view  | ~42     |
+| `analytics`    | Postgres      | `household_segment_monthly_trend`   | view  | ~48     |
+| `analytics`    | Postgres      | `household_geo_points`              | view  | 200 000 |
+| `analytics`    | Postgres      | `household_path_summary`            | view  | ~250    |
+| `csv_datasets` | shillelagh    | `eth_txn.csv`                       | CSV   | ~3 900  |
 
-### Starter Seed Dashboard (15 charts)
+### Starter Seed Dashboard (18 charts)
 
 | Chart                             | Type              | Source                                |
 |-----------------------------------|-------------------|---------------------------------------|
@@ -94,6 +95,9 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | Monthly Household Creation        | Timeseries line   | analytics.household_monthly_trend     |
 | Monthly Avg Income Trend          | Timeseries line   | analytics.household_monthly_trend     |
 | Segment Household Creation Trend  | Timeseries line   | analytics.household_segment_monthly_trend |
+| ETH Transaction Value Over Time | Timeseries line   | csv_datasets.eth_txn.csv              |
+| ETH Transaction Volume          | Big number        | csv_datasets.eth_txn.csv              |
+| ETH Daily Transactions          | Timeseries bar    | csv_datasets.eth_txn.csv              |
 
 In the current image build, `chart_config.yaml` can use the verified
 `visualization_type` labels wired into the Python seeder, including
@@ -336,13 +340,82 @@ All containers share the `superset-net` bridge network — use the container nam
 
 **MySQL — sales**
 ```
-mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
+mysql://sample_user:sample_pass@mysql-db:3306/sales
 ```
 
 **PostgreSQL — analytics**
 ```
 postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
 ```
+
+---
+
+## Superset 6.0.0 database connectivity reference
+
+Superset does not bundle all database drivers. Per the official Superset 6.0.0
+database documentation, each external database needs a compatible SQLAlchemy
+dialect and Python driver installed in the image.
+
+### Common supported databases and drivers
+
+| Database | PyPI package | SQLAlchemy URI example |
+|----------|--------------|------------------------|
+| MySQL | `mysqlclient` | `mysql://<User>:<Pass>@<Host>/<DB>` |
+| PostgreSQL | `psycopg2` | `postgresql://<User>:<Pass>@<Host>/<DB>` |
+| SQLite | Included in Python | `sqlite://path/to/file.db?check_same_thread=false` |
+| Snowflake | `snowflake-sqlalchemy` | `snowflake://{user}:{password}@{account}.{region}/{database}?role={role}&warehouse={warehouse}` |
+| BigQuery | `sqlalchemy-bigquery` | `bigquery://{project_id}` |
+| Oracle | `cx_Oracle` | `oracle://<username>:<password>@<hostname>:<port>` |
+| SQL Server | `pymssql` | `mssql+pymssql://<Username>:<Password>@<Host>:1433/<Database Name>` |
+| Redshift | `sqlalchemy-redshift` | `redshift+psycopg2://<userName>:<DBPassword>@<AWS End Point>:5439/<Database Name>` |
+| Athena | `pyathena[pandas]` | `awsathena+rest://{access_key_id}:{access_key}@athena.{region}.amazonaws.com/{schema}?s3_staging_dir={s3_staging_dir}&...` |
+| Trino | `trino` | `trino://{username}:{password}@{hostname}:{port}/{catalog}` |
+| Presto | `pyhive` | `presto://{username}:{password}@{hostname}:{port}/{database}` |
+| Hive | `pyhive` | `hive://hive@{hostname}:{port}/{database}` |
+| Spark SQL | `pyhive` | `hive://hive@{hostname}:{port}/{database}` |
+| Impala | `impyla` | `impala://{hostname}:{port}/{database}` |
+| ClickHouse | `clickhouse-connect` | `clickhousedb://{username}:{password}@{hostname}:{port}/{database}` |
+| Druid | `pydruid` | `druid://<User>:<password>@<Host>:9088/druid/v2/sql` |
+| Elasticsearch | `elasticsearch-dbapi` | `elasticsearch+http://{user}:{password}@{host}:9200/` |
+| TimescaleDB | `psycopg2` | `postgresql://<UserName>:<DBPassword>@<Database Host>:<Port>/<Database Name>` |
+| DynamoDB | `pydynamodb` | `dynamodb://{access_key_id}:{secret_access_key}@dynamodb.{region_name}.amazonaws.com?connector=superset` |
+| Couchbase | `couchbase-sqlalchemy` | `couchbase://{username}:{password}@{hostname}:{port}?truststorepath={ssl certificate path}` |
+| TDengine | `taospy` or `taos-ws-py` | `taosws://<user>:<password>@<host>:<port>` |
+| **CSV Files** | **`shillelagh`** | **`shillelagh://`** (query with `SELECT * FROM "/path/to/file.csv"`) |
+| Google Sheets | `shillelagh[gsheetsapi]` | `gsheets://` |
+
+### CSV files as databases
+
+This project includes **`shillelagh`** — a SQLAlchemy adapter that lets you query CSV files
+(and other formats) directly using SQL:
+
+```sql
+SELECT * FROM "/app/seed/eth_txn.csv";
+```
+
+**To add a new CSV dataset:**
+1. Place your CSV file in the `seed/` directory
+2. Register it in `seed/import_datasources.yaml` under the `csv_datasets` database
+3. Add charts pointing to the file path as the table name
+
+See `eth_txn.csv` in this repo for a working example with 3 charts (line, bar, big number).
+
+### Notes for document and non-SQL databases
+
+- **MongoDB**
+  - MongoDB is **not listed as a direct built-in Superset 6.0.0 connector** in the official docs.
+  - To use it with Superset, you typically need a **SQL interface**, a compatible
+    SQLAlchemy dialect, or an intermediate engine such as Trino.
+
+- **Document, time-series, and search engines**
+  - Superset can work with non-traditional backends when they expose a stable SQL
+    interface and Python driver.
+  - Examples in the official docs include **Druid**, **Elasticsearch**,
+    **ClickHouse**, **DynamoDB**, **Couchbase**, and **TDengine**.
+
+- **General rule**
+  - If your source is not on the official list, the main requirement is the
+    existence of a functional SQLAlchemy dialect and Python driver.
 
 ---
 
@@ -384,7 +457,7 @@ Add extra Python packages (DB drivers, extensions) in `Dockerfile`:
 ```dockerfile
 RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     trino \
-    pybigquery
+    sqlalchemy-bigquery
 ```
 
 Then rebuild: `docker compose build --no-cache`.
@@ -396,14 +469,14 @@ Then rebuild: `docker compose build --no-cache`.
 ### `No module named 'MySQLdb'` on MySQL charts
 
 `mysql://...` URIs default to SQLAlchemy's `MySQLdb` / `mysqlclient` driver,
-which is not in the upstream Superset image. This project fixes it on two layers:
+which is not in the upstream Superset image by default. This project fixes it by
+installing `mysqlclient` in the custom Docker image and reconciling the seeded
+`sales` connection to the recommended `mysql://` URI during init.
 
-1. **`superset_config.py`** calls `pymysql.install_as_MySQLdb()` at startup —
-   aliases `pymysql` as `MySQLdb` in `sys.modules` so both `mysql://` and
-   `mysql+pymysql://` URIs resolve correctly.
-2. **`docker/scripts/init.sh`** reconciles the stored `sales` URI to
-   `mysql+pymysql://` via `Database.set_sqlalchemy_uri()` and smoke-tests the
-   connection during init, so errors surface early rather than at first chart render.
+1. **`Dockerfile`** installs `mysqlclient` into Superset's application virtualenv.
+2. **`docker/scripts/init.sh`** reconciles the stored `sales` URI to `mysql://`
+   via `Database.set_sqlalchemy_uri()` and smoke-tests the connection during init,
+   so errors surface early rather than at first chart render.
 
 To verify:
 
@@ -421,10 +494,10 @@ with app.app_context():
 PY
 ```
 
-Expected — both lines start with `mysql+pymysql://`:
+Expected — both lines start with `mysql://`:
 ```
-stored   : mysql+pymysql://sample_user:XXXXXXXXXX@mysql-db:3306/sales
-decrypted: mysql+pymysql://sample_user:sample_pass@mysql-db:3306/sales
+stored   : mysql://sample_user:XXXXXXXXXX@mysql-db:3306/sales
+decrypted: mysql://sample_user:sample_pass@mysql-db:3306/sales
 ```
 
 ### Charts missing after adding a new seed
@@ -443,6 +516,7 @@ docker compose up -d --build
 
 - [Superset Docker Compose setup](https://superset.apache.org/docs/installation/docker-compose)
 - [Superset configuration guide](https://superset.apache.org/docs/configuration/configuring-superset)
+- [Superset 6.0.0 database connections](https://superset.apache.org/user-docs/6.0.0/configuration/databases/)
 - [SQLAlchemy database URLs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls)
 
 ---
