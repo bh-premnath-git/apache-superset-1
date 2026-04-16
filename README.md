@@ -1,14 +1,13 @@
 # Apache Superset — Local Starter (BigHammer)
 
-A Docker Compose setup for running Apache Superset locally with pre-seeded sample databases,
+A Docker Compose setup for running Apache Superset locally with a pre-seeded analytics database,
 auto-imported datasets, and a config-driven dashboard seeder.
 
 - **Superset 6.0.0** — custom image with extra DB drivers + custom branding
 - **PostgreSQL 16** — Superset metadata DB
 - **Redis 7** — cache + Celery broker/backend
 - **Celery worker + beat** — async queries and scheduled alerts/reports
-- **MySQL 8** — sample `sales` database (seeded on first start)
-- **PostgreSQL 16** — sample `analytics` database (seeded on first start)
+- **PostgreSQL 16** — sample `analytics` database with `eth_txn` seeded on first start
 
 ---
 
@@ -41,8 +40,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | `celery-beat`    | superset-celery-beat      | —     | Scheduled alerts/reports       |
 | `metadata-db`    | superset-metadata-db      | —     | Superset internal metadata     |
 | `redis`          | superset-redis            | —     | Cache + Celery broker/backend  |
-| `mysql-db`       | superset-mysql-db         | —     | Sample sales data              |
-| `analytics-db`   | superset-analytics-db     | —     | Sample analytics + household   |
+| `analytics-db`   | superset-analytics-db     | —     | Seeded ETH transaction dataset |
 
 ---
 
@@ -52,52 +50,22 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 
 1. **DB migrations** (`superset db upgrade`)
 2. **Admin user** creation
-3. **Datasource import** from `seed/import_datasources.yaml` — registers both sample DBs and all tables in the Superset UI
-4. **MySQL URI reconciliation** — ensures `sales` DB uses the Superset 6.0.0 recommended `mysql://` / `mysqlclient` driver
-5. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
+3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.eth_txn` in the Superset UI
+4. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
 
 ### Seeded databases, tables and views
 
 | Database       | Engine        | Object                              | Kind  | Rows    |
 |----------------|---------------|-------------------------------------|-------|---------|
-| `sales`        | MySQL 8       | `products`, `customers`, `orders` | table | ~35     |
-| `analytics`    | Postgres      | `events`, `daily_active_users`      | table | ~28     |
-| `analytics`    | Postgres      | `household`                         | table | 200 000 |
-| `analytics`    | Postgres      | `segment_summary`                   | view  | 4       |
-| `analytics`    | Postgres      | `state_summary`                     | view  | 5       |
-| `analytics`    | Postgres      | `income_distribution`               | view  | 6       |
-| `analytics`    | Postgres      | `district_segment_summary`          | view  | ~1 000  |
-| `analytics`    | Postgres      | `household_monthly_trend`           | view  | 12      |
-| `analytics`    | Postgres      | `household_headlines`               | view  | 1       |
-| `analytics`    | Postgres      | `household_size_distribution`       | view  | ~7      |
-| `analytics`    | Postgres      | `household_joint_distribution`      | view  | ~42     |
-| `analytics`    | Postgres      | `household_segment_monthly_trend`   | view  | ~48     |
-| `analytics`    | Postgres      | `household_geo_points`              | view  | 200 000 |
-| `analytics`    | Postgres      | `household_path_summary`            | view  | ~250    |
 | `analytics`    | Postgres      | `eth_txn`                           | table | ~3 900  |
 
-### Starter Seed Dashboard (18 charts)
+### Starter Seed Dashboard (3 charts)
 
 | Chart                             | Type              | Source                                |
 |-----------------------------------|-------------------|---------------------------------------|
-| Sales Amount by Day               | Timeseries bar    | sales.orders                          |
-| Products by Category              | Pie               | sales.products                        |
-| Customers by Country              | World map         | sales.customers                       |
-| Daily Active Users                | Timeseries line   | analytics.daily_active_users          |
-| Households by Social Category     | Pie               | analytics.household                   |
-| Income Distribution               | Categorical bar   | analytics.income_distribution         |
-| Household Size Distribution       | Categorical bar   | analytics.household_size_distribution |
-| Households by Segment             | Categorical bar   | analytics.segment_summary             |
-| Weighted Income by Segment        | Categorical bar   | analytics.segment_summary             |
-| Internet Penetration by Segment   | Categorical bar   | analytics.segment_summary             |
-| Households by State               | Categorical bar   | analytics.state_summary               |
-| Weighted Income by State          | Categorical bar   | analytics.state_summary               |
-| Monthly Household Creation        | Timeseries line   | analytics.household_monthly_trend     |
-| Monthly Avg Income Trend          | Timeseries line   | analytics.household_monthly_trend     |
-| Segment Household Creation Trend  | Timeseries line   | analytics.household_segment_monthly_trend |
-| ETH Transaction Value Over Time | Timeseries line   | analytics.eth_txn                     |
-| ETH Transaction Volume          | Big number        | analytics.eth_txn                     |
-| ETH Daily Transactions          | Timeseries bar    | analytics.eth_txn                     |
+| ETH Transaction Value Over Time   | Timeseries line   | analytics.eth_txn                     |
+| ETH Transaction Volume            | Big number        | analytics.eth_txn                     |
+| ETH Daily Transactions            | Timeseries bar    | analytics.eth_txn                     |
 
 In the current image build, `chart_config.yaml` can use the verified
 `visualization_type` labels wired into the Python seeder, including
@@ -111,62 +79,36 @@ For categorical comparisons such as segment/state bars, this repo intentionally
 uses the `Bar Chart` visualization type with a categorical `x_axis`, because that is the
 registered bar-capable plugin available in the running Superset build.
 
+
 ---
 
-## Analytical layering — raw tables vs. views
+## Current seed pipeline
 
-This repo follows a simple two-layer model:
+This repo now uses a single Postgres-backed seed flow for Ethereum transaction
+data:
 
 ```
-  Raw layer                         Analytical layer (views)
-  ─────────                         ────────────────────────
-  household        ──────►          segment_summary           ◄── weighted KPIs per segment
-  (200K atomic                      state_summary             ◄── geo rollup (lat/lon, state_code)
-   survey rows)                     income_distribution       ◄── fixed-width buckets
-                                    household_size_distribution ◄── household-size frequency bins
-                                    household_headlines       ◄── single-row KPI headline metrics
-                                    household_joint_distribution ◄── income × hh_size joint matrix
-                                    district_segment_summary  ◄── state → district → segment hierarchy
-                                    household_monthly_trend   ◄── time-series (created_at)
-                                    household_segment_monthly_trend ◄── segment trends over time
-                                    household_geo_points      ◄── point-level geo coordinates
-                                    household_path_summary    ◄── source → target flow edges
+seed/pg/eth_txn.csv
+        │
+        ▼
+seed/pg/01_eth_txn.sql
+        │  COPY + TO_DATE
+        ▼
+analytics.eth_txn
+        │
+        ▼
+seed/import_datasources.yaml
+        │
+        ▼
+seed/chart_config.yaml
+        │
+        ▼
+docker/scripts/seed_dashboard.py
 ```
 
-**Why views:** business semantics — survey-weighting, bucket edges, geo rollup —
-live in one place (SQL), so every chart that uses a concept gets the same
-numbers. Charts stay thin (just `x_axis` / `metric`) and Python stays dumb
-(the seeder only wires metadata).
-
-**Rules of thumb:**
-
-| Concern                                          | Belongs in           |
-|--------------------------------------------------|----------------------|
-| Weighted aggregates (e.g. `SUM(income*multiplier)/SUM(multiplier)`) | SQL view             |
-| Bucketing / binning / `CASE WHEN`                | SQL view             |
-| Geography rollups, centroids, codes              | SQL view             |
-| Chart title, viz type, x/y, metric, groupby      | `chart_config.yaml`  |
-| Registering a table / view as a Superset dataset | `import_datasources.yaml` |
-| Validation, upsert, dashboard layout             | `seed_dashboard.py`  |
-
-### Household visualization pattern coverage
-
-The household seed now models the following visualization families at the SQL
-view layer:
-
-| Pattern family | Seeded dataset(s) | Notes |
-|---|---|---|
-| Headlines | `household_headlines` | Ready for big-number style cards when that plugin is enabled |
-| Distributions | `income_distribution`, `household_size_distribution` | Works today with bar charts; ready for histogram-like visuals |
-| Comparisons | `segment_summary`, `state_summary` | Works today with bar charts |
-| Trends / time series | `household_monthly_trend`, `household_segment_monthly_trend` | Works today with line charts |
-| Joint distributions | `household_joint_distribution` | Ready for heatmap / bubble / scatter style plugins |
-| Hierarchical maps | `district_segment_summary` | Ready for treemap / sunburst style plugins |
-| Path maps | `household_path_summary` | Ready for sankey / path-style plugins |
-| Geo point maps | `household_geo_points`, `state_summary` | Ready for Mapbox / deck.gl style plugins |
-
-The current image build still renders only the verified plugin subset described
-below, so some of these datasets are modeled now for future chart expansion.
+The SQL seed script stages the CSV, parses the original `Date(UTC)` text into a
+real `DATE` column named `txn_date`, and loads the result into
+`analytics.eth_txn` for Superset to query efficiently.
 
 ---
 
@@ -181,7 +123,6 @@ view.
 **Step 1 — Drop a SQL seed file**
 
 ```
-seed/mysql/NN_name.sql    ← auto-loaded by MySQL on fresh volume
 seed/pg/NN_name.sql       ← auto-loaded by Postgres on fresh volume
 ```
 
@@ -229,7 +170,7 @@ Superset treats views exactly like tables — no special flag needed.
 
 ### Adding a chart
 
-Point it at the view, not the raw table, whenever a business rule applies.
+Point it at the seeded table or view you registered in `import_datasources.yaml`.
 
 ```yaml
 - database: analytics
@@ -302,15 +243,9 @@ environment and Docker Compose config.
 └── seed/
     ├── import_datasources.yaml     # DB connections + table registrations
     ├── chart_config.yaml           # dashboard + chart definitions (YAML-only)
-    ├── mysql/
-    │   └── 01_sales.sql            # sales schema + seed rows
     └── pg/
-        ├── 01_analytics.sql        # events + daily_active_users
-        └── 02_household.sql        # household survey 200K rows +
-                                    # segment_summary, state_summary,
-                                    # income_distribution,
-                                    # district_segment_summary,
-                                    # household_monthly_trend (views)
+        ├── 01_eth_txn.sql          # CSV loader into analytics.eth_txn
+        └── eth_txn.csv             # source Ethereum daily transaction data
 ```
 
 ---
@@ -337,11 +272,6 @@ SUPERSET_APP_FAVICON=/static/assets/images/logo.svg
 ## Connection URIs (manual setup)
 
 All containers share the `superset-net` bridge network — use the container name as the hostname.
-
-**MySQL — sales**
-```
-mysql://sample_user:sample_pass@mysql-db:3306/sales
-```
 
 **PostgreSQL — analytics**
 ```
@@ -394,7 +324,7 @@ placed there is visible to server-side `COPY ... FROM`.
 **To add a new CSV dataset:**
 1. Drop the CSV into `seed/pg/` (alongside the SQL loaders).
 2. Add a numbered SQL file in `seed/pg/` that `CREATE TABLE`s the target and
-   `COPY`s the CSV into a staging table (see `seed/pg/03_eth_txn.sql` for a
+   `COPY`s the CSV into a staging table (see `seed/pg/01_eth_txn.sql` for a
    worked example that also parses an M/D/YYYY date column).
 3. Register the new table in `seed/import_datasources.yaml` under the
    `analytics` database.
@@ -473,40 +403,6 @@ Then rebuild: `docker compose build --no-cache`.
 
 ## Troubleshooting
 
-### `No module named 'MySQLdb'` on MySQL charts
-
-`mysql://...` URIs default to SQLAlchemy's `MySQLdb` / `mysqlclient` driver,
-which is not in the upstream Superset image by default. This project fixes it by
-installing `mysqlclient` in the custom Docker image and reconciling the seeded
-`sales` connection to the recommended `mysql://` URI during init.
-
-1. **`Dockerfile`** installs `mysqlclient` into Superset's application virtualenv.
-2. **`docker/scripts/init.sh`** reconciles the stored `sales` URI to `mysql://`
-   via `Database.set_sqlalchemy_uri()` and smoke-tests the connection during init,
-   so errors surface early rather than at first chart render.
-
-To verify:
-
-```bash
-docker compose exec superset python - <<'PY'
-from superset.app import create_app
-from superset.extensions import db
-from superset.models.core import Database
-
-app = create_app()
-with app.app_context():
-    row = db.session.query(Database).filter(Database.database_name == "sales").one()
-    print("stored   :", row.sqlalchemy_uri)
-    print("decrypted:", row.sqlalchemy_uri_decrypted)
-PY
-```
-
-Expected — both lines start with `mysql://`:
-```
-stored   : mysql://sample_user:XXXXXXXXXX@mysql-db:3306/sales
-decrypted: mysql://sample_user:sample_pass@mysql-db:3306/sales
-```
-
 ### Charts missing after adding a new seed
 
 `docker-entrypoint-initdb.d` only runs on a **fresh volume**. If you add a new
@@ -535,5 +431,5 @@ docker compose up -d --build
 - [ ] Use a managed Postgres and Redis — not the Compose services
 - [ ] Configure SMTP in `superset_config.py` for alert/report emails
 - [ ] Change `SUPERSET_ADMIN_PASSWORD` from the default
-- [ ] Pin image tags for `metadata-db`, `redis`, `mysql-db`, and `analytics-db`
-- [ ] Remove or restrict the `analytics-db` and `mysql-db` sample services
+- [ ] Pin image tags for `metadata-db`, `redis`, and `analytics-db`
+- [ ] Remove or restrict the `analytics-db` sample service

@@ -23,4 +23,4 @@ venv/
 # Windsurf / AI assistants
 .codex
 .claude
-.windsurf
+.windsurfseed/pg/HH.master.csv

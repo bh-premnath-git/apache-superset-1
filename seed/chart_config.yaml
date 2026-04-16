@@ -6,13 +6,9 @@
 #      For CSV-sourced data: place the CSV alongside a SQL loader in seed/pg/
 #      (the directory is mounted into the analytics Postgres container at
 #      /docker-entrypoint-initdb.d, so `COPY … FROM` works at init time).
-#      See seed/pg/03_eth_txn.sql for a worked example.
+#      See seed/pg/01_eth_txn.sql for a worked example.
 #   2. Register the table or view in seed/import_datasources.yaml
 #   3. Add chart entries below — no code changes needed.
-#
-# Chart layer rule of thumb: point charts at analytical VIEWS (segment_summary,
-# state_summary, income_distribution, …) rather than the raw fact table. Views
-# own the business semantics, so charts stay thin and consistent.
 #
 # This file uses human-facing `visualization_type` labels. The Python seeder
 # maps them to the internal Superset `viz_type` keys required by the API.
@@ -52,19 +48,6 @@
 #   deck.gl Polygon          → internal key: deck_polygon
 #                               typically requires geojson/polygon columns and MAPBOX_API_KEY
 #
-# Legacy aliases still accepted by the Python seeder for backward compatibility:
-#   viz_type: dist_bar, echarts_bar    → mapped to echarts_timeseries_bar
-#
-# Additional household pattern datasets are also modeled in SQL for future chart
-# families beyond the current image build:
-#   household_headlines              → headline / big-number metrics
-#   household_size_distribution      → size distributions / histogram-style bars
-#   household_joint_distribution     → joint distributions / heatmaps / bubbles
-#   household_segment_monthly_trend  → segment trend comparisons over time
-#   household_geo_points             → Mapbox / deck.gl point maps
-#   household_path_summary           → path / sankey style source-target flows
-#   district_segment_summary         → hierarchy views such as treemap/sunburst
-#
 # Optional per-chart fields:
 #   required_columns: [col1, col2]  → validated before chart creation
 #   row_limit: 10000                → default 10000
@@ -74,167 +57,6 @@ dashboards:
   - title: "Starter Seed Dashboard"
     slug: starter-seed-dashboard
     charts:
-
-      # ── Sales (MySQL) ────────────────────────────────────────────────────────
-      - database: sales
-        table: orders
-        name: "Sales Amount by Day (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [order_date, amount]
-        x_axis: order_date
-        time_grain: P1D
-        metrics:
-          - {column: amount, aggregate: SUM}
-        groupby: []
-
-      - database: sales
-        table: products
-        name: "Products by Category (Pie)"
-        visualization_type: Pie Chart
-        required_columns: [id, category]
-        groupby: [category]
-        metric: {column: id, aggregate: COUNT}
-
-      - database: sales
-        table: customers
-        name: "Customers by Country (Geo)"
-        visualization_type: World Map
-        required_columns: [id, country]
-        entity: country
-        country_fieldtype: cca2
-        metric: {column: id, aggregate: COUNT}
-        show_bubbles: true
-        max_bubble_size: "25"
-        color_by_metric: true
-
-      # ── Analytics (Postgres) ─────────────────────────────────────────────────
-      - database: analytics
-        table: daily_active_users
-        name: "Daily Active Users (Line)"
-        visualization_type: Line Chart
-        required_columns: [date, dau]
-        x_axis: date
-        time_grain: P1D
-        metrics:
-          - {column: dau, aggregate: SUM}
-        groupby: []
-
-      # ── Household Survey: Distributions ──────────────────────────────────────
-      # Pie over raw table — simple categorical slice, no weighting.
-      - database: analytics
-        table: household
-        name: "Households by Social Category (Pie)"
-        visualization_type: Pie Chart
-        required_columns: [household_id, social_category]
-        groupby: [social_category]
-        metric: {column: household_id, aggregate: COUNT}
-
-      # Histogram-style bar over a pre-bucketed view.
-      - database: analytics
-        table: income_distribution
-        name: "Income Distribution (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [income_bucket, households]
-        x_axis: income_bucket
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: household_size_distribution
-        name: "Household Size Distribution (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [hh_size, households]
-        x_axis: hh_size
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: []
-
-      # ── Household Survey: Comparisons (weighted, via views) ──────────────────
-      - database: analytics
-        table: segment_summary
-        name: "Households by Segment (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [segment, households]
-        x_axis: segment
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: segment_summary
-        name: "Weighted Income by Segment (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [segment, weighted_income]
-        x_axis: segment
-        metrics:
-          - {column: weighted_income, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: segment_summary
-        name: "Internet Penetration by Segment (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [segment, internet_pct]
-        x_axis: segment
-        metrics:
-          - {column: internet_pct, aggregate: SUM}
-        groupby: []
-
-      # ── Household Survey: Geography (state rollup) ───────────────────────────
-      - database: analytics
-        table: state_summary
-        name: "Households by State (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [state, households]
-        x_axis: state
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: state_summary
-        name: "Weighted Income by State (Bar)"
-        visualization_type: Bar Chart
-        required_columns: [state, weighted_income]
-        x_axis: state
-        metrics:
-          - {column: weighted_income, aggregate: SUM}
-        groupby: []
-
-      # ── Household Survey: Time-series ────────────────────────────────────────
-      - database: analytics
-        table: household_monthly_trend
-        name: "Monthly Household Creation (Line)"
-        visualization_type: Line Chart
-        required_columns: [month, households]
-        x_axis: month
-        time_grain: P1M
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: household_monthly_trend
-        name: "Monthly Avg Income Trend (Line)"
-        visualization_type: Line Chart
-        required_columns: [month, avg_income]
-        x_axis: month
-        time_grain: P1M
-        metrics:
-          - {column: avg_income, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: household_segment_monthly_trend
-        name: "Segment Household Creation Trend (Line)"
-        visualization_type: Line Chart
-        required_columns: [month, segment, households]
-        x_axis: month
-        time_grain: P1M
-        metrics:
-          - {column: households, aggregate: SUM}
-        groupby: [segment]
 
       # ── Ethereum Transactions (loaded from CSV into analytics.eth_txn) ───────
       - database: analytics

@@ -1,37 +1,9 @@
 databases:
-  - database_name: sales
-    sqlalchemy_uri: mysql://sample_user:sample_pass@mysql-db:3306/sales
-    expose_in_sqllab: true
-    allow_run_async: true
-    tables:
-      - table_name: customers
-      - table_name: orders
-      - table_name: products
-
   - database_name: analytics
     sqlalchemy_uri: postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
     expose_in_sqllab: true
     allow_run_async: true
     tables:
-      # ── Product analytics ─────────────────────────────────────────────────
-      - table_name: daily_active_users
-      - table_name: events
-
-      # ── Household survey: raw fact table ──────────────────────────────────
-      - table_name: household
-
-      # ── Household survey: analytical views (preferred for charts) ─────────
-      - table_name: segment_summary
-      - table_name: state_summary
-      - table_name: income_distribution
-      - table_name: district_segment_summary
-      - table_name: household_monthly_trend
-      - table_name: household_headlines
-      - table_name: household_size_distribution
-      - table_name: household_joint_distribution
-      - table_name: household_segment_monthly_trend
-      - table_name: household_geo_points
-      - table_name: household_path_summary
-
       # ── Ethereum daily transactions (loaded from CSV by seed/pg) ──────────
       - table_name: eth_txn
+

@@ -9,7 +9,6 @@ networks:
 volumes:
   metadata-db-data:
   redis-data:
-  mysql-data:
   analytics-db-data:
   superset-home:
 
@@ -26,11 +25,6 @@ x-superset-env: &superset-env
   METADATA_DB_PORT:         ${METADATA_DB_PORT}
   REDIS_HOST:               ${REDIS_HOST}
   REDIS_PORT:               ${REDIS_PORT}
-  MYSQL_USER:               ${MYSQL_USER}
-  MYSQL_PASSWORD:           ${MYSQL_PASSWORD}
-  MYSQL_DATABASE:           ${MYSQL_DATABASE}
-  MYSQL_DB_HOST:            ${MYSQL_DB_HOST:-mysql-db}
-  MYSQL_DB_PORT:            ${MYSQL_DB_PORT:-3306}
   ANALYTICS_DB_HOST:        ${ANALYTICS_DB_HOST:-analytics-db}
   ANALYTICS_DB_PORT:        ${ANALYTICS_DB_PORT:-5432}
   MAPBOX_API_KEY:           ${MAPBOX_API_KEY:-}
@@ -84,8 +78,6 @@ services:
       metadata-db:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      mysql-db:
         condition: service_healthy
       analytics-db:
         condition: service_healthy
@@ -156,28 +148,6 @@ services:
     volumes:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
-    networks:
-      - superset-net
-
-  # ── Sample MySQL DB (sales) ────────────────────────────────────────────────
-  mysql-db:
-    image: mysql:8.0
-    container_name: superset-mysql-db
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE:      ${MYSQL_DATABASE}
-      MYSQL_USER:          ${MYSQL_USER}
-      MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./seed/mysql:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
-             "-u", "${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
     networks:
       - superset-net
 
