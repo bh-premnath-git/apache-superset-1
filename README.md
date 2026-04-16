@@ -51,7 +51,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 1. **DB migrations** (`superset db upgrade`)
 2. **Admin user** creation
 3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.hh_master` in the Superset UI
-4. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
+4. **Dashboard seeding** from `seed/chart_config.yaml` — creates the LCA Dashboard
 
 ### Seeded databases, tables and views
 
@@ -59,7 +59,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 |----------------|---------------|-------------------------------------|-------|---------|
 | `analytics`    | Postgres      | `hh_master`                         | table | ~261 953 |
 
-### Starter Seed Dashboard (3 charts)
+### LCA Dashboard (3 charts)
 
 | Chart                             | Type              | Source                                |
 |-----------------------------------|-------------------|---------------------------------------|

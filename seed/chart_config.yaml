@@ -53,8 +53,8 @@
 
 dashboards:
 
-  - title: "Starter Seed Dashboard"
-    slug: starter-seed-dashboard
+  - title: "LCA Dashboard"
+    slug: lca-dashboard
     charts:
 
       - database: analytics
