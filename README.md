@@ -69,10 +69,10 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 
 In the current image build, `chart_config.yaml` can use the verified
 `visualization_type` labels wired into the Python seeder, including
-`Bar Chart`, `Line Chart`, `Pie Chart`, `World Map`, `Big Number`,
-`Big Number with Trendline`, `Histogram`, `Heatmap`, `Treemap`, `Sunburst`,
-`Sankey`, `MapBox`, `Scatter Plot`, `deck.gl Scatterplot`,
-`deck.gl Heatmap`, and `deck.gl Polygon`.
+`Bar Chart`, `Line Chart`, `Pie Chart`, `World Map`, `Country Map`,
+`Big Number`, `Big Number with Trendline`, `Histogram`, `Heatmap`,
+`Treemap`, `Sunburst`, `Sankey`, `MapBox`, `Scatter Plot`,
+`deck.gl Scatterplot`, `deck.gl Heatmap`, and `deck.gl Polygon`.
 The Python seeder maps those labels to the internal Superset `viz_type` keys
 required by the API.
 For categorical comparisons such as segment/state bars, this repo intentionally
@@ -202,6 +202,7 @@ The Python seeder maps them to the internal keys required by the Superset API.
 | `Line Chart`                | `echarts_timeseries_line`   | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
 | `Pie Chart`                 | `pie`                       | `groupby[]`, `metric{}` |
 | `World Map`                 | `world_map`                 | `entity`, `country_fieldtype`, `metric{}` |
+| `Country Map`               | `country_map`               | `entity` (ISO 3166-2 column, e.g. `IN-KL`), `select_country` (e.g. `india`), `metric{}`. Ships GeoJSON, no Mapbox key needed. |
 | `Big Number`                | `big_number_total`          | `metric{}` or `metrics[]` |
 | `Big Number with Trendline` | `big_number`                | `metric{}` or `metrics[]` |
 | `Histogram`                 | `histogram_v2`              | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
@@ -245,9 +246,7 @@ environment and Docker Compose config.
     ├── chart_config.yaml           # dashboard + chart definitions (YAML-only)
     └── pg/
         ├── 01_hh_master.sql        # CSV loader + views for hh_master
-        ├── HH.master.csv           # source household master data
-        ├── india_states.geojson    # India state boundaries for choropleth
-        └── load_geojson.py         # GeoJSON loader script
+        └── HH.master.csv           # source household master data
 ```
 
 ---
@@ -341,52 +340,17 @@ not into the long-running `superset` / `celery-worker` services.
 
 ### India State Choropleth Map
 
-The LCA Dashboard includes a deck.gl Polygon choropleth for state-level exploration.
-To enable it, you must load the India state boundaries into Postgres after the
-analytics DB is initialized.
+The LCA Dashboard's "India State Choropleth" uses Superset's built-in
+`country_map` plugin. It ships an India GeoJSON inside Superset itself,
+renders without Mapbox or any API key, and needs no external boundary
+file or loader script.
 
-**Step 1: Download the GeoJSON (already in repo)**
-```bash
-# The file is already at seed/pg/india_states.geojson
-```
-
-**Step 2: Load boundaries into Postgres** (run once after DB init):
-```bash
-docker compose exec analytics-db python /docker-entrypoint-initdb.d/load_geojson.py
-```
-
-Or from host with Python:
-```bash
-cd seed/pg
-python3 load_geojson.py
-```
-
-**Step 3: Verify the choropleth view**
-- The view `vw_state_choropleth` joins state boundaries with survey metrics
-- Chart: "India State Choropleth" uses deck.gl Polygon visualization
-- Click any state to filter other charts (cross-filter is enabled)
-
-**Note**: The GeoJSON file uses district-level boundaries that are aggregated
-to state level by the loader script. State name matching is case-insensitive.
-
-**Mapbox API Key Alternatives**
-By default, the choropleth renders colored polygons **without base tiles** (no API key needed).
-
-To add a base map, you have two options:
-
-1. **OpenStreetMap via CartoDB** (no API key, edit `chart_config.yaml`):
-   ```yaml
-   mapbox_style: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-   ```
-
-2. **Mapbox** (requires free API key):
-   ```bash
-   # Add to .env
-   MAPBOX_API_KEY=pk.your_token_here
-   ```
-   ```yaml
-   mapbox_style: "mapbox://styles/mapbox/light-v9"
-   ```
+Matching is done on ISO 3166-2 codes (`IN-KL`, `IN-MH`, …). The
+`vw_state_summary` view derives `iso_code` from `State_label` via a
+case-insensitive `CASE` expression covering all 28 states and 8 UTs,
+and the chart's `entity: iso_code` + `select_country: india` wire it
+up. Click any state to filter the rest of the dashboard (cross-filter
+is enabled).
 
 ### Notes for document and non-SQL databases
 

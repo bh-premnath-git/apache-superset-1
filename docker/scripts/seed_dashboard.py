@@ -24,6 +24,7 @@ VISUALIZATION_TYPE_MAP = {
     "Line Chart": "echarts_timeseries_line",
     "Pie Chart": "pie",
     "World Map": "world_map",
+    "Country Map": "country_map",
     "Big Number": "big_number_total",
     "Big Number with Trendline": "big_number",
     "Histogram": "histogram_v2",
@@ -48,6 +49,7 @@ SUPPORTED_VIZ_TYPES = {
     "echarts_timeseries_line",
     "pie",
     "world_map",
+    "country_map",
     "big_number_total",
     "big_number",
     "histogram_v2",
@@ -125,6 +127,9 @@ def build_params(spec: dict) -> dict:
     for key in (
         "entity",
         "country_fieldtype",
+        "select_country",
+        "number_format",
+        "linear_color_scheme",
         "show_bubbles",
         "max_bubble_size",
         "color_by_metric",
@@ -257,6 +262,14 @@ def validate_chart_spec(spec: dict) -> str:
         if missing_world_map:
             raise RuntimeError(
                 f"Chart '{chart_name}' missing world_map keys: {', '.join(missing_world_map)}."
+            )
+
+    if canonical_viz_type == "country_map":
+        missing_country_map = [key for key in ("entity", "select_country", "metric") if key not in spec]
+        if missing_country_map:
+            raise RuntimeError(
+                f"Chart '{chart_name}' missing country_map keys: {', '.join(missing_country_map)}. "
+                f"Provide 'entity' (ISO 3166-2 column), 'select_country' (e.g. 'india'), and 'metric'."
             )
 
     if canonical_viz_type in {"big_number_total", "big_number"}:
