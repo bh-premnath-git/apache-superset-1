@@ -5,3 +5,13 @@ databases:
     allow_run_async: true
     tables:
       - table_name: hh_master
+      - table_name: vw_state_summary
+      - table_name: vw_food_spend_long
+      - table_name: vw_asset_possession_long
+      - table_name: vw_income_source_flow
+      - table_name: vw_food_spend_heatmap
+      - table_name: vw_asset_ownership_heatmap
+      - table_name: vw_district_summary
+      - table_name: vw_geo_hierarchy
+      - table_name: vw_welfare_summary
+      - table_name: vw_digital_adoption

@@ -120,6 +120,8 @@ def build_params(spec: dict) -> dict:
         params["metric"] = simple_metric(spec["metric"]["column"], spec["metric"]["aggregate"])
     if "groupby" in spec:
         params["groupby"] = spec["groupby"]
+    if "emit_filter" in spec:
+        params["emit_filter"] = spec["emit_filter"]
     for key in (
         "entity",
         "country_fieldtype",
@@ -165,6 +167,43 @@ def build_params(spec: dict) -> dict:
             params[key] = spec[key]
     params["row_limit"] = spec.get("row_limit", 10000)
     return params
+
+
+def build_native_filter_configuration(charts: list[dict], filter_specs: list[dict]) -> list[dict]:
+    all_chart_ids = [chart["slice"].id for chart in charts]
+    native_filters: list[dict] = []
+
+    for i, spec in enumerate(filter_specs, start=1):
+        target_tables = set(spec.get("targets", []))
+        matching_charts = [chart for chart in charts if not target_tables or chart["table"] in target_tables]
+        targets = [
+            {"datasetId": chart["slice"].datasource_id, "column": {"name": spec["column"]}}
+            for chart in matching_charts
+        ]
+        charts_in_scope = [chart["slice"].id for chart in matching_charts] or all_chart_ids
+        native_filters.append(
+            {
+                "id": spec.get("id", f"NATIVE_FILTER-{i}"),
+                "controlValues": {
+                    "enableEmptyFilter": False,
+                    "defaultToFirstItem": False,
+                    "multiSelect": spec.get("multi_select", True),
+                    "inverseSelection": False,
+                    "searchAllOptions": True,
+                },
+                "name": spec.get("name", spec["column"]),
+                "filterType": spec.get("filter_type", "filter_select"),
+                "targets": targets,
+                "defaultDataMask": spec.get("default_data_mask", {"extraFormData": {}, "filterState": {}}),
+                "cascadeParentIds": spec.get("cascade_parent_ids", []),
+                "scope": {"rootPath": ["ROOT_ID"], "excluded": spec.get("excluded_charts", [])},
+                "chartsInScope": charts_in_scope,
+                "tabsInScope": [],
+                "adhoc_filters": spec.get("adhoc_filters", []),
+            }
+        )
+
+    return native_filters
 
 
 def resolve_viz_type(spec: dict) -> str:
@@ -334,15 +373,23 @@ def build_position_json(charts: list[Slice]) -> str:
     return json.dumps(layout)
 
 
-def upsert_dashboard(title: str, slug: str, charts: list[Slice]) -> None:
+def upsert_dashboard(title: str, slug: str, charts: list[Slice], native_filters: list[dict] | None = None) -> None:
     from superset.models.dashboard import Dashboard
     from superset.extensions import db
 
     position = build_position_json(charts)
+    json_metadata = json.dumps(
+        {
+            "timed_refresh_immune_slices": [],
+            "native_filter_configuration": native_filters or [],
+            "cross_filters_enabled": True,
+        }
+    )
     dashboard = db.session.query(Dashboard).filter(Dashboard.dashboard_title == title).one_or_none()
     if dashboard:
         dashboard.slices = charts
         dashboard.position_json = position
+        dashboard.json_metadata = json_metadata
         dashboard.published = True
         print(f"[seed-dashboard] Updated dashboard: {title}")
         return
@@ -351,7 +398,7 @@ def upsert_dashboard(title: str, slug: str, charts: list[Slice]) -> None:
         dashboard_title=title,
         slug=slug,
         position_json=position,
-        json_metadata=json.dumps({"timed_refresh_immune_slices": []}),
+        json_metadata=json_metadata,
         published=True,
     )
     dashboard.slices = charts
@@ -383,9 +430,10 @@ def main() -> None:
                     ensure_columns(table, required)
                 params = build_params(chart_spec)
                 chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
-                charts.append(chart)
+                charts.append({"slice": chart, "table": chart_spec["table"]})
 
-            upsert_dashboard(title, slug, charts)
+            native_filters = build_native_filter_configuration(charts, dashboard_spec.get("native_filters", []))
+            upsert_dashboard(title, slug, [chart["slice"] for chart in charts], native_filters)
             db.session.commit()
             print(f"[seed-dashboard] Done — '{title}' ({len(charts)} charts).")
 

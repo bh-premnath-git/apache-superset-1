@@ -55,7 +55,54 @@ dashboards:
 
   - title: "LCA Dashboard"
     slug: lca-dashboard
+    native_filters:
+      - name: "State"
+        column: State_label
+        targets: [hh_master]
+      - name: "District"
+        column: District
+        targets: [hh_master]
+      - name: "Sector"
+        column: Sector_label
+        targets: [hh_master]
+      - name: "Social Group"
+        column: Social_Group_of_HH_Head_label
+        targets: [hh_master]
+      - name: "Religion"
+        column: Religion_of_HH_Head_label
+        targets: [hh_master]
+      - name: "Year"
+        column: Year
+        targets: [hh_master]
     charts:
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Total Households Surveyed"
+        visualization_type: Big Number
+        required_columns: [hh_count]
+        metric: {column: hh_count, aggregate: SUM}
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Average Household Size"
+        visualization_type: Big Number
+        required_columns: [avg_hh_size]
+        metric: {column: avg_hh_size, aggregate: AVG}
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Internet Access Rate"
+        visualization_type: Big Number
+        required_columns: [internet_rate]
+        metric: {column: internet_rate, aggregate: AVG}
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Ayushman Coverage Rate"
+        visualization_type: Big Number
+        required_columns: [ayushman_rate]
+        metric: {column: ayushman_rate, aggregate: AVG}
 
       - database: analytics
         table: hh_master
@@ -63,9 +110,23 @@ dashboards:
         visualization_type: Bar Chart
         required_columns: [State_label, HHID]
         x_axis: State_label
+        emit_filter: true
         metrics:
           - {column: HHID, aggregate: COUNT}
         groupby: []
+        row_limit: 50
+
+      - database: analytics
+        table: hh_master
+        name: "Households by District"
+        visualization_type: Bar Chart
+        required_columns: [District, HHID]
+        x_axis: District
+        emit_filter: true
+        metrics:
+          - {column: HHID, aggregate: COUNT}
+        groupby: []
+        row_limit: 75
 
       - database: analytics
         table: hh_master
@@ -81,3 +142,148 @@ dashboards:
         visualization_type: Big Number
         required_columns: [HHID]
         metric: {column: HHID, aggregate: COUNT}
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Religion"
+        visualization_type: Pie Chart
+        required_columns: [Religion_of_HH_Head_label, HHID]
+        groupby: [Religion_of_HH_Head_label]
+        metric: {column: HHID, aggregate: COUNT}
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Social Group"
+        visualization_type: Bar Chart
+        required_columns: [Social_Group_of_HH_Head_label, HHID]
+        x_axis: Social_Group_of_HH_Head_label
+        emit_filter: true
+        metrics:
+          - {column: HHID, aggregate: COUNT}
+        groupby: []
+
+      - database: analytics
+        table: hh_master
+        name: "Ration Card Coverage"
+        visualization_type: Pie Chart
+        required_columns: [Ration_Card_Type_label, HHID]
+        groupby: [Ration_Card_Type_label]
+        metric: {column: HHID, aggregate: COUNT}
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Internet Access Rate by State"
+        visualization_type: Bar Chart
+        required_columns: [state, internet_rate]
+        x_axis: state
+        metrics:
+          - {column: internet_rate, aggregate: AVG}
+        groupby: []
+        row_limit: 50
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Average Education Years by State"
+        visualization_type: Bar Chart
+        required_columns: [state, avg_edu_years]
+        x_axis: state
+        metrics:
+          - {column: avg_edu_years, aggregate: AVG}
+        groupby: []
+        row_limit: 50
+
+      - database: analytics
+        table: vw_food_spend_long
+        name: "Average Food Spend by Category"
+        visualization_type: Bar Chart
+        required_columns: [category, spend]
+        x_axis: category
+        metrics:
+          - {column: spend, aggregate: AVG}
+        groupby: []
+
+      - database: analytics
+        table: vw_food_spend_heatmap
+        name: "Food Spend Heatmap"
+        visualization_type: Heatmap
+        required_columns: [state, category, avg_spend]
+        x_axis: state
+        groupby: [category]
+        metric: {column: avg_spend, aggregate: AVG}
+        row_limit: 1000
+
+      - database: analytics
+        table: vw_asset_possession_long
+        name: "Asset Ownership by Type"
+        visualization_type: Bar Chart
+        required_columns: [asset, owned]
+        x_axis: asset
+        metrics:
+          - {column: owned, aggregate: AVG}
+        groupby: []
+
+      - database: analytics
+        table: vw_asset_ownership_heatmap
+        name: "Asset Ownership Heatmap"
+        visualization_type: Heatmap
+        required_columns: [state, asset, ownership_rate]
+        x_axis: state
+        groupby: [asset]
+        metric: {column: ownership_rate, aggregate: AVG}
+        row_limit: 1000
+
+      - database: analytics
+        table: vw_income_source_flow
+        name: "Income Source to Sector Flow"
+        visualization_type: Sankey
+        required_columns: [source, target, hh_count]
+        source: source
+        target: target
+        metric: {column: hh_count, aggregate: SUM}
+
+      - database: analytics
+        table: vw_district_summary
+        name: "Households by District (Summary)"
+        visualization_type: Bar Chart
+        required_columns: [district, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: []
+        row_limit: 75
+
+      - database: analytics
+        table: vw_welfare_summary
+        name: "Welfare Coverage by State"
+        visualization_type: Bar Chart
+        required_columns: [state, ayushman_rate, lpg_subsidy_rate, ration_rate]
+        x_axis: state
+        metrics:
+          - {column: ayushman_rate, aggregate: AVG}
+          - {column: lpg_subsidy_rate, aggregate: AVG}
+          - {column: ration_rate, aggregate: AVG}
+        groupby: []
+        row_limit: 50
+
+      - database: analytics
+        table: vw_digital_adoption
+        name: "Digital Adoption by Sector"
+        visualization_type: Bar Chart
+        required_columns: [sector, internet_rate, online_grocery_rate]
+        x_axis: sector
+        metrics:
+          - {column: internet_rate, aggregate: AVG}
+          - {column: online_grocery_rate, aggregate: AVG}
+        groupby: []
+
+      - database: analytics
+        table: vw_digital_adoption
+        name: "Online Services Adoption"
+        visualization_type: Bar Chart
+        required_columns: [state, online_medicine_rate, online_education_rate]
+        x_axis: state
+        metrics:
+          - {column: online_medicine_rate, aggregate: AVG}
+          - {column: online_education_rate, aggregate: AVG}
+        groupby: []
+        row_limit: 50

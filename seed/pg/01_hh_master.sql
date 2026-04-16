@@ -573,3 +573,178 @@ CREATE INDEX IF NOT EXISTS idx_hh_master_hhid ON hh_master ("HHID");
 CREATE INDEX IF NOT EXISTS idx_hh_master_state_label ON hh_master ("State_label");
 CREATE INDEX IF NOT EXISTS idx_hh_master_sector_label ON hh_master ("Sector_label");
 CREATE INDEX IF NOT EXISTS idx_hh_master_questionnaire_no ON hh_master ("Questionnaire_No");
+
+CREATE OR REPLACE VIEW vw_state_summary AS
+SELECT
+    "State_label" AS state,
+    COUNT("HHID") AS hh_count,
+    AVG(NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_hh_size,
+    AVG(NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_edu_years,
+    AVG(NULLIF(regexp_replace("any_internet", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS internet_rate,
+    AVG(NULLIF(regexp_replace("Ayushman_beneficiary", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS ayushman_rate,
+    AVG(NULLIF(regexp_replace("LPG_subsidy_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS lpg_subsidy_rate,
+    AVG(NULLIF(regexp_replace("Ration_Any_Item_Last_30_Days", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS ration_coverage,
+    AVG(NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_cereal_spend,
+    AVG(NULLIF(regexp_replace("electricity_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS avg_electricity_spend,
+    AVG(NULLIF(regexp_replace("Possess_Mobile", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS mobile_ownership_rate,
+    AVG(NULLIF(regexp_replace("Possess_Car", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS car_ownership_rate,
+    AVG(NULLIF(regexp_replace("Online_Groceries", '[^0-9.\-]+', '', 'g'), '')::NUMERIC) AS online_grocery_rate
+FROM hh_master
+GROUP BY "State_label";
+
+CREATE OR REPLACE VIEW vw_food_spend_long AS
+SELECT "HHID" AS hhid, "State_label" AS state, "Sector_label" AS sector_label, 'Cereal' AS category,
+       NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS spend
+FROM hh_master
+WHERE NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Dairy',
+       NULLIF(regexp_replace("dairy_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("dairy_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Vegetables',
+       NULLIF(regexp_replace("vegetables_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("vegetables_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Egg/Fish/Meat',
+       NULLIF(regexp_replace("egg_fish_meat_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("egg_fish_meat_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Pulses',
+       NULLIF(regexp_replace("pulses_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("pulses_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Beverages',
+       NULLIF(regexp_replace("beverages_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("beverages_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Fresh Fruits',
+       NULLIF(regexp_replace("fresh fruits_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("fresh fruits_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", 'Dry Fruits',
+       NULLIF(regexp_replace("dry fruits_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("dry fruits_val_total", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL;
+
+CREATE OR REPLACE VIEW vw_asset_possession_long AS
+SELECT "HHID" AS hhid, "State_label" AS state, "Sector_label" AS sector_label, "Social_Group_of_HH_Head_label" AS social_group,
+       'Television' AS asset, NULLIF(regexp_replace("Possess_Television", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS owned
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_Television", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", "Social_Group_of_HH_Head_label",
+       'Mobile', NULLIF(regexp_replace("Possess_Mobile", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_Mobile", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", "Social_Group_of_HH_Head_label",
+       'Refrigerator', NULLIF(regexp_replace("Possess_Refrigerator", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_Refrigerator", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", "Social_Group_of_HH_Head_label",
+       'Car', NULLIF(regexp_replace("Possess_Car", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_Car", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", "Social_Group_of_HH_Head_label",
+       'Washing Machine', NULLIF(regexp_replace("Possess_WashingMachine", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_WashingMachine", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL
+UNION ALL
+SELECT "HHID", "State_label", "Sector_label", "Social_Group_of_HH_Head_label",
+       'Laptop', NULLIF(regexp_replace("Possess_Laptop", '[^0-9.\-]+', '', 'g'), '')::NUMERIC
+FROM hh_master
+WHERE NULLIF(regexp_replace("Possess_Laptop", '[^0-9.\-]+', '', 'g'), '') IS NOT NULL;
+
+CREATE OR REPLACE VIEW vw_income_source_flow AS
+SELECT
+    COALESCE(NULLIF("Max_Income_Activity_label", ''), 'Unknown') AS source,
+    COALESCE(NULLIF("Sector_label", ''), 'Unknown') AS target,
+    COUNT("HHID") AS hh_count
+FROM hh_master
+GROUP BY COALESCE(NULLIF("Max_Income_Activity_label", ''), 'Unknown'), COALESCE(NULLIF("Sector_label", ''), 'Unknown');
+
+-- Pre-aggregated heatmap views (exact, fast, no row limit issues)
+CREATE OR REPLACE VIEW vw_food_spend_heatmap AS
+SELECT
+    state,
+    category,
+    ROUND(AVG(spend)::NUMERIC, 2) AS avg_spend,
+    COUNT(DISTINCT hhid) AS hh_count
+FROM vw_food_spend_long
+GROUP BY state, category;
+
+CREATE OR REPLACE VIEW vw_asset_ownership_heatmap AS
+SELECT
+    state,
+    asset,
+    ROUND(AVG(owned)::NUMERIC, 4) AS ownership_rate,
+    COUNT(DISTINCT hhid) AS hh_count
+FROM vw_asset_possession_long
+GROUP BY state, asset;
+
+-- Geographic hierarchy views
+CREATE OR REPLACE VIEW vw_district_summary AS
+SELECT
+    "State_label" AS state,
+    "District" AS district,
+    COUNT("HHID") AS hh_count,
+    ROUND(AVG(NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_hh_size,
+    ROUND(AVG(NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_edu_years,
+    ROUND(AVG(NULLIF(regexp_replace("any_internet", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Ayushman_beneficiary", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(NULLIF(regexp_replace("LPG_subsidy_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Ration_Any_Item_Last_30_Days", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ration_coverage
+FROM hh_master
+GROUP BY "State_label", "District";
+
+-- State + District combined for drill-down
+CREATE OR REPLACE VIEW vw_geo_hierarchy AS
+SELECT
+    "State_label" AS state,
+    "District" AS district,
+    COUNT("HHID") AS hh_count,
+    "Sector_label" AS sector,
+    "Social_Group_of_HH_Head_label" AS social_group,
+    "Religion_of_HH_Head_label" AS religion,
+    "Year" AS year
+FROM hh_master
+GROUP BY "State_label", "District", "Sector_label", "Social_Group_of_HH_Head_label", "Religion_of_HH_Head_label", "Year";
+
+-- Welfare summary view
+CREATE OR REPLACE VIEW vw_welfare_summary AS
+SELECT
+    "State_label" AS state,
+    COUNT("HHID") AS hh_count,
+    ROUND(AVG(NULLIF(regexp_replace("Ayushman_beneficiary", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(NULLIF(regexp_replace("LPG_subsidy_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Free_electricity", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS free_electricity_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Ration_Any_Item_Last_30_Days", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ration_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Any_member_attended_school", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS school_attendance_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Free_textbooks_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS free_textbooks_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Fee_waiver_received", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS fee_waiver_rate
+FROM hh_master
+GROUP BY "State_label";
+
+-- Digital adoption summary
+CREATE OR REPLACE VIEW vw_digital_adoption AS
+SELECT
+    "State_label" AS state,
+    "Sector_label" AS sector,
+    COUNT("HHID") AS hh_count,
+    ROUND(AVG(NULLIF(regexp_replace("any_internet", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Online_Groceries", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_grocery_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Online_Milk", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_milk_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Online_Vegetables", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_veg_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Online_purchase_medicine", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_medicine_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Online_purchase_education", '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS online_education_rate
+FROM hh_master
+GROUP BY "State_label", "Sector_label";
