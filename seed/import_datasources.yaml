@@ -4,6 +4,4 @@ databases:
     expose_in_sqllab: true
     allow_run_async: true
     tables:
-      # ── Ethereum daily transactions (loaded from CSV by seed/pg) ──────────
-      - table_name: eth_txn
-
+      - table_name: hh_master

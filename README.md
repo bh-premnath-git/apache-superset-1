@@ -7,7 +7,7 @@ auto-imported datasets, and a config-driven dashboard seeder.
 - **PostgreSQL 16** — Superset metadata DB
 - **Redis 7** — cache + Celery broker/backend
 - **Celery worker + beat** — async queries and scheduled alerts/reports
-- **PostgreSQL 16** — sample `analytics` database with `eth_txn` seeded on first start
+- **PostgreSQL 16** — sample `analytics` database with `hh_master` seeded on first start
 
 ---
 
@@ -40,7 +40,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | `celery-beat`    | superset-celery-beat      | —     | Scheduled alerts/reports       |
 | `metadata-db`    | superset-metadata-db      | —     | Superset internal metadata     |
 | `redis`          | superset-redis            | —     | Cache + Celery broker/backend  |
-| `analytics-db`   | superset-analytics-db     | —     | Seeded ETH transaction dataset |
+| `analytics-db`   | superset-analytics-db     | —     | Seeded household master dataset |
 
 ---
 
@@ -50,22 +50,22 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 
 1. **DB migrations** (`superset db upgrade`)
 2. **Admin user** creation
-3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.eth_txn` in the Superset UI
+3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.hh_master` in the Superset UI
 4. **Dashboard seeding** from `seed/chart_config.yaml` — creates the Starter Seed Dashboard
 
 ### Seeded databases, tables and views
 
 | Database       | Engine        | Object                              | Kind  | Rows    |
 |----------------|---------------|-------------------------------------|-------|---------|
-| `analytics`    | Postgres      | `eth_txn`                           | table | ~3 900  |
+| `analytics`    | Postgres      | `hh_master`                         | table | ~261 953 |
 
 ### Starter Seed Dashboard (3 charts)
 
 | Chart                             | Type              | Source                                |
 |-----------------------------------|-------------------|---------------------------------------|
-| ETH Transaction Value Over Time   | Timeseries line   | analytics.eth_txn                     |
-| ETH Transaction Volume            | Big number        | analytics.eth_txn                     |
-| ETH Daily Transactions            | Timeseries bar    | analytics.eth_txn                     |
+| Households by State               | Bar chart         | analytics.hh_master                   |
+| Households by Sector              | Pie chart         | analytics.hh_master                   |
+| Total Households                  | Big number        | analytics.hh_master                   |
 
 In the current image build, `chart_config.yaml` can use the verified
 `visualization_type` labels wired into the Python seeder, including
@@ -84,17 +84,17 @@ registered bar-capable plugin available in the running Superset build.
 
 ## Current seed pipeline
 
-This repo now uses a single Postgres-backed seed flow for Ethereum transaction
-data:
+This repo now uses a single Postgres-backed seed flow for the household master
+dataset:
 
 ```
-seed/pg/eth_txn.csv
+seed/pg/HH.master.csv
         │
         ▼
-seed/pg/01_eth_txn.sql
-        │  COPY + TO_DATE
+seed/pg/01_hh_master.sql
+        │  COPY
         ▼
-analytics.eth_txn
+analytics.hh_master
         │
         ▼
 seed/import_datasources.yaml
@@ -106,9 +106,9 @@ seed/chart_config.yaml
 docker/scripts/seed_dashboard.py
 ```
 
-The SQL seed script stages the CSV, parses the original `Date(UTC)` text into a
-real `DATE` column named `txn_date`, and loads the result into
-`analytics.eth_txn` for Superset to query efficiently.
+The SQL seed script loads the CSV into `analytics.hh_master` while preserving
+the source column names from the extract, including mixed case and headers with
+spaces, so the imported table mirrors the raw dataset faithfully.
 
 ---
 
@@ -244,8 +244,8 @@ environment and Docker Compose config.
     ├── import_datasources.yaml     # DB connections + table registrations
     ├── chart_config.yaml           # dashboard + chart definitions (YAML-only)
     └── pg/
-        ├── 01_eth_txn.sql          # CSV loader into analytics.eth_txn
-        └── eth_txn.csv             # source Ethereum daily transaction data
+        ├── 01_hh_master.sql        # CSV loader into analytics.hh_master
+        └── HH.master.csv           # source household master data
 ```
 
 ---
@@ -324,8 +324,8 @@ placed there is visible to server-side `COPY ... FROM`.
 **To add a new CSV dataset:**
 1. Drop the CSV into `seed/pg/` (alongside the SQL loaders).
 2. Add a numbered SQL file in `seed/pg/` that `CREATE TABLE`s the target and
-   `COPY`s the CSV into a staging table (see `seed/pg/01_eth_txn.sql` for a
-   worked example that also parses an M/D/YYYY date column).
+   `COPY`s the CSV into a Postgres table (see `seed/pg/01_hh_master.sql` for a
+   worked example that preserves the source headers exactly as delivered).
 3. Register the new table in `seed/import_datasources.yaml` under the
    `analytics` database.
 4. Add chart entries in `seed/chart_config.yaml` pointing at the new table.

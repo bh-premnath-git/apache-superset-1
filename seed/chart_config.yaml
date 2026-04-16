@@ -6,7 +6,6 @@
 #      For CSV-sourced data: place the CSV alongside a SQL loader in seed/pg/
 #      (the directory is mounted into the analytics Postgres container at
 #      /docker-entrypoint-initdb.d, so `COPY … FROM` works at init time).
-#      See seed/pg/01_eth_txn.sql for a worked example.
 #   2. Register the table or view in seed/import_datasources.yaml
 #   3. Add chart entries below — no code changes needed.
 #
@@ -58,31 +57,27 @@ dashboards:
     slug: starter-seed-dashboard
     charts:
 
-      # ── Ethereum Transactions (loaded from CSV into analytics.eth_txn) ───────
       - database: analytics
-        table: eth_txn
-        name: "ETH Transaction Value Over Time (Line)"
-        visualization_type: Line Chart
-        required_columns: [txn_date, value]
-        x_axis: txn_date
-        time_grain: P1D
-        metrics:
-          - {column: value, aggregate: SUM}
-        groupby: []
-
-      - database: analytics
-        table: eth_txn
-        name: "ETH Transaction Volume (Big Number)"
-        visualization_type: Big Number
-        required_columns: [value]
-        metric: {column: value, aggregate: SUM}
-
-      - database: analytics
-        table: eth_txn
-        name: "ETH Daily Transactions (Bar)"
+        table: hh_master
+        name: "Households by State"
         visualization_type: Bar Chart
-        required_columns: [txn_date, value]
-        x_axis: txn_date
+        required_columns: [State_label, HHID]
+        x_axis: State_label
         metrics:
-          - {column: value, aggregate: SUM}
+          - {column: HHID, aggregate: COUNT}
         groupby: []
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Sector"
+        visualization_type: Pie Chart
+        required_columns: [Sector_label, HHID]
+        groupby: [Sector_label]
+        metric: {column: HHID, aggregate: COUNT}
+
+      - database: analytics
+        table: hh_master
+        name: "Total Households"
+        visualization_type: Big Number
+        required_columns: [HHID]
+        metric: {column: HHID, aggregate: COUNT}
