@@ -33,10 +33,5 @@ databases:
       - table_name: household_geo_points
       - table_name: household_path_summary
 
-  # ── CSV Files via shillelagh ────────────────────────────────────────────
-  - database_name: csv_datasets
-    sqlalchemy_uri: shillelagh://
-    expose_in_sqllab: true
-    allow_run_async: false
-    tables:
-      - table_name: "/app/seed/eth_txn.csv"
+      # ── Ethereum daily transactions (loaded from CSV by seed/pg) ──────────
+      - table_name: eth_txn
