@@ -18,3 +18,8 @@ databases:
       - table_name: vw_digital_adoption
       - table_name: vw_digital_kpis_long
       - table_name: vw_state_sector_summary
+      - table_name: vw_social_group_summary
+      - table_name: vw_social_group_kpis_long
+      - table_name: vw_food_spend_state
+      - table_name: vw_asset_state
+      - table_name: vw_expenditure_long

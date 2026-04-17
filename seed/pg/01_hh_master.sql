@@ -889,3 +889,89 @@ GROUP BY "State_label", "Sector_label";
 -- column via state_to_iso(). See seed/chart_config.yaml for the wiring and
 -- docker/scripts/seed_dashboard.py for the chart_configuration that scopes
 -- the cross-filter to those receivers only.
+
+-- ── Social group welfare & digital summary ───────────────────────────────────
+-- Aggregates welfare scheme coverage, internet access, education, and asset
+-- ownership by social group of the household head. Used for equity comparison.
+CREATE OR REPLACE VIEW vw_social_group_summary AS
+SELECT
+    COALESCE(NULLIF("Social_Group_of_HH_Head_label", ''), 'Unknown') AS social_group,
+    COUNT("HHID") AS hh_count,
+    ROUND(AVG(NULLIF(regexp_replace("Ayushman_beneficiary",        '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(NULLIF(regexp_replace("LPG_subsidy_received",        '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Ration_Any_Item_Last_30_Days",'[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS ration_rate,
+    ROUND(AVG(NULLIF(regexp_replace("any_internet",                '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(NULLIF(regexp_replace("mean_years_edu",              '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_edu_years,
+    ROUND(AVG(NULLIF(regexp_replace("Fee_waiver_received",         '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS fee_waiver_rate,
+    ROUND(AVG(NULLIF(regexp_replace("Possess_Mobile",              '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 4) AS mobile_ownership_rate
+FROM hh_master
+GROUP BY "Social_Group_of_HH_Head_label";
+
+-- Long-form KPIs by social group for grouped bar comparison chart.
+-- kpi_name is the dimension; rate is the measure.
+CREATE OR REPLACE VIEW vw_social_group_kpis_long AS
+SELECT social_group, 'Ayushman'        AS kpi_name, ayushman_rate         AS rate FROM vw_social_group_summary
+UNION ALL
+SELECT social_group, 'LPG Subsidy',               lpg_subsidy_rate              FROM vw_social_group_summary
+UNION ALL
+SELECT social_group, 'Ration Coverage',           ration_rate                   FROM vw_social_group_summary
+UNION ALL
+SELECT social_group, 'Internet Access',           internet_rate                 FROM vw_social_group_summary
+UNION ALL
+SELECT social_group, 'Fee Waiver',                fee_waiver_rate               FROM vw_social_group_summary
+UNION ALL
+SELECT social_group, 'Mobile Ownership',          mobile_ownership_rate         FROM vw_social_group_summary;
+
+-- ── State food spend with iso_code (cross-filter drill-down receiver) ─────────
+-- Pre-aggregated food category spend by state, exposing iso_code so the
+-- India choropleth cross-filter can narrow it to the selected state.
+CREATE OR REPLACE VIEW vw_food_spend_state AS
+SELECT
+    state,
+    state_to_iso(state)              AS iso_code,
+    category,
+    ROUND(AVG(spend)::NUMERIC, 2)    AS avg_spend,
+    COUNT(DISTINCT hhid)             AS hh_count
+FROM vw_food_spend_long
+GROUP BY state, category;
+
+-- ── State asset ownership with iso_code (cross-filter drill-down receiver) ────
+-- Pre-aggregated asset ownership rate by state, exposing iso_code so the
+-- choropleth cross-filter narrows it to the selected state.
+CREATE OR REPLACE VIEW vw_asset_state AS
+SELECT
+    state,
+    state_to_iso(state)                 AS iso_code,
+    asset,
+    ROUND(AVG(owned)::NUMERIC, 4)       AS ownership_rate,
+    COUNT(DISTINCT hhid)                AS hh_count
+FROM vw_asset_possession_long
+GROUP BY state, asset;
+
+-- ── Non-food expenditure categories in long form ──────────────────────────────
+-- Six major non-food spending categories per state, unpivoted to long form
+-- so a single bar chart can compare categories nationally.
+CREATE OR REPLACE VIEW vw_expenditure_long AS
+WITH base AS (
+    SELECT
+        "State_label" AS state,
+        ROUND(AVG(NULLIF(regexp_replace("edu expense_val_total",              '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_edu_expense,
+        ROUND(AVG(NULLIF(regexp_replace("medical nonhospitalized_val_total",  '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_medical_expense,
+        ROUND(AVG(NULLIF(regexp_replace("conveyance_val_total",               '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_conveyance,
+        ROUND(AVG(NULLIF(regexp_replace("entertainment_val_total",            '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_entertainment,
+        ROUND(AVG(NULLIF(regexp_replace("toilet articles_val_total",          '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_toilet_articles,
+        ROUND(AVG(NULLIF(regexp_replace("clothing_val_total",                 '[^0-9.\-]+', '', 'g'), '')::NUMERIC)::NUMERIC, 2) AS avg_clothing
+    FROM hh_master
+    GROUP BY "State_label"
+)
+SELECT state, 'Education'       AS category, avg_edu_expense       AS avg_spend FROM base
+UNION ALL
+SELECT state, 'Medical',                     avg_medical_expense                FROM base
+UNION ALL
+SELECT state, 'Conveyance',                  avg_conveyance                     FROM base
+UNION ALL
+SELECT state, 'Entertainment',               avg_entertainment                  FROM base
+UNION ALL
+SELECT state, 'Toilet Articles',             avg_toilet_articles                FROM base
+UNION ALL
+SELECT state, 'Clothing',                    avg_clothing                       FROM base;
