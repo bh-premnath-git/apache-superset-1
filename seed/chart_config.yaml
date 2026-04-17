@@ -107,7 +107,7 @@ dashboards:
         targets: [hh_master]
     charts:
 
-      # ── Row 1: National KPI strip ─────────────────────────────────────────
+      # ── Row 1: National KPI strip — 8 at-a-glance metrics ─────────────────
       - database: analytics
         table: vw_state_summary
         name: "Total Households"
@@ -145,12 +145,47 @@ dashboards:
         width: 3
         height: 16
 
-      # ── Row 2: India choropleth ───────────────────────────────────────────
-      # Click any state → emits a cross-filter on `iso_code` that drives the
-      # entire "Selected State Detail" block below. The cross-filter scope is
-      # restricted (in seed_dashboard.py) to charts marked
-      # cross_filter_target: "India State Choropleth", so the country-wide
-      # KPIs and bars stay at country totals while the user explores a state.
+      - database: analytics
+        table: vw_state_summary
+        name: "LPG Subsidy Rate"
+        visualization_type: Big Number
+        required_columns: [lpg_subsidy_rate]
+        metric: {column: lpg_subsidy_rate, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Ration Card Coverage"
+        visualization_type: Big Number
+        required_columns: [ration_coverage]
+        metric: {column: ration_coverage, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Avg Education Years"
+        visualization_type: Big Number
+        required_columns: [avg_edu_years]
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_state_summary
+        name: "Mobile Ownership Rate"
+        visualization_type: Big Number
+        required_columns: [mobile_ownership_rate]
+        metric: {column: mobile_ownership_rate, aggregate: AVG}
+        width: 3
+        height: 16
+
+      # ── Row 2: Geographic overview — choropleth + state bar side-by-side ──
+      # Click any state on the choropleth → emits a cross-filter on `iso_code`
+      # that drives all "Selected State Detail" charts below. The scope is
+      # restricted to charts marked cross_filter_target: "India State Choropleth"
+      # so the national KPIs and section bars stay at country totals.
       - database: analytics
         table: vw_state_summary
         name: "India State Choropleth"
@@ -163,10 +198,23 @@ dashboards:
         number_format: SMART_NUMBER
         cross_filter_source: true
         row_limit: 50
-        width: 12
+        width: 8
         height: 56
 
-      # ── Row 3+: Selected State Detail (drill-down receivers) ─────────────
+      - database: analytics
+        table: vw_state_summary
+        name: "Households by State"
+        visualization_type: Bar Chart
+        required_columns: [state, hh_count]
+        x_axis: state
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: []
+        row_limit: 50
+        width: 4
+        height: 56
+
+      # ── State Detail drill-down (6 receivers, all filtered by map click) ──
       - header: "Selected State Detail — click any state on the map above to drill in"
 
       - database: analytics
@@ -223,19 +271,98 @@ dashboards:
         width: 8
         height: 44
 
-      # ── Row N: National comparison views ─────────────────────────────────
-      - header: "National Comparison"
+      - database: analytics
+        table: vw_food_spend_state
+        name: "Selected State Food Spend"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, category, avg_spend]
+        x_axis: category
+        metrics:
+          - {column: avg_spend, aggregate: AVG}
+        groupby: []
+        cross_filter_target: "India State Choropleth"
+        row_limit: 50
+        width: 6
+        height: 44
 
       - database: analytics
-        table: vw_state_summary
-        name: "Households by State"
+        table: vw_asset_state
+        name: "Selected State Asset Ownership"
         visualization_type: Bar Chart
-        required_columns: [iso_code, state, hh_count]
-        x_axis: state
+        required_columns: [iso_code, asset, ownership_rate]
+        x_axis: asset
         metrics:
-          - {column: hh_count, aggregate: SUM}
+          - {column: ownership_rate, aggregate: AVG}
         groupby: []
+        cross_filter_target: "India State Choropleth"
         row_limit: 50
+        width: 6
+        height: 44
+
+      # ── Demographics & Household Composition ──────────────────────────────
+      - header: "Demographics & Household Composition"
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Sector"
+        visualization_type: Pie Chart
+        required_columns: [Sector_label, HHID]
+        groupby: [Sector_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 36
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Religion"
+        visualization_type: Pie Chart
+        required_columns: [Religion_of_HH_Head_label, HHID]
+        groupby: [Religion_of_HH_Head_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 36
+
+      - database: analytics
+        table: hh_master
+        name: "Households by Social Group"
+        visualization_type: Bar Chart
+        required_columns: [Social_Group_of_HH_Head_label, HHID]
+        x_axis: Social_Group_of_HH_Head_label
+        metrics:
+          - {column: HHID, aggregate: COUNT}
+        groupby: []
+        width: 4
+        height: 36
+
+      - database: analytics
+        table: hh_master
+        name: "Cooking Energy Source"
+        visualization_type: Pie Chart
+        required_columns: [Energy_Source_Cooking_label, HHID]
+        groupby: [Energy_Source_Cooking_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 36
+
+      - database: analytics
+        table: hh_master
+        name: "Lighting Energy Source"
+        visualization_type: Pie Chart
+        required_columns: [Energy_Source_Lighting_label, HHID]
+        groupby: [Energy_Source_Lighting_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 36
+
+      - database: analytics
+        table: hh_master
+        name: "Dwelling Type Distribution"
+        visualization_type: Pie Chart
+        required_columns: [Type_of_Dwelling_Unit_label, HHID]
+        groupby: [Type_of_Dwelling_Unit_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 36
 
       - database: analytics
         table: hh_master
@@ -247,58 +374,11 @@ dashboards:
           - {column: HHID, aggregate: COUNT}
         groupby: []
         row_limit: 75
+        width: 12
+        height: 44
 
-      - database: analytics
-        table: hh_master
-        name: "Households by Sector"
-        visualization_type: Pie Chart
-        required_columns: [Sector_label, HHID]
-        groupby: [Sector_label]
-        metric: {column: HHID, aggregate: COUNT}
-
-      - database: analytics
-        table: hh_master
-        name: "Total Households"
-        visualization_type: Big Number
-        required_columns: [HHID]
-        metric: {column: HHID, aggregate: COUNT}
-
-      - database: analytics
-        table: hh_master
-        name: "Households by Religion"
-        visualization_type: Pie Chart
-        required_columns: [Religion_of_HH_Head_label, HHID]
-        groupby: [Religion_of_HH_Head_label]
-        metric: {column: HHID, aggregate: COUNT}
-
-      - database: analytics
-        table: hh_master
-        name: "Households by Social Group"
-        visualization_type: Bar Chart
-        required_columns: [Social_Group_of_HH_Head_label, HHID]
-        x_axis: Social_Group_of_HH_Head_label
-        metrics:
-          - {column: HHID, aggregate: COUNT}
-        groupby: []
-
-      - database: analytics
-        table: hh_master
-        name: "Ration Card Coverage"
-        visualization_type: Pie Chart
-        required_columns: [Ration_Card_Type_label, HHID]
-        groupby: [Ration_Card_Type_label]
-        metric: {column: HHID, aggregate: COUNT}
-
-      - database: analytics
-        table: vw_state_summary
-        name: "Internet Access Rate by State"
-        visualization_type: Bar Chart
-        required_columns: [state, internet_rate]
-        x_axis: state
-        metrics:
-          - {column: internet_rate, aggregate: AVG}
-        groupby: []
-        row_limit: 50
+      # ── Education & Digital Access ─────────────────────────────────────────
+      - header: "Education & Digital Access"
 
       - database: analytics
         table: vw_state_summary
@@ -310,66 +390,51 @@ dashboards:
           - {column: avg_edu_years, aggregate: AVG}
         groupby: []
         row_limit: 50
+        width: 6
+        height: 44
 
       - database: analytics
-        table: vw_food_spend_long
-        name: "Average Food Spend by Category"
+        table: vw_state_summary
+        name: "Internet Access Rate by State"
         visualization_type: Bar Chart
-        required_columns: [category, spend]
-        x_axis: category
-        metrics:
-          - {column: spend, aggregate: AVG}
-        groupby: []
-
-      - database: analytics
-        table: vw_food_spend_heatmap
-        name: "Food Spend Heatmap"
-        visualization_type: Heatmap
-        required_columns: [state, category, avg_spend]
+        required_columns: [state, internet_rate]
         x_axis: state
-        groupby: [category]
-        metric: {column: avg_spend, aggregate: AVG}
-        row_limit: 1000
-
-      - database: analytics
-        table: vw_asset_possession_long
-        name: "Asset Ownership by Type"
-        visualization_type: Bar Chart
-        required_columns: [asset, owned]
-        x_axis: asset
         metrics:
-          - {column: owned, aggregate: AVG}
+          - {column: internet_rate, aggregate: AVG}
         groupby: []
+        row_limit: 50
+        width: 6
+        height: 44
 
       - database: analytics
-        table: vw_asset_ownership_heatmap
-        name: "Asset Ownership Heatmap"
-        visualization_type: Heatmap
-        required_columns: [state, asset, ownership_rate]
+        table: vw_digital_adoption
+        name: "Digital Adoption by Sector"
+        visualization_type: Bar Chart
+        required_columns: [sector, internet_rate, online_grocery_rate]
+        x_axis: sector
+        metrics:
+          - {column: internet_rate, aggregate: AVG}
+          - {column: online_grocery_rate, aggregate: AVG}
+        groupby: []
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_digital_adoption
+        name: "Online Services Adoption"
+        visualization_type: Bar Chart
+        required_columns: [state, online_medicine_rate, online_education_rate]
         x_axis: state
-        groupby: [asset]
-        metric: {column: ownership_rate, aggregate: AVG}
-        row_limit: 1000
-
-      - database: analytics
-        table: vw_income_source_flow
-        name: "Income Source to Sector Flow"
-        visualization_type: Sankey
-        required_columns: [source, target, hh_count]
-        source: source
-        target: target
-        metric: {column: hh_count, aggregate: SUM}
-
-      - database: analytics
-        table: vw_district_summary
-        name: "Households by District (Summary)"
-        visualization_type: Bar Chart
-        required_columns: [district, hh_count]
-        x_axis: district
         metrics:
-          - {column: hh_count, aggregate: SUM}
+          - {column: online_medicine_rate, aggregate: AVG}
+          - {column: online_education_rate, aggregate: AVG}
         groupby: []
-        row_limit: 75
+        row_limit: 50
+        width: 6
+        height: 44
+
+      # ── Welfare & Social Protection ────────────────────────────────────────
+      - header: "Welfare & Social Protection"
 
       - database: analytics
         table: vw_welfare_summary
@@ -383,26 +448,114 @@ dashboards:
           - {column: ration_rate, aggregate: AVG}
         groupby: []
         row_limit: 50
+        width: 8
+        height: 44
 
       - database: analytics
-        table: vw_digital_adoption
-        name: "Digital Adoption by Sector"
+        table: hh_master
+        name: "Ration Card Coverage"
+        visualization_type: Pie Chart
+        required_columns: [Ration_Card_Type_label, HHID]
+        groupby: [Ration_Card_Type_label]
+        metric: {column: HHID, aggregate: COUNT}
+        width: 4
+        height: 44
+
+      # Grouped bar: x=kpi_name (6 metrics), series=social_group (4 groups)
+      # Shows whether welfare reach is equitable across social groups.
+      - database: analytics
+        table: vw_social_group_kpis_long
+        name: "Welfare Reach by Social Group"
         visualization_type: Bar Chart
-        required_columns: [sector, internet_rate, online_grocery_rate]
-        x_axis: sector
+        required_columns: [social_group, kpi_name, rate]
+        x_axis: kpi_name
         metrics:
-          - {column: internet_rate, aggregate: AVG}
-          - {column: online_grocery_rate, aggregate: AVG}
+          - {column: rate, aggregate: AVG}
+        groupby: [social_group]
+        row_limit: 200
+        width: 12
+        height: 44
+
+      # ── Food Security & Nutrition ──────────────────────────────────────────
+      - header: "Food Security & Nutrition"
+
+      - database: analytics
+        table: vw_food_spend_long
+        name: "Average Food Spend by Category"
+        visualization_type: Bar Chart
+        required_columns: [category, spend]
+        x_axis: category
+        metrics:
+          - {column: spend, aggregate: AVG}
         groupby: []
+        width: 6
+        height: 44
 
       - database: analytics
-        table: vw_digital_adoption
-        name: "Online Services Adoption"
-        visualization_type: Bar Chart
-        required_columns: [state, online_medicine_rate, online_education_rate]
+        table: vw_food_spend_heatmap
+        name: "Food Spend Heatmap"
+        visualization_type: Heatmap
+        required_columns: [state, category, avg_spend]
         x_axis: state
+        groupby: [category]
+        metric: {column: avg_spend, aggregate: AVG}
+        row_limit: 1000
+        width: 6
+        height: 44
+
+      # ── Asset Ownership & Living Standards ────────────────────────────────
+      - header: "Asset Ownership & Living Standards"
+
+      - database: analytics
+        table: vw_asset_possession_long
+        name: "Asset Ownership by Type"
+        visualization_type: Bar Chart
+        required_columns: [asset, owned]
+        x_axis: asset
         metrics:
-          - {column: online_medicine_rate, aggregate: AVG}
-          - {column: online_education_rate, aggregate: AVG}
+          - {column: owned, aggregate: AVG}
+        groupby: []
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_asset_ownership_heatmap
+        name: "Asset Ownership Heatmap"
+        visualization_type: Heatmap
+        required_columns: [state, asset, ownership_rate]
+        x_axis: state
+        groupby: [asset]
+        metric: {column: ownership_rate, aggregate: AVG}
+        row_limit: 1000
+        width: 6
+        height: 44
+
+      # ── Non-Food Expenditure Patterns ─────────────────────────────────────
+      - header: "Non-Food Expenditure Patterns"
+
+      - database: analytics
+        table: vw_expenditure_long
+        name: "Non-Food Spend by Category"
+        visualization_type: Bar Chart
+        required_columns: [category, avg_spend]
+        x_axis: category
+        metrics:
+          - {column: avg_spend, aggregate: AVG}
         groupby: []
         row_limit: 50
+        width: 12
+        height: 44
+
+      # ── Income & Employment Flows ──────────────────────────────────────────
+      - header: "Income & Employment Flows"
+
+      - database: analytics
+        table: vw_income_source_flow
+        name: "Income Source to Sector Flow"
+        visualization_type: Sankey
+        required_columns: [source, target, hh_count]
+        source: source
+        target: target
+        metric: {column: hh_count, aggregate: SUM}
+        width: 12
+        height: 56
