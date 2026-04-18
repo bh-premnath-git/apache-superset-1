@@ -1331,6 +1331,7 @@ WITH hh_scored AS (
         CASE WHEN COALESCE(NULLIF(TRIM("Online_Groceries"), ''), '0') = '1' THEN 1 ELSE 0 END AS online_grocery,
         NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS cereal_spend,
         NULLIF(regexp_replace("beverages_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS beverages_spend,
+        NULLIF(regexp_replace("n_children_u15", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS n_children_u15,
         -- Scoring logic for segmentation
         (CASE WHEN COALESCE(NULLIF(TRIM("any_internet"), ''), '0') = '1' THEN 2 ELSE 0 END +
          CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1 ELSE 0 END +
@@ -1440,14 +1441,19 @@ SELECT
     ROUND(AVG(rs.cereal_spend)::NUMERIC, 0) AS cereal_spend,
     ROUND(AVG(rs.cereal_spend) / NULLIF(sm.max_cereal_spend, 0) * 100, 1) AS cereal_spend_pct,
     ROUND(AVG(rs.beverages_spend)::NUMERIC, 0) AS beverages_spend,
+    -- MCPE: Monthly Consumption Proxy Expenditure (cereal + beverages as proxy for total food spend)
+    ROUND((AVG(rs.cereal_spend) + COALESCE(AVG(rs.beverages_spend), 0))::NUMERIC, 0) AS mcpe_inr,
     -- Digital Connectivity
     ROUND(AVG(rs.internet_access)::NUMERIC * 100, 1) AS internet_pct,
     ROUND(AVG(rs.mobile_ownership)::NUMERIC * 100, 1) AS mobile_pct,
+    ROUND(AVG(rs.mobile_ownership)::NUMERIC * 100, 1) AS high_online_pct,
     ROUND(AVG(rs.online_grocery)::NUMERIC * 100, 1) AS online_grocery_pct,
     -- Human Capital
     ROUND(AVG(rs.avg_edu_years)::NUMERIC, 1) AS avg_edu_years,
     ROUND(AVG(rs.avg_edu_years) / NULLIF(sm.max_edu_years, 0) * 100, 1) AS edu_pct,
-    ROUND(AVG(CASE WHEN rs.hh_size > 5 THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS large_hh_pct,
+    ROUND(AVG(CASE WHEN rs.hh_size > 6 THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS large_hh_pct,
+    -- UHS minors >3: households with more than 3 children under 15
+    ROUND(AVG(CASE WHEN COALESCE(rs.n_children_u15, 0) > 3 THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS uhs_minor_pct,
     -- Welfare & Vulnerability
     ROUND(AVG(rs.ayushman_beneficiary)::NUMERIC * 100, 1) AS ayushman_pct,
     ROUND(AVG(rs.ration_received)::NUMERIC * 100, 1) AS ration_pct,
