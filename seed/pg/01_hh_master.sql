@@ -1478,3 +1478,133 @@ SELECT
 FROM vw_rural_segments rs
 JOIN state_max sm ON rs.state = sm.state
 GROUP BY rs.state, rs.segment, sm.max_cereal_spend, sm.max_edu_years;
+
+-- ── Household segments by sector (R1–R4 Rural / U1–U3 Urban) ─────────────────
+-- Every household is placed into one of seven codes derived from the rural
+-- segment scoring (asset_score, digital_score, welfare_score, internet_access,
+-- mobile_ownership) combined with the sector label. This drives the
+-- district-level segment map dashboard.
+CREATE OR REPLACE VIEW vw_household_segments AS
+SELECT
+    rs.hhid,
+    rs.state,
+    rs.iso_code,
+    rs.district,
+    rs.sector,
+    rs.social_group,
+    rs.hh_size,
+    rs.avg_edu_years,
+    rs.internet_access,
+    rs.mobile_ownership,
+    rs.car_ownership,
+    rs.ayushman_beneficiary,
+    rs.ration_received,
+    rs.digital_score,
+    rs.asset_score,
+    rs.welfare_score,
+    CASE
+        WHEN rs.sector ILIKE 'Urban' THEN
+            CASE
+                WHEN rs.asset_score >= 2 AND rs.digital_score >= 2 AND rs.internet_access = 1 THEN 'U1'
+                WHEN rs.digital_score >= 2 AND rs.mobile_ownership = 1 THEN 'U2'
+                ELSE 'U3'
+            END
+        ELSE
+            CASE
+                WHEN rs.asset_score >= 2 AND rs.digital_score >= 2 AND rs.internet_access = 1 THEN 'R1'
+                WHEN rs.digital_score >= 2 AND rs.mobile_ownership = 1 THEN 'R2'
+                WHEN rs.digital_score <= 1 AND rs.internet_access = 0 THEN 'R3'
+                ELSE 'R4'
+            END
+    END AS segment,
+    CASE WHEN COALESCE(rs.sector, '') ILIKE 'Urban' THEN 'Urban' ELSE 'Rural' END AS segment_band
+FROM vw_rural_segments rs;
+
+-- ── State segment summary (for choropleth & KPI cards) ───────────────────────
+CREATE OR REPLACE VIEW vw_state_segment_summary AS
+SELECT
+    state,
+    iso_code,
+    COUNT(*) AS hh_count,
+    SUM(CASE WHEN segment_band = 'Rural' THEN 1 ELSE 0 END) AS rural_count,
+    SUM(CASE WHEN segment_band = 'Urban' THEN 1 ELSE 0 END) AS urban_count,
+    COUNT(DISTINCT district) AS district_count,
+    SUM(CASE WHEN segment = 'R1' THEN 1 ELSE 0 END) AS r1_count,
+    SUM(CASE WHEN segment = 'R2' THEN 1 ELSE 0 END) AS r2_count,
+    SUM(CASE WHEN segment = 'R3' THEN 1 ELSE 0 END) AS r3_count,
+    SUM(CASE WHEN segment = 'R4' THEN 1 ELSE 0 END) AS r4_count,
+    SUM(CASE WHEN segment = 'U1' THEN 1 ELSE 0 END) AS u1_count,
+    SUM(CASE WHEN segment = 'U2' THEN 1 ELSE 0 END) AS u2_count,
+    SUM(CASE WHEN segment = 'U3' THEN 1 ELSE 0 END) AS u3_count
+FROM vw_household_segments
+GROUP BY state, iso_code;
+
+-- ── State × Segment long form (for grouped bar / stacked bar) ────────────────
+CREATE OR REPLACE VIEW vw_state_segment_long AS
+SELECT
+    state,
+    iso_code,
+    segment,
+    segment_band,
+    COUNT(*) AS hh_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY state), 2) AS segment_pct
+FROM vw_household_segments
+GROUP BY state, iso_code, segment, segment_band;
+
+-- ── District segment pie data (powers the Handlebars pie grid) ───────────────
+-- Percentages and cumulative endpoints drive a CSS `conic-gradient` pie per
+-- district, matching the "Proportion of Segments by District" pattern.
+CREATE OR REPLACE VIEW vw_district_segment_pie AS
+WITH district_counts AS (
+    SELECT
+        state,
+        iso_code,
+        district,
+        COUNT(*)                                                                 AS hh_count,
+        SUM(CASE WHEN segment = 'R1' THEN 1 ELSE 0 END)                          AS r1_count,
+        SUM(CASE WHEN segment = 'R2' THEN 1 ELSE 0 END)                          AS r2_count,
+        SUM(CASE WHEN segment = 'R3' THEN 1 ELSE 0 END)                          AS r3_count,
+        SUM(CASE WHEN segment = 'R4' THEN 1 ELSE 0 END)                          AS r4_count,
+        SUM(CASE WHEN segment = 'U1' THEN 1 ELSE 0 END)                          AS u1_count,
+        SUM(CASE WHEN segment = 'U2' THEN 1 ELSE 0 END)                          AS u2_count,
+        SUM(CASE WHEN segment = 'U3' THEN 1 ELSE 0 END)                          AS u3_count
+    FROM vw_household_segments
+    GROUP BY state, iso_code, district
+),
+district_pct AS (
+    SELECT
+        state,
+        iso_code,
+        district,
+        hh_count,
+        ROUND(r1_count * 100.0 / NULLIF(hh_count, 0), 2) AS r1_pct,
+        ROUND(r2_count * 100.0 / NULLIF(hh_count, 0), 2) AS r2_pct,
+        ROUND(r3_count * 100.0 / NULLIF(hh_count, 0), 2) AS r3_pct,
+        ROUND(r4_count * 100.0 / NULLIF(hh_count, 0), 2) AS r4_pct,
+        ROUND(u1_count * 100.0 / NULLIF(hh_count, 0), 2) AS u1_pct,
+        ROUND(u2_count * 100.0 / NULLIF(hh_count, 0), 2) AS u2_pct,
+        ROUND(u3_count * 100.0 / NULLIF(hh_count, 0), 2) AS u3_pct
+    FROM district_counts
+)
+SELECT
+    state,
+    iso_code,
+    district,
+    hh_count,
+    COALESCE(r1_pct, 0) AS r1_pct,
+    COALESCE(r2_pct, 0) AS r2_pct,
+    COALESCE(r3_pct, 0) AS r3_pct,
+    COALESCE(r4_pct, 0) AS r4_pct,
+    COALESCE(u1_pct, 0) AS u1_pct,
+    COALESCE(u2_pct, 0) AS u2_pct,
+    COALESCE(u3_pct, 0) AS u3_pct,
+    -- Cumulative endpoints feed a seven-stop CSS conic-gradient.
+    COALESCE(r1_pct, 0)                                                                                 AS c1,
+    COALESCE(r1_pct, 0) + COALESCE(r2_pct, 0)                                                           AS c2,
+    COALESCE(r1_pct, 0) + COALESCE(r2_pct, 0) + COALESCE(r3_pct, 0)                                     AS c3,
+    COALESCE(r1_pct, 0) + COALESCE(r2_pct, 0) + COALESCE(r3_pct, 0) + COALESCE(r4_pct, 0)               AS c4,
+    COALESCE(r1_pct, 0) + COALESCE(r2_pct, 0) + COALESCE(r3_pct, 0) + COALESCE(r4_pct, 0)
+        + COALESCE(u1_pct, 0)                                                                            AS c5,
+    COALESCE(r1_pct, 0) + COALESCE(r2_pct, 0) + COALESCE(r3_pct, 0) + COALESCE(r4_pct, 0)
+        + COALESCE(u1_pct, 0) + COALESCE(u2_pct, 0)                                                      AS c6
+FROM district_pct;

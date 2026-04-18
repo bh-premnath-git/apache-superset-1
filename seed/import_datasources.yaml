@@ -32,3 +32,7 @@ databases:
       - table_name: vw_rural_segment_summary
       - table_name: vw_rural_segment_kpis_long
       - table_name: vw_rural_segment_matrix
+      - table_name: vw_household_segments
+      - table_name: vw_state_segment_summary
+      - table_name: vw_state_segment_long
+      - table_name: vw_district_segment_pie
