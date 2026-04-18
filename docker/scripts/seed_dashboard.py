@@ -67,15 +67,16 @@ SUPPORTED_VIZ_TYPES = {
 }
 
 
-def simple_metric(column_name: str, aggregate: str = "SUM") -> dict:
-    label = f"{aggregate}({column_name})"
+def simple_metric(column_name: str, aggregate: str = "SUM", label: str | None = None) -> dict:
+    auto_label = f"{aggregate}({column_name})"
+    final_label = label or auto_label
     return {
         "expressionType": "SIMPLE",
         "column": {"column_name": column_name},
         "aggregate": aggregate,
         "sqlExpression": None,
-        "label": label,
-        "optionName": label,
+        "label": final_label,
+        "optionName": final_label,
     }
 
 
@@ -120,9 +121,10 @@ def build_params(spec: dict) -> dict:
     if "time_grain" in spec:
         params["time_grain_sqla"] = spec["time_grain"]
     if "metrics" in spec:
-        params["metrics"] = [simple_metric(m["column"], m["aggregate"]) for m in spec["metrics"]]
+        params["metrics"] = [simple_metric(m["column"], m.get("aggregate", "SUM"), m.get("label")) for m in spec["metrics"]]
     if "metric" in spec:
-        params["metric"] = simple_metric(spec["metric"]["column"], spec["metric"]["aggregate"])
+        m = spec["metric"]
+        params["metric"] = simple_metric(m["column"], m.get("aggregate", "SUM"), m.get("label"))
     if "groupby" in spec:
         params["groupby"] = spec["groupby"]
     if "emit_filter" in spec:
