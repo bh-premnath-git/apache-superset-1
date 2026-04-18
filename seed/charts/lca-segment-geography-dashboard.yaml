@@ -4,6 +4,10 @@ dashboards:
     native_filters:
       - name: "State"
         column: state
+        multi_select: true
+        default_data_mask:
+          extraFormData: {}
+          filterState: {}
         targets:
           - vw_state_segment_summary
           - vw_state_segment_long
@@ -58,20 +62,6 @@ dashboards:
         height: 16
 
       - database: analytics
-        table: vw_state_segment_summary
-        name: "Segment Geo State Choropleth"
-        visualization_type: Country Map
-        required_columns: [iso_code, hh_count]
-        select_country: india
-        entity: iso_code
-        metric: {column: hh_count, aggregate: SUM}
-        linear_color_scheme: oranges
-        cross_filter_source: true
-        row_limit: 50
-        width: 6
-        height: 60
-
-      - database: analytics
         table: vw_state_segment_long
         name: "Segment Geo Segment Distribution by State"
         visualization_type: Bar Chart
@@ -80,10 +70,9 @@ dashboards:
         metrics:
           - {column: hh_count, aggregate: SUM}
         groupby: [segment]
-        cross_filter_target: "Segment Geo State Choropleth"
         row_limit: 300
-        width: 6
-        height: 60
+        width: 12
+        height: 50
 
       - header: "Proportion of Segments by District"
 
@@ -126,7 +115,6 @@ dashboards:
           - c5
           - c6
         metric: {column: hh_count, aggregate: SUM}
-        cross_filter_target: "Segment Geo State Choropleth"
         row_limit: 1500
         width: 12
         height: 96
@@ -136,6 +124,15 @@ dashboards:
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #fff;
             padding: 8px 4px 4px;
+          }
+          .sg-hint {
+            font-size: 12px;
+            color: #334155;
+            padding: 6px 10px 10px;
+            background: #f1f5f9;
+            border-left: 3px solid #2563eb;
+            border-radius: 4px;
+            margin: 0 6px 10px;
           }
           .sg-legend-row {
             display: flex;
@@ -160,15 +157,15 @@ dashboards:
           }
           .sg-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
             padding: 0 6px 10px;
           }
           .sg-card {
             background: #fff;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            padding: 12px 10px;
+            padding: 10px 8px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -179,47 +176,27 @@ dashboards:
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: #64748b;
+            color: #2563eb;
           }
           .sg-district {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: #1e293b;
-            margin-top: 3px;
+            margin-top: 2px;
             text-align: center;
             line-height: 1.2;
           }
           .sg-count {
-            font-size: 11px;
+            font-size: 10px;
             color: #94a3b8;
             margin-top: 2px;
           }
           .sg-pie {
-            width: 108px;
-            height: 108px;
+            width: 88px;
+            height: 88px;
             border-radius: 50%;
-            margin: 10px 0 8px;
+            margin: 8px 0 4px;
             box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-          }
-          .sg-legend {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 4px 6px;
-            font-size: 9.5px;
-            color: #334155;
-            width: 100%;
-          }
-          .sg-legend .sg-chip {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-          .sg-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 2px;
-            display: inline-block;
-            flex-shrink: 0;
           }
           .sg-r1 { background: #fed7aa; }
           .sg-r2 { background: #fb923c; }
@@ -230,6 +207,7 @@ dashboards:
           .sg-u3 { background: #1d4ed8; }
           </style>
           <div class="sg-wrap">
+            <div class="sg-hint">Pick one or more states in the <strong>State</strong> filter above to drill down. Each pie shows that district's segment mix.</div>
             <div class="sg-legend-row">
               <span class="sg-chip"><span class="sg-chip-sw sg-r1"></span>R1 Rural Stable</span>
               <span class="sg-chip"><span class="sg-chip-sw sg-r2"></span>R2 Rural Aspirant</span>
@@ -244,17 +222,8 @@ dashboards:
               <div class="sg-card">
                 <div class="sg-state">{{state}}</div>
                 <div class="sg-district">{{district}}</div>
-                <div class="sg-count">{{hh_count}} households</div>
+                <div class="sg-count">{{hh_count}} hh</div>
                 <div class="sg-pie" style="background: conic-gradient(#fed7aa 0% {{c1}}%, #fb923c {{c1}}% {{c2}}%, #ea580c {{c2}}% {{c3}}%, #9a3412 {{c3}}% {{c4}}%, #bfdbfe {{c4}}% {{c5}}%, #60a5fa {{c5}}% {{c6}}%, #1d4ed8 {{c6}}% 100%);"></div>
-                <div class="sg-legend">
-                  <span class="sg-chip"><span class="sg-dot sg-r1"></span>R1 {{r1_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-r2"></span>R2 {{r2_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-r3"></span>R3 {{r3_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-r4"></span>R4 {{r4_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-u1"></span>U1 {{u1_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-u2"></span>U2 {{u2_pct}}%</span>
-                  <span class="sg-chip"><span class="sg-dot sg-u3"></span>U3 {{u3_pct}}%</span>
-                </div>
               </div>
               {{/each}}
             </div>
@@ -264,6 +233,15 @@ dashboards:
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: #fff;
             padding: 8px 4px 4px;
+          }
+          .sg-hint {
+            font-size: 12px;
+            color: #334155;
+            padding: 6px 10px 10px;
+            background: #f1f5f9;
+            border-left: 3px solid #2563eb;
+            border-radius: 4px;
+            margin: 0 6px 10px;
           }
           .sg-legend-row {
             display: flex;
@@ -275,28 +253,17 @@ dashboards:
             font-size: 11px;
             color: #334155;
           }
-          .sg-legend-row .sg-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-          }
-          .sg-chip-sw {
-            width: 12px;
-            height: 12px;
-            border-radius: 3px;
-            display: inline-block;
-          }
           .sg-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-            gap: 14px;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
             padding: 0 6px 10px;
           }
           .sg-card {
             background: #fff;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            padding: 12px 10px;
+            padding: 10px 8px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -307,47 +274,27 @@ dashboards:
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            color: #64748b;
+            color: #2563eb;
           }
           .sg-district {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: #1e293b;
-            margin-top: 3px;
+            margin-top: 2px;
             text-align: center;
             line-height: 1.2;
           }
           .sg-count {
-            font-size: 11px;
+            font-size: 10px;
             color: #94a3b8;
             margin-top: 2px;
           }
           .sg-pie {
-            width: 108px;
-            height: 108px;
+            width: 88px;
+            height: 88px;
             border-radius: 50%;
-            margin: 10px 0 8px;
+            margin: 8px 0 4px;
             box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-          }
-          .sg-legend {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 4px 6px;
-            font-size: 9.5px;
-            color: #334155;
-            width: 100%;
-          }
-          .sg-legend .sg-chip {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-          }
-          .sg-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 2px;
-            display: inline-block;
-            flex-shrink: 0;
           }
           .sg-r1 { background: #fed7aa; }
           .sg-r2 { background: #fb923c; }

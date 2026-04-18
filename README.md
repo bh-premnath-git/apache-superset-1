@@ -67,7 +67,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 | `LCA District Drill Dashboard` | `lca-district-drill-dashboard` | District-level drill analysis with cross-filtered breakdowns |
 | `LCA Household & Segment Explorer` | `lca-household-segment-explorer` | Household KPIs, heatmap, and detail table |
 | `LCA Rural Segments Comparison` | `lca-rural-segments-comparison` | Handlebars comparison grid for rural segment KPIs |
-| `LCA Segment Geography` | `lca-segment-geography` | India state choropleth plus a Handlebars "proportion of segments by district" pie grid (R1–R4 / U1–U3) |
+| `LCA Segment Geography` | `lca-segment-geography` | State-level KPIs plus a state-filtered Handlebars "proportion of segments by district" pie grid (R1–R4 / U1–U3); use the State filter to drill to one or more states |
 
 In the current image build, chart YAML can use the verified
 `visualization_type` labels wired into the Python seeder, including
