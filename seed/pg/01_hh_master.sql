@@ -590,14 +590,18 @@ LANGUAGE SQL IMMUTABLE AS $$
         WHEN 'ANDAMAN AND NICOBAR ISLANDS'         THEN 'IN-AN'
         WHEN 'ANDAMAN & NICOBAR ISLANDS'           THEN 'IN-AN'
         WHEN 'ANDAMAN AND NICOBAR'                 THEN 'IN-AN'
+        WHEN 'A AND N ISLANDS (U.T.)'              THEN 'IN-AN'
+        WHEN 'A & N ISLANDS (U.T.)'                THEN 'IN-AN'
         WHEN 'ANDHRA PRADESH'                      THEN 'IN-AP'
         WHEN 'ARUNACHAL PRADESH'                   THEN 'IN-AR'
         WHEN 'ASSAM'                               THEN 'IN-AS'
         WHEN 'BIHAR'                               THEN 'IN-BR'
         WHEN 'CHANDIGARH'                          THEN 'IN-CH'
+        WHEN 'CHANDIGARH(U.T.)'                    THEN 'IN-CH'
         WHEN 'CHHATTISGARH'                        THEN 'IN-CT'
         WHEN 'CHATTISGARH'                         THEN 'IN-CT'
         WHEN 'DADRA AND NAGAR HAVELI AND DAMAN AND DIU' THEN 'IN-DH'
+        WHEN 'DADRA & NAGAR HAVELI AND DAMAN & DIU' THEN 'IN-DH'
         WHEN 'DADRA AND NAGAR HAVELI'              THEN 'IN-DH'
         WHEN 'DAMAN AND DIU'                       THEN 'IN-DH'
         WHEN 'DELHI'                               THEN 'IN-DL'
@@ -612,7 +616,9 @@ LANGUAGE SQL IMMUTABLE AS $$
         WHEN 'KARNATAKA'                           THEN 'IN-KA'
         WHEN 'KERALA'                              THEN 'IN-KL'
         WHEN 'LADAKH'                              THEN 'IN-LA'
+        WHEN 'LADAKH (U.T.)'                       THEN 'IN-LA'
         WHEN 'LAKSHADWEEP'                         THEN 'IN-LD'
+        WHEN 'LAKSHADWEEP (U.T.)'                  THEN 'IN-LD'
         WHEN 'MADHYA PRADESH'                      THEN 'IN-MP'
         WHEN 'MAHARASHTRA'                         THEN 'IN-MH'
         WHEN 'MANIPUR'                             THEN 'IN-MN'
@@ -623,15 +629,19 @@ LANGUAGE SQL IMMUTABLE AS $$
         WHEN 'ORISSA'                              THEN 'IN-OR'
         WHEN 'PUDUCHERRY'                          THEN 'IN-PY'
         WHEN 'PONDICHERRY'                         THEN 'IN-PY'
+        WHEN 'PUDUCHERRY (U.T.)'                   THEN 'IN-PY'
         WHEN 'PUNJAB'                              THEN 'IN-PB'
         WHEN 'RAJASTHAN'                           THEN 'IN-RJ'
         WHEN 'SIKKIM'                              THEN 'IN-SK'
         WHEN 'TAMIL NADU'                          THEN 'IN-TN'
+        WHEN 'TAMILNADU'                           THEN 'IN-TN'
         WHEN 'TELANGANA'                           THEN 'IN-TG'
         WHEN 'TRIPURA'                             THEN 'IN-TR'
         WHEN 'UTTAR PRADESH'                       THEN 'IN-UP'
+        WHEN 'UTTAR PRDESH'                        THEN 'IN-UP'
         WHEN 'UTTARAKHAND'                         THEN 'IN-UT'
         WHEN 'UTTARANCHAL'                         THEN 'IN-UT'
+        WHEN 'UTTRAKHAND'                          THEN 'IN-UT'
         WHEN 'WEST BENGAL'                         THEN 'IN-WB'
     END
 $$;
@@ -746,13 +756,157 @@ FROM vw_food_spend_long
 GROUP BY state, category;
 
 CREATE OR REPLACE VIEW vw_asset_ownership_heatmap AS
+WITH state_households AS (
+    SELECT
+        "State_label" AS state,
+        COUNT(DISTINCT "HHID") AS hh_count
+    FROM hh_master
+    GROUP BY "State_label"
+),
+asset_rates AS (
+    SELECT
+        "State_label" AS state,
+        'Television' AS asset,
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Television"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END) AS ownership_rate
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        'Mobile',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        'Refrigerator',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Refrigerator"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        'Car',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Car"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        'Washing Machine',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_WashingMachine"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        'Laptop',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Laptop"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+)
 SELECT
-    state,
-    asset,
-    ROUND(AVG(owned)::NUMERIC, 4) AS ownership_rate,
-    COUNT(DISTINCT hhid) AS hh_count
-FROM vw_asset_possession_long
-GROUP BY state, asset;
+    asset_rates.state,
+    asset_rates.asset,
+    ROUND(asset_rates.ownership_rate::NUMERIC, 4) AS ownership_rate,
+    state_households.hh_count
+FROM asset_rates
+JOIN state_households
+  ON state_households.state = asset_rates.state;
+
+CREATE OR REPLACE VIEW vw_state_geo_points AS
+WITH geo_base AS (
+    SELECT
+        summary.state,
+        summary.iso_code,
+        summary.hh_count,
+        ROUND(summary.internet_rate::NUMERIC, 4) AS internet_rate,
+        ROUND(summary.mobile_ownership_rate::NUMERIC, 4) AS mobile_ownership_rate,
+        ROUND(summary.car_ownership_rate::NUMERIC, 4) AS car_ownership_rate,
+        ROUND(summary.avg_edu_years::NUMERIC, 2) AS avg_edu_years,
+        ROUND(summary.ayushman_rate::NUMERIC, 4) AS ayushman_rate,
+        CASE summary.iso_code
+            WHEN 'IN-AN' THEN 11.7401
+            WHEN 'IN-AP' THEN 15.9129
+            WHEN 'IN-AR' THEN 28.2180
+            WHEN 'IN-AS' THEN 26.2006
+            WHEN 'IN-BR' THEN 25.0961
+            WHEN 'IN-CH' THEN 30.7333
+            WHEN 'IN-CT' THEN 21.2787
+            WHEN 'IN-DN' THEN 20.3974
+            WHEN 'IN-DL' THEN 28.7041
+            WHEN 'IN-GA' THEN 15.2993
+            WHEN 'IN-GJ' THEN 22.2587
+            WHEN 'IN-HP' THEN 31.1048
+            WHEN 'IN-HR' THEN 29.0588
+            WHEN 'IN-JH' THEN 23.6102
+            WHEN 'IN-JK' THEN 34.0837
+            WHEN 'IN-KA' THEN 15.3173
+            WHEN 'IN-KL' THEN 10.8505
+            WHEN 'IN-LA' THEN 34.1526
+            WHEN 'IN-LD' THEN 10.5667
+            WHEN 'IN-MH' THEN 19.7515
+            WHEN 'IN-ML' THEN 25.4670
+            WHEN 'IN-MN' THEN 24.6637
+            WHEN 'IN-MP' THEN 23.4733
+            WHEN 'IN-MZ' THEN 23.1645
+            WHEN 'IN-NL' THEN 26.1584
+            WHEN 'IN-OR' THEN 20.9517
+            WHEN 'IN-PB' THEN 31.1471
+            WHEN 'IN-PY' THEN 11.9416
+            WHEN 'IN-RJ' THEN 27.0238
+            WHEN 'IN-SK' THEN 27.5330
+            WHEN 'IN-TG' THEN 18.1124
+            WHEN 'IN-TN' THEN 11.1271
+            WHEN 'IN-TR' THEN 23.9408
+            WHEN 'IN-UP' THEN 26.8467
+            WHEN 'IN-UT' THEN 30.0668
+            WHEN 'IN-WB' THEN 22.9868
+        END AS latitude,
+        CASE summary.iso_code
+            WHEN 'IN-AN' THEN 92.6586
+            WHEN 'IN-AP' THEN 79.7400
+            WHEN 'IN-AR' THEN 94.7278
+            WHEN 'IN-AS' THEN 92.9376
+            WHEN 'IN-BR' THEN 85.3131
+            WHEN 'IN-CH' THEN 76.7794
+            WHEN 'IN-CT' THEN 81.8661
+            WHEN 'IN-DN' THEN 72.8397
+            WHEN 'IN-DL' THEN 77.1025
+            WHEN 'IN-GA' THEN 74.1240
+            WHEN 'IN-GJ' THEN 71.1924
+            WHEN 'IN-HP' THEN 77.1734
+            WHEN 'IN-HR' THEN 76.0856
+            WHEN 'IN-JH' THEN 85.2799
+            WHEN 'IN-JK' THEN 74.7973
+            WHEN 'IN-KA' THEN 75.7139
+            WHEN 'IN-KL' THEN 76.2711
+            WHEN 'IN-LA' THEN 77.5770
+            WHEN 'IN-LD' THEN 72.6417
+            WHEN 'IN-MH' THEN 75.7139
+            WHEN 'IN-ML' THEN 91.3662
+            WHEN 'IN-MN' THEN 93.9063
+            WHEN 'IN-MP' THEN 77.9470
+            WHEN 'IN-MZ' THEN 92.9376
+            WHEN 'IN-NL' THEN 94.5624
+            WHEN 'IN-OR' THEN 85.0985
+            WHEN 'IN-PB' THEN 75.3412
+            WHEN 'IN-PY' THEN 79.8083
+            WHEN 'IN-RJ' THEN 74.2179
+            WHEN 'IN-SK' THEN 88.5122
+            WHEN 'IN-TG' THEN 79.0193
+            WHEN 'IN-TN' THEN 78.6569
+            WHEN 'IN-TR' THEN 91.9882
+            WHEN 'IN-UP' THEN 80.9462
+            WHEN 'IN-UT' THEN 79.0193
+            WHEN 'IN-WB' THEN 87.8550
+        END AS longitude
+    FROM vw_state_summary AS summary
+)
+SELECT *
+FROM geo_base
+WHERE iso_code IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Geographic hierarchy views
 CREATE OR REPLACE VIEW vw_district_summary AS
@@ -782,6 +936,91 @@ SELECT
     "Year" AS year
 FROM hh_master
 GROUP BY "State_label", "District", "Sector_label", "Social_Group_of_HH_Head_label", "Religion_of_HH_Head_label", "Year";
+
+CREATE OR REPLACE VIEW vw_household_drill_base AS
+SELECT
+    "HHID" AS hhid,
+    "Year" AS year,
+    "State_label" AS state,
+    state_to_iso("State_label") AS iso_code,
+    COALESCE(NULLIF("District", ''), 'Unknown') AS district,
+    COALESCE(NULLIF("Sector_label", ''), 'Unknown') AS sector,
+    COALESCE(NULLIF("Social_Group_of_HH_Head_label", ''), 'Unknown') AS social_group,
+    COALESCE(NULLIF("Religion_of_HH_Head_label", ''), 'Unknown') AS religion,
+    COALESCE(NULLIF("Max_Income_Activity_label", ''), 'Unknown') AS income_source,
+    NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS hh_size,
+    NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS avg_edu_years,
+    CASE WHEN COALESCE(NULLIF(TRIM("any_internet"), ''), '0') = '1' THEN 1 ELSE 0 END AS internet_access,
+    CASE WHEN COALESCE(NULLIF(TRIM("Ayushman_beneficiary"), ''), '0') = '1' THEN 1 ELSE 0 END AS ayushman_beneficiary,
+    CASE WHEN COALESCE(NULLIF(TRIM("LPG_subsidy_received"), ''), '0') = '1' THEN 1 ELSE 0 END AS lpg_subsidy_received,
+    CASE WHEN COALESCE(NULLIF(TRIM("Ration_Any_Item_Last_30_Days"), ''), '0') = '1' THEN 1 ELSE 0 END AS ration_received,
+    CASE WHEN COALESCE(NULLIF(TRIM("Fee_waiver_received"), ''), '0') = '1' THEN 1 ELSE 0 END AS fee_waiver_received,
+    CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1 ELSE 0 END AS mobile_ownership,
+    CASE WHEN COALESCE(NULLIF(TRIM("Possess_Car"), ''), '0') = '1' THEN 1 ELSE 0 END AS car_ownership,
+    NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS cereal_spend,
+    NULLIF(regexp_replace("electricity_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS electricity_spend,
+    NULLIF(regexp_replace("beverages_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS beverages_spend
+FROM hh_master;
+
+CREATE OR REPLACE VIEW vw_district_sector_drill AS
+SELECT
+    state,
+    iso_code,
+    district,
+    sector,
+    COUNT(hhid) AS hh_count,
+    ROUND(AVG(hh_size)::NUMERIC, 2) AS avg_hh_size,
+    ROUND(AVG(avg_edu_years)::NUMERIC, 2) AS avg_edu_years,
+    ROUND(AVG(internet_access)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(ayushman_beneficiary)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(lpg_subsidy_received)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(ration_received)::NUMERIC, 4) AS ration_rate,
+    ROUND(AVG(mobile_ownership)::NUMERIC, 4) AS mobile_ownership_rate,
+    ROUND(AVG(car_ownership)::NUMERIC, 4) AS car_ownership_rate,
+    ROUND(AVG(cereal_spend)::NUMERIC, 2) AS avg_cereal_spend,
+    ROUND(AVG(electricity_spend)::NUMERIC, 2) AS avg_electricity_spend
+FROM vw_household_drill_base
+GROUP BY state, iso_code, district, sector;
+
+CREATE OR REPLACE VIEW vw_district_social_group_drill AS
+SELECT
+    state,
+    iso_code,
+    district,
+    social_group,
+    COUNT(hhid) AS hh_count,
+    ROUND(AVG(hh_size)::NUMERIC, 2) AS avg_hh_size,
+    ROUND(AVG(avg_edu_years)::NUMERIC, 2) AS avg_edu_years,
+    ROUND(AVG(internet_access)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(ayushman_beneficiary)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(lpg_subsidy_received)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(ration_received)::NUMERIC, 4) AS ration_rate,
+    ROUND(AVG(fee_waiver_received)::NUMERIC, 4) AS fee_waiver_rate,
+    ROUND(AVG(mobile_ownership)::NUMERIC, 4) AS mobile_ownership_rate,
+    ROUND(AVG(car_ownership)::NUMERIC, 4) AS car_ownership_rate
+FROM vw_household_drill_base
+GROUP BY state, iso_code, district, social_group;
+
+CREATE OR REPLACE VIEW vw_state_sector_social_group_drill AS
+SELECT
+    state,
+    iso_code,
+    sector,
+    social_group,
+    COUNT(hhid) AS hh_count,
+    ROUND(AVG(hh_size)::NUMERIC, 2) AS avg_hh_size,
+    ROUND(AVG(avg_edu_years)::NUMERIC, 2) AS avg_edu_years,
+    ROUND(AVG(internet_access)::NUMERIC, 4) AS internet_rate,
+    ROUND(AVG(ayushman_beneficiary)::NUMERIC, 4) AS ayushman_rate,
+    ROUND(AVG(lpg_subsidy_received)::NUMERIC, 4) AS lpg_subsidy_rate,
+    ROUND(AVG(ration_received)::NUMERIC, 4) AS ration_rate,
+    ROUND(AVG(fee_waiver_received)::NUMERIC, 4) AS fee_waiver_rate,
+    ROUND(AVG(mobile_ownership)::NUMERIC, 4) AS mobile_ownership_rate,
+    ROUND(AVG(car_ownership)::NUMERIC, 4) AS car_ownership_rate,
+    ROUND(AVG(cereal_spend)::NUMERIC, 2) AS avg_cereal_spend,
+    ROUND(AVG(beverages_spend)::NUMERIC, 2) AS avg_beverages_spend
+FROM vw_household_drill_base
+GROUP BY state, iso_code, sector, social_group;
 
 -- Welfare summary view. `iso_code` is exposed so the country_map's
 -- cross-filter (which emits {col: 'iso_code', op: 'IN', val: ['IN-XX']})
@@ -879,6 +1118,42 @@ SELECT
 FROM hh_master
 GROUP BY "State_label", "Sector_label";
 
+CREATE OR REPLACE VIEW vw_dashboard_navigation AS
+SELECT
+    1 AS nav_order,
+    'Overview'::TEXT AS navigation_group,
+    'LCA Overview Dashboard'::TEXT AS dashboard_title,
+    'lca-overview-dashboard'::TEXT AS dashboard_slug,
+    '/superset/dashboard/lca-overview-dashboard/'::TEXT AS dashboard_path,
+    'National overview with state map, KPI summary, and top-level comparisons.'::TEXT AS dashboard_description,
+    'Use when starting exploration or comparing states nationally.'::TEXT AS recommended_use
+UNION ALL
+SELECT
+    2,
+    'Drill',
+    'LCA State Drill Dashboard',
+    'lca-state-drill-dashboard',
+    '/superset/dashboard/lca-state-drill-dashboard/',
+    'District, sector, social-group, and household drill views for one state at a time.',
+    'Use after identifying a state or segment that needs deeper analysis.'
+UNION ALL
+SELECT
+    3,
+    'Explorer',
+    'LCA Household Explorer',
+    'lca-household-explorer',
+    '/superset/dashboard/lca-household-explorer/',
+    'Household-level exploration table with state, district, sector, and social-group filters.',
+    'Use for row-level inspection and detailed household slicing.';
+
+CREATE TABLE IF NOT EXISTS dashboard_state_links (
+    state TEXT NOT NULL,
+    iso_code TEXT NOT NULL,
+    state_drill_url TEXT NOT NULL,
+    household_explorer_url TEXT NOT NULL,
+    PRIMARY KEY (iso_code)
+);
+
 -- State-level choropleth is rendered via Superset's built-in country_map
 -- plugin, which ships the India GeoJSON and matches rows by ISO 3166-2
 -- code. See vw_state_summary.iso_code above — no boundary table or
@@ -939,14 +1214,72 @@ GROUP BY state, category;
 -- Pre-aggregated asset ownership rate by state, exposing iso_code so the
 -- choropleth cross-filter narrows it to the selected state.
 CREATE OR REPLACE VIEW vw_asset_state AS
+WITH state_households AS (
+    SELECT
+        "State_label" AS state,
+        state_to_iso("State_label") AS iso_code,
+        COUNT(DISTINCT "HHID") AS hh_count
+    FROM hh_master
+    GROUP BY "State_label"
+),
+asset_rates AS (
+    SELECT
+        "State_label" AS state,
+        state_to_iso("State_label") AS iso_code,
+        'Television' AS asset,
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Television"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END) AS ownership_rate
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        state_to_iso("State_label"),
+        'Mobile',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        state_to_iso("State_label"),
+        'Refrigerator',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Refrigerator"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        state_to_iso("State_label"),
+        'Car',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Car"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        state_to_iso("State_label"),
+        'Washing Machine',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_WashingMachine"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+    UNION ALL
+    SELECT
+        "State_label",
+        state_to_iso("State_label"),
+        'Laptop',
+        AVG(CASE WHEN COALESCE(NULLIF(TRIM("Possess_Laptop"), ''), '0') = '1' THEN 1.0 ELSE 0.0 END)
+    FROM hh_master
+    GROUP BY "State_label"
+)
 SELECT
-    state,
-    state_to_iso(state)                 AS iso_code,
-    asset,
-    ROUND(AVG(owned)::NUMERIC, 4)       AS ownership_rate,
-    COUNT(DISTINCT hhid)                AS hh_count
-FROM vw_asset_possession_long
-GROUP BY state, asset;
+    asset_rates.state,
+    asset_rates.iso_code,
+    asset_rates.asset,
+    ROUND(asset_rates.ownership_rate::NUMERIC, 4) AS ownership_rate,
+    state_households.hh_count
+FROM asset_rates
+JOIN state_households
+  ON state_households.state = asset_rates.state;
 
 -- ── Non-food expenditure categories in long form ──────────────────────────────
 -- Six major non-food spending categories per state, unpivoted to long form
@@ -975,3 +1308,167 @@ UNION ALL
 SELECT state, 'Toilet Articles',             avg_toilet_articles                FROM base
 UNION ALL
 SELECT state, 'Clothing',                    avg_clothing                       FROM base;
+
+-- ── Rural Household Segmentation (Personas) ───────────────────────────────────
+-- Categorizes households into four rural segments based on digital connectivity,
+-- economic stability, human capital, and welfare dependence.
+CREATE OR REPLACE VIEW vw_rural_segments AS
+WITH hh_scored AS (
+    SELECT
+        "HHID" AS hhid,
+        "State_label" AS state,
+        state_to_iso("State_label") AS iso_code,
+        COALESCE(NULLIF("District", ''), 'Unknown') AS district,
+        COALESCE(NULLIF("Sector_label", ''), 'Unknown') AS sector,
+        COALESCE(NULLIF("Social_Group_of_HH_Head_label", ''), 'Unknown') AS social_group,
+        NULLIF(regexp_replace("hh_size", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS hh_size,
+        NULLIF(regexp_replace("mean_years_edu", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS avg_edu_years,
+        CASE WHEN COALESCE(NULLIF(TRIM("any_internet"), ''), '0') = '1' THEN 1 ELSE 0 END AS internet_access,
+        CASE WHEN COALESCE(NULLIF(TRIM("Ayushman_beneficiary"), ''), '0') = '1' THEN 1 ELSE 0 END AS ayushman_beneficiary,
+        CASE WHEN COALESCE(NULLIF(TRIM("Ration_Any_Item_Last_30_Days"), ''), '0') = '1' THEN 1 ELSE 0 END AS ration_received,
+        CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1 ELSE 0 END AS mobile_ownership,
+        CASE WHEN COALESCE(NULLIF(TRIM("Possess_Car"), ''), '0') = '1' THEN 1 ELSE 0 END AS car_ownership,
+        CASE WHEN COALESCE(NULLIF(TRIM("Online_Groceries"), ''), '0') = '1' THEN 1 ELSE 0 END AS online_grocery,
+        NULLIF(regexp_replace("cereal_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS cereal_spend,
+        NULLIF(regexp_replace("beverages_val_total", '[^0-9.\-]+', '', 'g'), '')::NUMERIC AS beverages_spend,
+        -- Scoring logic for segmentation
+        (CASE WHEN COALESCE(NULLIF(TRIM("any_internet"), ''), '0') = '1' THEN 2 ELSE 0 END +
+         CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1 ELSE 0 END +
+         CASE WHEN COALESCE(NULLIF(TRIM("Online_Groceries"), ''), '0') = '1' THEN 1 ELSE 0 END) AS digital_score,
+        (CASE WHEN COALESCE(NULLIF(TRIM("Possess_Car"), ''), '0') = '1' THEN 2 ELSE 0 END +
+         CASE WHEN COALESCE(NULLIF(TRIM("Possess_Mobile"), ''), '0') = '1' THEN 1 ELSE 0 END) AS asset_score,
+        (CASE WHEN COALESCE(NULLIF(TRIM("Ayushman_beneficiary"), ''), '0') = '1' THEN 1 ELSE 0 END +
+         CASE WHEN COALESCE(NULLIF(TRIM("Ration_Any_Item_Last_30_Days"), ''), '0') = '1' THEN 1 ELSE 0 END) AS welfare_score
+    FROM hh_master
+),
+classified AS (
+    SELECT *,
+        CASE
+            -- Rural Stable: High assets (car+mobile) + internet + some welfare
+            WHEN asset_score >= 2 AND digital_score >= 2 AND internet_access = 1 THEN 'Rural Stable'
+            -- Rural Aspirant: High digital + mobile ownership + moderate assets
+            WHEN digital_score >= 3 AND mobile_ownership = 1 AND asset_score >= 1 THEN 'Rural Aspirant'
+            -- Rural Disconnected: Low digital (no internet) + low online activity
+            WHEN digital_score <= 1 AND internet_access = 0 THEN 'Rural Disconnected'
+            -- Rural Constrained: Low assets + high welfare dependence
+            WHEN asset_score <= 1 AND welfare_score >= 1 AND internet_access = 0 THEN 'Rural Constrained'
+            ELSE 'Rural Constrained'  -- Default fallback
+        END AS segment
+    FROM hh_scored
+)
+SELECT * FROM classified;
+
+-- ── Rural Segment Aggregated Summary ─────────────────────────────────────────
+-- Aggregated metrics by state and rural segment for comparison dashboard
+CREATE OR REPLACE VIEW vw_rural_segment_summary AS
+SELECT
+    state,
+    state_to_iso(state) AS iso_code,
+    segment,
+    COUNT(hhid) AS hh_count,
+    ROUND(COUNT(hhid) * 100.0 / SUM(COUNT(hhid)) OVER (PARTITION BY state), 1) AS segment_pct,
+    ROUND(AVG(hh_size)::NUMERIC, 1) AS avg_hh_size,
+    ROUND(AVG(avg_edu_years)::NUMERIC, 1) AS avg_edu_years,
+    ROUND(AVG(internet_access)::NUMERIC * 100, 1) AS internet_pct,
+    ROUND(AVG(mobile_ownership)::NUMERIC * 100, 1) AS mobile_ownership_pct,
+    ROUND(AVG(car_ownership)::NUMERIC * 100, 1) AS car_ownership_pct,
+    ROUND(AVG(online_grocery)::NUMERIC * 100, 1) AS online_grocery_pct,
+    ROUND(AVG(ayushman_beneficiary)::NUMERIC * 100, 1) AS ayushman_pct,
+    ROUND(AVG(ration_received)::NUMERIC * 100, 1) AS ration_pct,
+    ROUND(AVG(cereal_spend)::NUMERIC, 0) AS avg_cereal_spend,
+    ROUND(AVG(beverages_spend)::NUMERIC, 0) AS avg_beverages_spend,
+    ROUND(AVG(digital_score)::NUMERIC, 1) AS avg_digital_score,
+    ROUND(AVG(asset_score)::NUMERIC, 1) AS avg_asset_score
+FROM vw_rural_segments
+GROUP BY state, segment;
+
+-- ── Rural Segment KPIs Long Form ──────────────────────────────────────────────
+-- Long-form view for grouped bar charts comparing segments across KPIs by state
+CREATE OR REPLACE VIEW vw_rural_segment_kpis_long AS
+WITH segment_metrics AS (
+    SELECT
+        state,
+        state_to_iso(state) AS iso_code,
+        segment,
+        ROUND(AVG(internet_access)::NUMERIC * 100, 1) AS internet_rate,
+        ROUND(AVG(mobile_ownership)::NUMERIC * 100, 1) AS mobile_rate,
+        ROUND(AVG(car_ownership)::NUMERIC * 100, 1) AS car_rate,
+        ROUND(AVG(online_grocery)::NUMERIC * 100, 1) AS online_grocery_rate,
+        ROUND(AVG(ayushman_beneficiary)::NUMERIC * 100, 1) AS ayushman_rate,
+        ROUND(AVG(ration_received)::NUMERIC * 100, 1) AS ration_rate,
+        ROUND(AVG(avg_edu_years)::NUMERIC, 1) AS avg_education,
+        ROUND(AVG(CASE WHEN hh_size > 5 THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS large_hh_pct
+    FROM vw_rural_segments
+    GROUP BY state, segment
+)
+SELECT state, iso_code, segment, 'Internet Access' AS kpi, internet_rate AS value FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Mobile Ownership', mobile_rate FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Car Ownership', car_rate FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Online Grocery', online_grocery_rate FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Ayushman Coverage', ayushman_rate FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Ration Card Use', ration_rate FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Avg Education Years', avg_education FROM segment_metrics
+UNION ALL
+SELECT state, iso_code, segment, 'Large Households (>5)', large_hh_pct FROM segment_metrics;
+
+-- ── Rural Segment Matrix (Wide Format) ────────────────────────────────────────
+-- Pivoted view for grid-style dashboard layout.
+-- Each row is a segment with all KPIs as columns for matrix display.
+CREATE OR REPLACE VIEW vw_rural_segment_matrix AS
+WITH state_max AS (
+    -- Compute max values per state for percentage scaling
+    SELECT
+        state,
+        MAX(cereal_spend) AS max_cereal_spend,
+        MAX(avg_edu_years) AS max_edu_years
+    FROM vw_rural_segments
+    GROUP BY state
+)
+SELECT
+    rs.state,
+    state_to_iso(rs.state) AS iso_code,
+    rs.segment,
+    COUNT(rs.hhid) AS hh_count,
+    ROUND(COUNT(rs.hhid) * 100.0 / SUM(COUNT(rs.hhid)) OVER (PARTITION BY rs.state), 1) AS size_pct,
+    -- Economic Condition
+    ROUND(AVG(rs.cereal_spend)::NUMERIC, 0) AS cereal_spend,
+    ROUND(AVG(rs.cereal_spend) / NULLIF(sm.max_cereal_spend, 0) * 100, 1) AS cereal_spend_pct,
+    ROUND(AVG(rs.beverages_spend)::NUMERIC, 0) AS beverages_spend,
+    -- Digital Connectivity
+    ROUND(AVG(rs.internet_access)::NUMERIC * 100, 1) AS internet_pct,
+    ROUND(AVG(rs.mobile_ownership)::NUMERIC * 100, 1) AS mobile_pct,
+    ROUND(AVG(rs.online_grocery)::NUMERIC * 100, 1) AS online_grocery_pct,
+    -- Human Capital
+    ROUND(AVG(rs.avg_edu_years)::NUMERIC, 1) AS avg_edu_years,
+    ROUND(AVG(rs.avg_edu_years) / NULLIF(sm.max_edu_years, 0) * 100, 1) AS edu_pct,
+    ROUND(AVG(CASE WHEN rs.hh_size > 5 THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS large_hh_pct,
+    -- Welfare & Vulnerability
+    ROUND(AVG(rs.ayushman_beneficiary)::NUMERIC * 100, 1) AS ayushman_pct,
+    ROUND(AVG(rs.ration_received)::NUMERIC * 100, 1) AS ration_pct,
+    -- Asset Ownership
+    ROUND(AVG(rs.car_ownership)::NUMERIC * 100, 1) AS car_pct,
+    -- No digital connectivity (inverse of internet)
+    ROUND((1 - AVG(rs.internet_access))::NUMERIC * 100, 1) AS no_digital_pct,
+    -- SC/ST composition (placeholder - replace with actual social_group calc)
+    ROUND(AVG(CASE WHEN rs.social_group IN ('SC', 'ST') THEN 1 ELSE 0 END)::NUMERIC * 100, 1) AS scst_pct,
+    -- PMGKY placeholder (using ration as proxy)
+    ROUND(AVG(rs.ration_received)::NUMERIC * 100, 1) AS pmgky_pct,
+    -- Segment class for CSS styling
+    LOWER(REPLACE(rs.segment, ' ', '-')) AS segment_class,
+    -- Segment ordering for display
+    CASE rs.segment
+        WHEN 'Rural Stable' THEN 1
+        WHEN 'Rural Aspirant' THEN 2
+        WHEN 'Rural Disconnected' THEN 3
+        WHEN 'Rural Constrained' THEN 4
+        ELSE 5
+    END AS segment_order
+FROM vw_rural_segments rs
+JOIN state_max sm ON rs.state = sm.state
+GROUP BY rs.state, rs.segment, sm.max_cereal_spend, sm.max_edu_years;

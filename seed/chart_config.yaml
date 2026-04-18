@@ -84,33 +84,17 @@
 
 dashboards:
 
-  - title: "LCA Dashboard"
-    slug: lca-dashboard
+  - title: "LCA Overview Dashboard"
+    slug: lca-overview-dashboard
     native_filters:
       - name: "State"
-        column: State_label
-        targets: [hh_master]
-      - name: "District"
-        column: District
-        targets: [hh_master]
-      - name: "Sector"
-        column: Sector_label
-        targets: [hh_master]
-      - name: "Social Group"
-        column: Social_Group_of_HH_Head_label
-        targets: [hh_master]
-      - name: "Religion"
-        column: Religion_of_HH_Head_label
-        targets: [hh_master]
-      - name: "Year"
-        column: Year
-        targets: [hh_master]
+        column: state
+        targets: [vw_state_summary, vw_welfare_summary, vw_food_spend_state, vw_asset_state, vw_state_geo_points]
     charts:
 
-      # ── Row 1: National KPI strip — 8 at-a-glance metrics ─────────────────
       - database: analytics
         table: vw_state_summary
-        name: "Total Households"
+        name: "Overview Total Households"
         visualization_type: Big Number
         required_columns: [hh_count]
         metric: {column: hh_count, aggregate: SUM}
@@ -120,16 +104,7 @@ dashboards:
 
       - database: analytics
         table: vw_state_summary
-        name: "Average Household Size"
-        visualization_type: Big Number
-        required_columns: [avg_hh_size]
-        metric: {column: avg_hh_size, aggregate: AVG}
-        width: 3
-        height: 16
-
-      - database: analytics
-        table: vw_state_summary
-        name: "Internet Access Rate"
+        name: "Overview Internet Access Rate"
         visualization_type: Big Number
         required_columns: [internet_rate]
         metric: {column: internet_rate, aggregate: AVG}
@@ -138,34 +113,7 @@ dashboards:
 
       - database: analytics
         table: vw_state_summary
-        name: "Ayushman Coverage Rate"
-        visualization_type: Big Number
-        required_columns: [ayushman_rate]
-        metric: {column: ayushman_rate, aggregate: AVG}
-        width: 3
-        height: 16
-
-      - database: analytics
-        table: vw_state_summary
-        name: "LPG Subsidy Rate"
-        visualization_type: Big Number
-        required_columns: [lpg_subsidy_rate]
-        metric: {column: lpg_subsidy_rate, aggregate: AVG}
-        width: 3
-        height: 16
-
-      - database: analytics
-        table: vw_state_summary
-        name: "Ration Card Coverage"
-        visualization_type: Big Number
-        required_columns: [ration_coverage]
-        metric: {column: ration_coverage, aggregate: AVG}
-        width: 3
-        height: 16
-
-      - database: analytics
-        table: vw_state_summary
-        name: "Avg Education Years"
+        name: "Overview Avg Education Years"
         visualization_type: Big Number
         required_columns: [avg_edu_years]
         metric: {column: avg_edu_years, aggregate: AVG}
@@ -174,28 +122,21 @@ dashboards:
 
       - database: analytics
         table: vw_state_summary
-        name: "Mobile Ownership Rate"
+        name: "Overview Mobile Ownership Rate"
         visualization_type: Big Number
         required_columns: [mobile_ownership_rate]
         metric: {column: mobile_ownership_rate, aggregate: AVG}
         width: 3
         height: 16
 
-      # ── Row 2: Geographic overview — choropleth + state bar side-by-side ──
-      # Click any state on the choropleth → emits a cross-filter on `iso_code`
-      # that drives all "Selected State Detail" charts below. The scope is
-      # restricted to charts marked cross_filter_target: "India State Choropleth"
-      # so the national KPIs and section bars stay at country totals.
       - database: analytics
         table: vw_state_summary
-        name: "India State Choropleth"
+        name: "Overview India State Choropleth"
         visualization_type: Country Map
         required_columns: [iso_code, hh_count]
         select_country: india
         entity: iso_code
         metric: {column: hh_count, aggregate: SUM}
-        linear_color_scheme: blue_white_yellow
-        number_format: SMART_NUMBER
         cross_filter_source: true
         row_limit: 50
         width: 8
@@ -203,7 +144,7 @@ dashboards:
 
       - database: analytics
         table: vw_state_summary
-        name: "Households by State"
+        name: "Overview Households by State"
         visualization_type: Bar Chart
         required_columns: [state, hh_count]
         x_axis: state
@@ -214,348 +155,865 @@ dashboards:
         width: 4
         height: 56
 
-      # ── State Detail drill-down (6 receivers, all filtered by map click) ──
-      - header: "Selected State Detail — click any state on the map above to drill in"
+      - header: "Selected State Detail"
 
       - database: analytics
         table: vw_district_summary
-        name: "Selected State District Breakdown"
+        name: "Overview Selected State District Breakdown"
         visualization_type: Bar Chart
         required_columns: [iso_code, district, hh_count]
         x_axis: district
         metrics:
           - {column: hh_count, aggregate: SUM}
         groupby: []
-        cross_filter_target: "India State Choropleth"
+        cross_filter_target: "Overview India State Choropleth"
         row_limit: 75
         width: 6
         height: 44
 
       - database: analytics
         table: vw_welfare_kpis_long
-        name: "Selected State Welfare Coverage"
+        name: "Overview Selected State Welfare Coverage"
         visualization_type: Bar Chart
         required_columns: [iso_code, scheme, coverage_rate]
         x_axis: scheme
         metrics:
           - {column: coverage_rate, aggregate: AVG}
         groupby: []
-        cross_filter_target: "India State Choropleth"
+        cross_filter_target: "Overview India State Choropleth"
         row_limit: 50
         width: 6
         height: 44
 
       - database: analytics
-        table: vw_state_sector_summary
-        name: "Selected State Sector Mix"
-        visualization_type: Pie Chart
-        required_columns: [iso_code, sector, hh_count]
-        groupby: [sector]
-        metric: {column: hh_count, aggregate: SUM}
-        cross_filter_target: "India State Choropleth"
-        row_limit: 50
-        width: 4
-        height: 44
-
-      - database: analytics
         table: vw_digital_kpis_long
-        name: "Selected State Digital Adoption"
+        name: "Overview Selected State Digital Adoption"
         visualization_type: Bar Chart
         required_columns: [iso_code, channel, adoption_rate]
         x_axis: channel
         metrics:
           - {column: adoption_rate, aggregate: AVG}
         groupby: []
-        cross_filter_target: "India State Choropleth"
+        cross_filter_target: "Overview India State Choropleth"
         row_limit: 50
-        width: 8
+        width: 6
         height: 44
 
       - database: analytics
         table: vw_food_spend_state
-        name: "Selected State Food Spend"
+        name: "Overview Selected State Food Spend"
         visualization_type: Bar Chart
         required_columns: [iso_code, category, avg_spend]
         x_axis: category
         metrics:
           - {column: avg_spend, aggregate: AVG}
         groupby: []
-        cross_filter_target: "India State Choropleth"
+        cross_filter_target: "Overview India State Choropleth"
         row_limit: 50
         width: 6
         height: 44
 
+  - title: "LCA District Drill Dashboard"
+    slug: lca-district-drill-dashboard
+    native_filters:
+      - name: "State ISO"
+        column: iso_code
+        targets: [vw_district_summary, vw_district_sector_drill, vw_district_social_group_drill]
+      - name: "District"
+        column: district
+        targets: [vw_district_summary, vw_district_sector_drill, vw_district_social_group_drill]
+    charts:
+
       - database: analytics
-        table: vw_asset_state
-        name: "Selected State Asset Ownership"
+        table: vw_district_summary
+        name: "District Drill Breakdown"
         visualization_type: Bar Chart
-        required_columns: [iso_code, asset, ownership_rate]
-        x_axis: asset
+        required_columns: [iso_code, district, hh_count]
+        x_axis: district
         metrics:
-          - {column: ownership_rate, aggregate: AVG}
+          - {column: hh_count, aggregate: SUM}
         groupby: []
-        cross_filter_target: "India State Choropleth"
-        row_limit: 50
-        width: 6
-        height: 44
-
-      # ── Demographics & Household Composition ──────────────────────────────
-      - header: "Demographics & Household Composition"
-
-      - database: analytics
-        table: hh_master
-        name: "Households by Sector"
-        visualization_type: Pie Chart
-        required_columns: [Sector_label, HHID]
-        groupby: [Sector_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Households by Religion"
-        visualization_type: Pie Chart
-        required_columns: [Religion_of_HH_Head_label, HHID]
-        groupby: [Religion_of_HH_Head_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Households by Social Group"
-        visualization_type: Bar Chart
-        required_columns: [Social_Group_of_HH_Head_label, HHID]
-        x_axis: Social_Group_of_HH_Head_label
-        metrics:
-          - {column: HHID, aggregate: COUNT}
-        groupby: []
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Cooking Energy Source"
-        visualization_type: Pie Chart
-        required_columns: [Energy_Source_Cooking_label, HHID]
-        groupby: [Energy_Source_Cooking_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Lighting Energy Source"
-        visualization_type: Pie Chart
-        required_columns: [Energy_Source_Lighting_label, HHID]
-        groupby: [Energy_Source_Lighting_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Dwelling Type Distribution"
-        visualization_type: Pie Chart
-        required_columns: [Type_of_Dwelling_Unit_label, HHID]
-        groupby: [Type_of_Dwelling_Unit_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 36
-
-      - database: analytics
-        table: hh_master
-        name: "Households by District"
-        visualization_type: Bar Chart
-        required_columns: [District, HHID]
-        x_axis: District
-        metrics:
-          - {column: HHID, aggregate: COUNT}
-        groupby: []
-        row_limit: 75
+        cross_filter_source: true
+        row_limit: 100
         width: 12
-        height: 44
-
-      # ── Education & Digital Access ─────────────────────────────────────────
-      - header: "Education & Digital Access"
+        height: 48
 
       - database: analytics
-        table: vw_state_summary
-        name: "Average Education Years by State"
+        table: vw_district_sector_drill
+        name: "District Drill by Sector"
         visualization_type: Bar Chart
-        required_columns: [state, avg_edu_years]
-        x_axis: state
+        required_columns: [iso_code, district, sector, hh_count]
+        x_axis: district
         metrics:
-          - {column: avg_edu_years, aggregate: AVG}
-        groupby: []
-        row_limit: 50
+          - {column: hh_count, aggregate: SUM}
+        groupby: [sector]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
         width: 6
         height: 44
 
       - database: analytics
-        table: vw_state_summary
-        name: "Internet Access Rate by State"
+        table: vw_district_social_group_drill
+        name: "District Drill by Social Group"
         visualization_type: Bar Chart
-        required_columns: [state, internet_rate]
-        x_axis: state
+        required_columns: [iso_code, district, social_group, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: [social_group]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_district_sector_drill
+        name: "District Internet Access by Sector"
+        visualization_type: Bar Chart
+        required_columns: [district, sector, internet_rate]
+        x_axis: district
         metrics:
           - {column: internet_rate, aggregate: AVG}
-        groupby: []
-        row_limit: 50
+        groupby: [sector]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
         width: 6
         height: 44
 
       - database: analytics
-        table: vw_digital_adoption
-        name: "Digital Adoption by Sector"
+        table: vw_district_social_group_drill
+        name: "District Welfare by Social Group"
         visualization_type: Bar Chart
-        required_columns: [sector, internet_rate, online_grocery_rate]
+        required_columns: [district, social_group, ayushman_rate]
+        x_axis: district
+        metrics:
+          - {column: ayushman_rate, aggregate: AVG}
+          - {column: ration_rate, aggregate: AVG}
+        groupby: [social_group]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44
+
+  - title: "LCA Household & Segment Explorer"
+    slug: lca-household-segment-explorer
+    native_filters:
+      - name: "State ISO"
+        column: iso_code
+        targets: [vw_state_sector_social_group_drill, vw_household_drill_base]
+      - name: "Sector"
+        column: sector
+        targets: [vw_state_sector_social_group_drill, vw_household_drill_base]
+      - name: "Social Group"
+        column: social_group
+        targets: [vw_state_sector_social_group_drill, vw_household_drill_base]
+      - name: "District"
+        column: district
+        targets: [vw_household_drill_base]
+    charts:
+
+      - database: analytics
+        table: vw_household_drill_base
+        name: "Explorer Household Count"
+        visualization_type: Big Number
+        required_columns: [hhid]
+        metric: {column: hhid, aggregate: COUNT}
+        number_format: ".3s"
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_household_drill_base
+        name: "Explorer Internet Access"
+        visualization_type: Big Number
+        required_columns: [internet_access]
+        metric: {column: internet_access, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_household_drill_base
+        name: "Explorer Mobile Ownership"
+        visualization_type: Big Number
+        required_columns: [mobile_ownership]
+        metric: {column: mobile_ownership, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_household_drill_base
+        name: "Explorer Avg Education Years"
+        visualization_type: Big Number
+        required_columns: [avg_edu_years]
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 3
+        height: 16
+
+      - database: analytics
+        table: vw_state_sector_social_group_drill
+        name: "Explorer Sector and Social Group Heatmap"
+        visualization_type: Heatmap
+        required_columns: [iso_code, sector, social_group, hh_count]
+        x_axis: sector
+        groupby: [social_group]
+        metric: {column: hh_count, aggregate: SUM}
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_state_sector_social_group_drill
+        name: "Explorer Internet Rate by Segment"
+        visualization_type: Bar Chart
+        required_columns: [sector, social_group, internet_rate]
         x_axis: sector
         metrics:
           - {column: internet_rate, aggregate: AVG}
-          - {column: online_grocery_rate, aggregate: AVG}
-        groupby: []
-        width: 6
-        height: 44
-
-      - database: analytics
-        table: vw_digital_adoption
-        name: "Online Services Adoption"
-        visualization_type: Bar Chart
-        required_columns: [state, online_medicine_rate, online_education_rate]
-        x_axis: state
-        metrics:
-          - {column: online_medicine_rate, aggregate: AVG}
-          - {column: online_education_rate, aggregate: AVG}
-        groupby: []
-        row_limit: 50
-        width: 6
-        height: 44
-
-      # ── Welfare & Social Protection ────────────────────────────────────────
-      - header: "Welfare & Social Protection"
-
-      - database: analytics
-        table: vw_welfare_summary
-        name: "Welfare Coverage by State"
-        visualization_type: Bar Chart
-        required_columns: [state, ayushman_rate, lpg_subsidy_rate, ration_rate]
-        x_axis: state
-        metrics:
-          - {column: ayushman_rate, aggregate: AVG}
-          - {column: lpg_subsidy_rate, aggregate: AVG}
-          - {column: ration_rate, aggregate: AVG}
-        groupby: []
-        row_limit: 50
-        width: 8
-        height: 44
-
-      - database: analytics
-        table: hh_master
-        name: "Ration Card Coverage"
-        visualization_type: Pie Chart
-        required_columns: [Ration_Card_Type_label, HHID]
-        groupby: [Ration_Card_Type_label]
-        metric: {column: HHID, aggregate: COUNT}
-        width: 4
-        height: 44
-
-      # Grouped bar: x=kpi_name (6 metrics), series=social_group (4 groups)
-      # Shows whether welfare reach is equitable across social groups.
-      - database: analytics
-        table: vw_social_group_kpis_long
-        name: "Welfare Reach by Social Group"
-        visualization_type: Bar Chart
-        required_columns: [social_group, kpi_name, rate]
-        x_axis: kpi_name
-        metrics:
-          - {column: rate, aggregate: AVG}
         groupby: [social_group]
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_household_drill_base
+        name: "Explorer Household Detail Table"
+        viz_type: table
+        required_columns: [hhid, state, district, sector, social_group]
+        all_columns: [hhid, state, district, sector, social_group, religion, income_source, hh_size, avg_edu_years, internet_access, ayushman_beneficiary, lpg_subsidy_received, ration_received, fee_waiver_received, mobile_ownership, car_ownership, cereal_spend, electricity_spend, beverages_spend]
         row_limit: 200
         width: 12
-        height: 44
+        height: 56
 
-      # ── Food Security & Nutrition ──────────────────────────────────────────
-      - header: "Food Security & Nutrition"
+  - title: "LCA Rural Segments Comparison"
+    slug: lca-rural-segments-comparison
+    native_filters:
+      - name: "State"
+        column: state
+        targets: [vw_rural_segment_matrix, vw_rural_segments]
+    charts:
+
+      - header: "Rural Segments Data Grid — Size"
+
+      # Segment Size Column with Pie Charts
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Segment Size Pie"
+        visualization_type: Pie Chart
+        required_columns: [state, segment, size_pct]
+        groupby: [segment]
+        metric: {column: size_pct, aggregate: AVG}
+        width: 2
+        height: 30
 
       - database: analytics
-        table: vw_food_spend_long
-        name: "Average Food Spend by Category"
-        visualization_type: Bar Chart
-        required_columns: [category, spend]
-        x_axis: category
-        metrics:
-          - {column: spend, aggregate: AVG}
-        groupby: []
-        width: 6
-        height: 44
-
-      - database: analytics
-        table: vw_food_spend_heatmap
-        name: "Food Spend Heatmap"
-        visualization_type: Heatmap
-        required_columns: [state, category, avg_spend]
-        x_axis: state
-        groupby: [category]
-        metric: {column: avg_spend, aggregate: AVG}
-        row_limit: 1000
-        width: 6
-        height: 44
-
-      # ── Asset Ownership & Living Standards ────────────────────────────────
-      - header: "Asset Ownership & Living Standards"
-
-      - database: analytics
-        table: vw_asset_possession_long
-        name: "Asset Ownership by Type"
-        visualization_type: Bar Chart
-        required_columns: [asset, owned]
-        x_axis: asset
-        metrics:
-          - {column: owned, aggregate: AVG}
-        groupby: []
-        width: 6
-        height: 44
-
-      - database: analytics
-        table: vw_asset_ownership_heatmap
-        name: "Asset Ownership Heatmap"
-        visualization_type: Heatmap
-        required_columns: [state, asset, ownership_rate]
-        x_axis: state
-        groupby: [asset]
-        metric: {column: ownership_rate, aggregate: AVG}
-        row_limit: 1000
-        width: 6
-        height: 44
-
-      # ── Non-Food Expenditure Patterns ─────────────────────────────────────
-      - header: "Non-Food Expenditure Patterns"
-
-      - database: analytics
-        table: vw_expenditure_long
-        name: "Non-Food Spend by Category"
-        visualization_type: Bar Chart
-        required_columns: [category, avg_spend]
-        x_axis: category
-        metrics:
-          - {column: avg_spend, aggregate: AVG}
-        groupby: []
-        row_limit: 50
-        width: 12
-        height: 44
-
-      # ── Income & Employment Flows ──────────────────────────────────────────
-      - header: "Income & Employment Flows"
-
-      - database: analytics
-        table: vw_income_source_flow
-        name: "Income Source to Sector Flow"
-        visualization_type: Sankey
-        required_columns: [source, target, hh_count]
-        source: source
-        target: target
+        table: vw_rural_segment_matrix
+        name: "RS — HH Count"
+        visualization_type: Big Number
+        required_columns: [state, segment, hh_count]
         metric: {column: hh_count, aggregate: SUM}
+        number_format: ".3s"
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Segment Size Pie"
+        visualization_type: Pie Chart
+        required_columns: [state, segment, size_pct]
+        filters: {segment: "Rural Aspirant"}
+        groupby: [segment]
+        metric: {column: size_pct, aggregate: AVG}
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — HH Count"
+        visualization_type: Big Number
+        required_columns: [state, segment, hh_count]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: hh_count, aggregate: SUM}
+        number_format: ".3s"
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Segment Size Pie"
+        visualization_type: Pie Chart
+        required_columns: [state, segment, size_pct]
+        filters: {segment: "Rural Disconnected"}
+        groupby: [segment]
+        metric: {column: size_pct, aggregate: AVG}
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — HH Count"
+        visualization_type: Big Number
+        required_columns: [state, segment, hh_count]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: hh_count, aggregate: SUM}
+        number_format: ".3s"
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Segment Size Pie"
+        visualization_type: Pie Chart
+        required_columns: [state, segment, size_pct]
+        filters: {segment: "Rural Constrained"}
+        groupby: [segment]
+        metric: {column: size_pct, aggregate: AVG}
+        width: 2
+        height: 30
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — HH Count"
+        visualization_type: Big Number
+        required_columns: [state, segment, hh_count]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: hh_count, aggregate: SUM}
+        number_format: ".3s"
+        width: 2
+        height: 30
+
+      - header: "Rural Stable — Economic & Digital"
+
+      # Rural Stable KPI Row
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Cereal Spend"
+        visualization_type: Big Number
+        required_columns: [state, segment, cereal_spend]
+        filters: {segment: "Rural Stable"}
+        metric: {column: cereal_spend, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Internet %"
+        visualization_type: Big Number
+        required_columns: [state, segment, internet_pct]
+        filters: {segment: "Rural Stable"}
+        metric: {column: internet_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Mobile %"
+        visualization_type: Big Number
+        required_columns: [state, segment, mobile_pct]
+        filters: {segment: "Rural Stable"}
+        metric: {column: mobile_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Education"
+        visualization_type: Big Number
+        required_columns: [state, segment, avg_edu_years]
+        filters: {segment: "Rural Stable"}
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Ayushman %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ayushman_pct]
+        filters: {segment: "Rural Stable"}
+        metric: {column: ayushman_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RS — Car %"
+        visualization_type: Big Number
+        required_columns: [state, segment, car_pct]
+        filters: {segment: "Rural Stable"}
+        metric: {column: car_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - header: "Rural Aspirant — Economic & Digital"
+
+      # Rural Aspirant KPI Row
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Cereal Spend"
+        visualization_type: Big Number
+        required_columns: [state, segment, cereal_spend]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: cereal_spend, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Internet %"
+        visualization_type: Big Number
+        required_columns: [state, segment, internet_pct]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: internet_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Mobile %"
+        visualization_type: Big Number
+        required_columns: [state, segment, mobile_pct]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: mobile_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Education"
+        visualization_type: Big Number
+        required_columns: [state, segment, avg_edu_years]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Ayushman %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ayushman_pct]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: ayushman_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RA — Ration %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ration_pct]
+        filters: {segment: "Rural Aspirant"}
+        metric: {column: ration_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - header: "Rural Disconnected — Economic & Digital"
+
+      # Rural Disconnected KPI Row
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Cereal Spend"
+        visualization_type: Big Number
+        required_columns: [state, segment, cereal_spend]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: cereal_spend, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Internet %"
+        visualization_type: Big Number
+        required_columns: [state, segment, internet_pct]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: internet_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Mobile %"
+        visualization_type: Big Number
+        required_columns: [state, segment, mobile_pct]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: mobile_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Education"
+        visualization_type: Big Number
+        required_columns: [state, segment, avg_edu_years]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Ayushman %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ayushman_pct]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: ayushman_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RD — Large HH %"
+        visualization_type: Big Number
+        required_columns: [state, segment, large_hh_pct]
+        filters: {segment: "Rural Disconnected"}
+        metric: {column: large_hh_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - header: "Rural Constrained — Economic & Digital"
+
+      # Rural Constrained KPI Row
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Cereal Spend"
+        visualization_type: Big Number
+        required_columns: [state, segment, cereal_spend]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: cereal_spend, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Internet %"
+        visualization_type: Big Number
+        required_columns: [state, segment, internet_pct]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: internet_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Mobile %"
+        visualization_type: Big Number
+        required_columns: [state, segment, mobile_pct]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: mobile_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Education"
+        visualization_type: Big Number
+        required_columns: [state, segment, avg_edu_years]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: avg_edu_years, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Ayushman %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ayushman_pct]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: ayushman_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "RC — Ration %"
+        visualization_type: Big Number
+        required_columns: [state, segment, ration_pct]
+        filters: {segment: "Rural Constrained"}
+        metric: {column: ration_pct, aggregate: AVG}
+        width: 2
+        height: 24
+
+      - header: "Segment Comparison Matrix Table"
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "Segment Matrix Table"
+        viz_type: table
+        required_columns: [state, segment, size_pct, hh_count, cereal_spend, internet_pct, mobile_pct, avg_edu_years, ayushman_pct, ration_pct, car_pct, large_hh_pct]
+        all_columns: [segment, size_pct, hh_count, cereal_spend, beverages_spend, internet_pct, mobile_pct, online_grocery_pct, avg_edu_years, large_hh_pct, ayushman_pct, ration_pct, car_pct]
+        row_limit: 20
+        width: 12
+        height: 48
+
+      - header: "Custom Rural Segments Grid (Handlebars)"
+
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "Rural Segments Comparison Grid"
+        viz_type: handlebars
+        required_columns: [state, segment, segment_class, segment_order, size_pct, hh_count, cereal_spend, cereal_spend_pct, internet_pct, mobile_pct, avg_edu_years, edu_pct, no_digital_pct, scst_pct, large_hh_pct, pmgky_pct, ayushman_pct, ration_pct]
+        # Handlebars chart needs all display columns in groupby
+        groupby: [segment]
+        columns:
+          - segment_class
+          - segment_order
+          - size_pct
+          - hh_count
+          - cereal_spend
+          - cereal_spend_pct
+          - internet_pct
+          - mobile_pct
+          - avg_edu_years
+          - edu_pct
+          - no_digital_pct
+          - scst_pct
+          - large_hh_pct
+          - pmgky_pct
+          - ayushman_pct
+          - ration_pct
+        # Add metric for proper aggregation
+        metric: {column: hh_count, aggregate: SUM}
+        row_limit: 100
+        width: 12
+        height: 72
+        handlebars_template: |
+          <div class="rural-segments-dashboard">
+            <div class="main-header">Rural Segments Comparison</div>
+            <div class="category-headers">
+              <div class="cat-header size-header">SIZE</div>
+              <div class="cat-header economic-header">ECONOMIC CONDITION</div>
+              <div class="cat-header digital-header">DIGITAL CONNECTIVITY</div>
+              <div class="cat-header human-header">HUMAN CAPITAL</div>
+              <div class="cat-header welfare-header">WELFARE & VULNERABILITY</div>
+            </div>
+            <div class="sub-headers-row">
+              <div class="sub-col segment-col">Segment</div>
+              <div class="sub-col metric-col">Size (%)</div>
+              <div class="sub-col metric-col">Food<br>spend >50%</div>
+              <div class="sub-col metric-col">Edu<br>spend >5%</div>
+              <div class="sub-col metric-col">High<br>internet use</div>
+              <div class="sub-col metric-col">No digital<br>connect</div>
+              <div class="sub-col metric-col">SC/ST<br>compos.</div>
+              <div class="sub-col metric-col">HH size<br>>5</div>
+              <div class="sub-col metric-col">Has<br>PMGKY</div>
+              <div class="sub-col metric-col">Ayushman<br>card</div>
+              <div class="sub-col metric-col">Ration<br>card</div>
+            </div>
+            {{#each data}}
+            <div class="data-row {{this.segment_class}}">
+              <div class="segment-label">
+                <div class="seg-name">{{this.segment}}</div>
+                <div class="seg-id">R{{this.segment_order}}</div>
+              </div>
+              <div class="size-cell">
+                <div class="mini-pie" style="--pct: {{this.size_pct}};">
+                  <span class="pie-label">{{this.size_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill food-bar" style="width: {{this.cereal_spend_pct}}%;"></div>
+                  <span class="bar-text">{{this.cereal_spend_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill edu-bar" style="width: {{this.edu_pct}}%;"></div>
+                  <span class="bar-text">{{this.edu_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill internet-bar" style="width: {{this.internet_pct}}%;"></div>
+                  <span class="bar-text">{{this.internet_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill no-digital-bar" style="width: {{this.no_digital_pct}}%;"></div>
+                  <span class="bar-text">{{this.no_digital_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-value">{{this.scst_pct}}%</div>
+              <div class="metric-bar-cell">
+                <div class="bar-bg">
+                  <div class="bar-fill hhsize-bar" style="width: {{this.large_hh_pct}}%;"></div>
+                  <span class="bar-text">{{this.large_hh_pct}}%</span>
+                </div>
+              </div>
+              <div class="metric-value welfare-val">{{this.pmgky_pct}}%</div>
+              <div class="metric-value welfare-val">{{this.ayushman_pct}}%</div>
+              <div class="metric-value welfare-val">{{this.ration_pct}}%</div>
+            </div>
+            {{/each}}
+          </div>
+        css_styles: |
+          .rural-segments-dashboard {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(180deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          }
+          .main-header {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 4px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e9ecef;
+          }
+          .category-headers {
+            display: grid;
+            grid-template-columns: 120px 80px 240px 160px 120px 200px;
+            gap: 2px;
+            margin-bottom: 2px;
+          }
+          .cat-header {
+            padding: 10px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            text-align: center;
+            color: white;
+            border-radius: 4px 4px 0 0;
+          }
+          .size-header { background: #6c757d; }
+          .economic-header { background: #0d6efd; }
+          .digital-header { background: #198754; }
+          .human-header { background: #6f42c1; }
+          .welfare-header { background: #fd7e14; }
+          .sub-headers-row {
+            display: grid;
+            grid-template-columns: 120px 80px repeat(9, 1fr);
+            gap: 4px;
+            padding: 8px 4px;
+            background: #f1f3f4;
+            border-radius: 0 0 4px 4px;
+            margin-bottom: 8px;
+          }
+          .sub-col {
+            font-size: 9px;
+            font-weight: 600;
+            color: #495057;
+            text-align: center;
+            line-height: 1.3;
+          }
+          .segment-col {
+            text-align: left;
+            padding-left: 8px;
+          }
+          .data-row {
+            display: grid;
+            grid-template-columns: 120px 80px repeat(9, 1fr);
+            gap: 4px;
+            padding: 12px 4px;
+            border-bottom: 1px solid #e9ecef;
+            align-items: center;
+          }
+          .data-row:last-child {
+            border-bottom: none;
+          }
+          .segment-label {
+            padding-left: 8px;
+          }
+          .seg-name {
+            font-weight: 700;
+            font-size: 13px;
+            color: #212529;
+          }
+          .seg-id {
+            font-size: 10px;
+            color: #6c757d;
+            margin-top: 2px;
+          }
+          .size-cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          }
+          .mini-pie {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #ff6b6b calc(var(--pct) * 3.6deg), #e9ecef 0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+          }
+          .mini-pie::before {
+            content: '';
+            width: 28px;
+            height: 28px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+          }
+          .pie-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: #212529;
+            position: relative;
+            z-index: 1;
+          }
+          .metric-bar-cell {
+            display: flex;
+            justify-content: center;
+          }
+          .bar-bg {
+            width: 100%;
+            max-width: 60px;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .bar-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            border-radius: 10px;
+          }
+          .food-bar { background: linear-gradient(90deg, #0d6efd, #4dabf7); }
+          .edu-bar { background: linear-gradient(90deg, #0d6efd, #74c0fc); }
+          .internet-bar { background: linear-gradient(90deg, #198754, #40c057); }
+          .no-digital-bar { background: linear-gradient(90deg, #495057, #adb5bd); }
+          .hhsize-bar { background: linear-gradient(90deg, #6f42c1, #9775fa); }
+          .bar-text {
+            position: relative;
+            z-index: 1;
+            font-size: 10px;
+            font-weight: 700;
+            color: #212529;
+          }
+          .metric-value {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #495057;
+          }
+          .welfare-val {
+            color: #e8590c;
+          }
+          .rural-stable .seg-name { color: #495057; }
+          .rural-aspirant .seg-name { color: #fd7e14; }
+          .rural-disconnected .seg-name { color: #6f42c1; }
+          .rural-constrained .seg-name { color: #212529; }
+
+      - header: "Drill Down — Individual Households by Segment"
+
+      - database: analytics
+        table: vw_rural_segments
+        name: "Households by Segment Detail"
+        viz_type: table
+        required_columns: [hhid, segment, state, district, sector, social_group]
+        all_columns: [hhid, segment, state, district, sector, social_group, hh_size, avg_edu_years, internet_access, mobile_ownership, car_ownership, online_grocery, ayushman_beneficiary, ration_received, cereal_spend]
+        row_limit: 100
         width: 12
         height: 56

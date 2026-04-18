@@ -9,6 +9,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 import yaml
+from sqlalchemy.exc import NoSuchTableError
 
 from superset.app import create_app
 
@@ -57,6 +58,8 @@ SUPPORTED_VIZ_TYPES = {
     "treemap_v2",
     "sunburst_v2",
     "sankey_v2",
+    "table",
+    "handlebars",
     "mapbox",
     "deck_scatter",
     "deck_heatmap",
@@ -170,6 +173,8 @@ def build_params(spec: dict) -> dict:
         "comparison_type",
         "source",
         "target",
+        "handlebars_template",
+        "css_styles",
     ):
         if key in spec:
             params[key] = spec[key]
@@ -308,6 +313,14 @@ def validate_chart_spec(spec: dict) -> str:
         if "line_column" not in spec:
             raise RuntimeError(f"Chart '{chart_name}' must define 'line_column' for deck_polygon.")
 
+    if canonical_viz_type == "handlebars":
+        if not spec.get("groupby") and not spec.get("columns"):
+            raise RuntimeError(
+                f"Chart '{chart_name}' must define 'groupby' or 'columns' for handlebars charts."
+            )
+        if "handlebars_template" not in spec:
+            raise RuntimeError(f"Chart '{chart_name}' must define 'handlebars_template'.")
+
     return canonical_viz_type
 
 
@@ -349,19 +362,17 @@ def build_position_json(items: list[dict]) -> str:
     """Build dashboard position JSON from a list of layout items.
 
     Items are either charts ({"slice": Slice, "width": int, "height": int})
-    or layout headers ({"header": "<text>"}). Headers force a row break and
-    render as a full-width HEADER component; charts pack into 12-col rows.
+    or layout headers ({"header": "<text>"}). Headers force a row break;
+    charts pack into 12-col rows.
     """
     grid_children: list[str] = []
     row_nodes: dict = {}
     chart_nodes: dict = {}
-    header_nodes: dict = {}
 
     current_row_index = 0
     current_row_id: str | None = None
     current_row_width = 0
     chart_counter = 0
-    header_counter = 0
 
     def open_row() -> str:
         nonlocal current_row_index, current_row_id, current_row_width
@@ -380,23 +391,10 @@ def build_position_json(items: list[dict]) -> str:
 
     for item in items:
         if "header" in item:
-            # Headers always sit on their own line; close the open row first.
+            # Headers act as row breaks only; omit custom header nodes because
+            # Superset layout rendering is sensitive to component schema.
             current_row_id = None
             current_row_width = 0
-            header_counter += 1
-            header_id = f"HEADER-{header_counter}"
-            grid_children.append(header_id)
-            header_nodes[header_id] = {
-                "id": header_id,
-                "type": "HEADER",
-                "children": [],
-                "parents": ["ROOT_ID", "GRID_ID"],
-                "meta": {
-                    "text": item["header"],
-                    "headerSize": item.get("header_size", "MEDIUM_HEADER"),
-                    "background": "BACKGROUND_TRANSPARENT",
-                },
-            }
             continue
 
         chart = item["slice"]
@@ -436,7 +434,6 @@ def build_position_json(items: list[dict]) -> str:
         },
         **row_nodes,
         **chart_nodes,
-        **header_nodes,
     }
     return json.dumps(layout)
 
@@ -554,12 +551,20 @@ def main() -> None:
                     # Layout-only HEADER component, not a chart.
                     items.append({"header": chart_spec["header"], "header_size": chart_spec.get("header_size", "MEDIUM_HEADER")})
                     continue
-                canonical_viz_type = validate_chart_spec(chart_spec)
-                table = get_table(chart_spec["database"], chart_spec["table"])
-                if required := chart_spec.get("required_columns"):
-                    ensure_columns(table, required)
-                params = build_params(chart_spec)
-                chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
+                try:
+                    canonical_viz_type = validate_chart_spec(chart_spec)
+                    table = get_table(chart_spec["database"], chart_spec["table"])
+                    if required := chart_spec.get("required_columns"):
+                        ensure_columns(table, required)
+                    params = build_params(chart_spec)
+                    chart = upsert_chart(chart_spec["name"], canonical_viz_type, table, params)
+                except (RuntimeError, NoSuchTableError) as ex:
+                    print(
+                        f"[seed-dashboard] Skipping chart '{chart_spec.get('name', '<unnamed>')}' "
+                        f"for dataset '{chart_spec.get('database', '<unknown>')}.{chart_spec.get('table', '<unknown>')}' "
+                        f"because: {ex}"
+                    )
+                    continue
                 items.append(
                     {
                         "slice": chart,

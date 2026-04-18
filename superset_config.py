@@ -77,6 +77,16 @@ FEATURE_FLAGS = {
     "ENABLE_TEMPLATE_PROCESSING": True,
 }
 
+# ── HTML Sanitization for Handlebars Charts ─────────────────────────────────────
+# Allow custom HTML/CSS in Handlebars chart templates
+HTML_SANITIZATION = True
+HTML_SANITIZATION_SCHEMA_EXTENSIONS = {
+    "attributes": {
+        "*": ["class", "className", "style", "id", "data-*"],
+    },
+    "tagNames": ["style", "div", "span", "table", "tr", "td", "th", "thead", "tbody"],
+}
+
 MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY", "")
 
 # ── Other settings ────────────────────────────────────────────────────────────
