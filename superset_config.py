@@ -113,6 +113,7 @@ APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg"
 THEME_DEFAULT = {
     "algorithm": "default",
     "token": {
+        "brandAppName": APP_NAME,
         "brandLogoUrl": APP_ICON,
         "brandLogoAlt": APP_NAME,
         "brandLogoHref": "/",
@@ -121,6 +122,7 @@ THEME_DEFAULT = {
 THEME_DARK = {
     "algorithm": "dark",
     "token": {
+        "brandAppName": APP_NAME,
         "brandLogoUrl": APP_ICON,
         "brandLogoAlt": APP_NAME,
         "brandLogoHref": "/",
