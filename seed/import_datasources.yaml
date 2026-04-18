@@ -36,3 +36,7 @@ databases:
       - table_name: vw_state_segment_summary
       - table_name: vw_state_segment_long
       - table_name: vw_district_segment_pie
+      - table_name: vw_segment_minor_structure
+      - table_name: vw_sector_minor_mean
+      - table_name: vw_sector_minor_mean_rural
+      - table_name: vw_sector_minor_mean_urban
