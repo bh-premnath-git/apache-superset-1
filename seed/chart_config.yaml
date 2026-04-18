@@ -596,6 +596,10 @@ dashboards:
           .rsc-b-econ { background: #2563eb; }
           .rsc-b-dig  { background: #059669; }
           .rsc-b-grey { background: #94a3b8; }
+          .rsc-b-size { background: #64748b; }
+          .rsc-b-econ { background: #2563eb; }
+          .rsc-b-dig  { background: #059669; }
+          .rsc-b-grey { background: #94a3b8; }
           .rsc-b-hum  { background: #6d28d9; }
           .rsc-b-wel  { background: #92400e; }
           </style>
