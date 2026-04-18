@@ -83,8 +83,25 @@ HTML_SANITIZATION = True
 HTML_SANITIZATION_SCHEMA_EXTENSIONS = {
     "attributes": {
         "*": ["class", "className", "style", "id", "data-*"],
+        "svg": ["xmlns", "viewBox", "width", "height", "class", "style"],
+        "circle": ["cx", "cy", "r", "fill", "stroke", "strokeWidth", "stroke-width",
+                   "strokeDasharray", "stroke-dasharray", "pathLength", "transform",
+                   "class", "style"],
+        "path": ["d", "fill", "stroke", "strokeWidth", "stroke-width", "transform",
+                 "class", "style"],
+        "g":    ["transform", "class", "style"],
+        "rect": ["x", "y", "width", "height", "rx", "ry", "fill", "stroke",
+                 "strokeWidth", "stroke-width", "class", "style"],
+        "line": ["x1", "y1", "x2", "y2", "stroke", "strokeWidth", "stroke-width",
+                 "class", "style"],
+        "text": ["x", "y", "dx", "dy", "textAnchor", "text-anchor", "fill",
+                 "fontSize", "font-size", "class", "style"],
     },
-    "tagNames": ["style", "div", "span", "table", "tr", "td", "th", "thead", "tbody"],
+    "tagNames": [
+        "style", "div", "span", "table", "tr", "td", "th", "thead", "tbody",
+        "svg", "circle", "path", "g", "rect", "line", "text", "polyline", "polygon",
+        "ellipse",
+    ],
 }
 
 MAPBOX_API_KEY = os.getenv("MAPBOX_API_KEY", "")
