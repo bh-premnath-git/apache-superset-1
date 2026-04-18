@@ -82,6 +82,24 @@
 #   header in the dashboard. Headers don't have charts; they break the current
 #   row and start a fresh one underneath.
 
+# ── Reusable Handlebars template anchors ──────────────────────────────────────
+# The seeder ignores this top-level key; PyYAML resolves anchors before Python
+# sees the data, so *pct_kpi_tpl can be referenced anywhere below.
+_templates:
+  pct_kpi: &pct_kpi_tpl |
+    <style>
+    .kpi-pw{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:8px 12px}
+    .kpi-pn{font-size:28px;font-weight:700;color:#1e293b;line-height:1}
+    .kpi-pb{width:100%;height:6px;background:#e2e8f0;border-radius:3px;margin-top:10px;overflow:hidden}
+    .kpi-pf{height:100%;border-radius:3px;background:#2563eb}
+    </style>
+    {{#each data}}
+    <div class="kpi-pw">
+      <div class="kpi-pn">{{this.value}}%</div>
+      <div class="kpi-pb"><div class="kpi-pf" style="width:{{this.value}}%"></div></div>
+    </div>
+    {{/each}}
+
 dashboards:
 
   - title: "LCA Overview Dashboard"
@@ -497,20 +515,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RS — Internet %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, internet_pct]
         filters: {segment: "Rural Stable"}
-        metric: {column: internet_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: internet_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RS — Mobile %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, mobile_pct]
         filters: {segment: "Rural Stable"}
-        metric: {column: mobile_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: mobile_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -527,20 +549,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RS — Ayushman %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ayushman_pct]
         filters: {segment: "Rural Stable"}
-        metric: {column: ayushman_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ayushman_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RS — Car %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, car_pct]
         filters: {segment: "Rural Stable"}
-        metric: {column: car_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: car_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -560,20 +586,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RA — Internet %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, internet_pct]
         filters: {segment: "Rural Aspirant"}
-        metric: {column: internet_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: internet_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RA — Mobile %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, mobile_pct]
         filters: {segment: "Rural Aspirant"}
-        metric: {column: mobile_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: mobile_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -590,20 +620,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RA — Ayushman %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ayushman_pct]
         filters: {segment: "Rural Aspirant"}
-        metric: {column: ayushman_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ayushman_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RA — Ration %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ration_pct]
         filters: {segment: "Rural Aspirant"}
-        metric: {column: ration_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ration_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -623,20 +657,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RD — Internet %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, internet_pct]
         filters: {segment: "Rural Disconnected"}
-        metric: {column: internet_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: internet_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RD — Mobile %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, mobile_pct]
         filters: {segment: "Rural Disconnected"}
-        metric: {column: mobile_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: mobile_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -653,20 +691,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RD — Ayushman %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ayushman_pct]
         filters: {segment: "Rural Disconnected"}
-        metric: {column: ayushman_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ayushman_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RD — Large HH %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, large_hh_pct]
         filters: {segment: "Rural Disconnected"}
-        metric: {column: large_hh_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: large_hh_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -686,20 +728,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RC — Internet %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, internet_pct]
         filters: {segment: "Rural Constrained"}
-        metric: {column: internet_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: internet_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RC — Mobile %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, mobile_pct]
         filters: {segment: "Rural Constrained"}
-        metric: {column: mobile_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: mobile_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
@@ -716,20 +762,24 @@ dashboards:
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RC — Ayushman %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ayushman_pct]
         filters: {segment: "Rural Constrained"}
-        metric: {column: ayushman_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ayushman_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
       - database: analytics
         table: vw_rural_segment_matrix
         name: "RC — Ration %"
-        visualization_type: Big Number
+        viz_type: handlebars
         required_columns: [state, segment, ration_pct]
         filters: {segment: "Rural Constrained"}
-        metric: {column: ration_pct, aggregate: AVG}
+        groupby: [segment]
+        metric: {column: ration_pct, aggregate: AVG, label: value}
+        handlebars_template: *pct_kpi_tpl
         width: 2
         height: 24
 
