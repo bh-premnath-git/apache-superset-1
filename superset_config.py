@@ -75,6 +75,7 @@ FEATURE_FLAGS = {
     "DASHBOARD_NATIVE_FILTERS": True,
     "DASHBOARD_CROSS_FILTERS": True,
     "ENABLE_TEMPLATE_PROCESSING": True,
+    "ESCAPE_MARKDOWN_HTML": False,
 }
 
 # ── HTML Sanitization for Handlebars Charts ─────────────────────────────────────
