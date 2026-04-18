@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import uuid
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from superset.models.slice import Slice
 
 CHART_CONFIG_PATH = os.environ.get("CHART_CONFIG_PATH", "/app/seed/chart_config.yaml")
+CHART_CONFIG_GLOB = os.environ.get("CHART_CONFIG_GLOB", "/app/seed/charts/*.yaml")
 VISUALIZATION_TYPE_MAP = {
     "Bar Chart": "echarts_timeseries_bar",
     "Line Chart": "echarts_timeseries_line",
@@ -531,13 +533,42 @@ def upsert_dashboard(title: str, slug: str, items: list[dict], native_filters: l
     print(f"[seed-dashboard] Created dashboard: {title}")
 
 
+def load_dashboard_config() -> dict:
+    config: dict = {"dashboards": []}
+
+    if os.path.exists(CHART_CONFIG_PATH):
+        with open(CHART_CONFIG_PATH) as f:
+            root_config = yaml.safe_load(f) or {}
+        if not isinstance(root_config, dict):
+            raise RuntimeError(f"Dashboard config at {CHART_CONFIG_PATH} must be a YAML mapping.")
+        for key, value in root_config.items():
+            if key == "dashboards":
+                config["dashboards"].extend(value or [])
+            else:
+                config[key] = value
+
+    for extra_path in sorted(glob.glob(CHART_CONFIG_GLOB)):
+        with open(extra_path) as f:
+            extra_config = yaml.safe_load(f) or {}
+        if not isinstance(extra_config, dict):
+            raise RuntimeError(f"Dashboard config at {extra_path} must be a YAML mapping.")
+        extra_dashboards = extra_config.get("dashboards", [])
+        if extra_dashboards and not isinstance(extra_dashboards, list):
+            raise RuntimeError(f"Key 'dashboards' in {extra_path} must be a YAML list.")
+        config["dashboards"].extend(extra_dashboards)
+
+    return config
+
+
 def main() -> None:
-    if not os.path.exists(CHART_CONFIG_PATH):
-        print(f"[seed-dashboard] Config not found at {CHART_CONFIG_PATH}, skipping.")
+    if not os.path.exists(CHART_CONFIG_PATH) and not glob.glob(CHART_CONFIG_GLOB):
+        print(
+            f"[seed-dashboard] Config not found at {CHART_CONFIG_PATH} "
+            f"and no chart files matched {CHART_CONFIG_GLOB}, skipping."
+        )
         return
 
-    with open(CHART_CONFIG_PATH) as f:
-        config = yaml.safe_load(f)
+    config = load_dashboard_config()
 
     app = create_app()
     with app.app_context():

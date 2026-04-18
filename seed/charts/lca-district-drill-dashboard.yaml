@@ -1,0 +1,81 @@
+dashboards:
+  - title: "LCA District Drill Dashboard"
+    slug: lca-district-drill-dashboard
+    native_filters:
+      - name: "State ISO"
+        column: iso_code
+        targets: [vw_district_summary, vw_district_sector_drill, vw_district_social_group_drill]
+      - name: "District"
+        column: district
+        targets: [vw_district_summary, vw_district_sector_drill, vw_district_social_group_drill]
+    charts:
+      - database: analytics
+        table: vw_district_summary
+        name: "District Drill Breakdown"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, district, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: []
+        cross_filter_source: true
+        row_limit: 100
+        width: 12
+        height: 48
+
+      - database: analytics
+        table: vw_district_sector_drill
+        name: "District Drill by Sector"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, district, sector, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: [sector]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_district_social_group_drill
+        name: "District Drill by Social Group"
+        visualization_type: Bar Chart
+        required_columns: [iso_code, district, social_group, hh_count]
+        x_axis: district
+        metrics:
+          - {column: hh_count, aggregate: SUM}
+        groupby: [social_group]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_district_sector_drill
+        name: "District Internet Access by Sector"
+        visualization_type: Bar Chart
+        required_columns: [district, sector, internet_rate]
+        x_axis: district
+        metrics:
+          - {column: internet_rate, aggregate: AVG}
+        groupby: [sector]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44
+
+      - database: analytics
+        table: vw_district_social_group_drill
+        name: "District Welfare by Social Group"
+        visualization_type: Bar Chart
+        required_columns: [district, social_group, ayushman_rate]
+        x_axis: district
+        metrics:
+          - {column: ayushman_rate, aggregate: AVG}
+          - {column: ration_rate, aggregate: AVG}
+        groupby: [social_group]
+        cross_filter_target: "District Drill Breakdown"
+        row_limit: 150
+        width: 6
+        height: 44

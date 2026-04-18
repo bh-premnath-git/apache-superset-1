@@ -1,0 +1,372 @@
+dashboards:
+  - title: "LCA Rural Segments Comparison"
+    slug: lca-rural-segments-comparison
+    native_filters:
+      - name: "State"
+        column: state
+        targets: [vw_rural_segment_matrix, vw_rural_segments]
+      - name: "Segment"
+        column: segment
+        targets: [vw_rural_segment_matrix]
+        multi_select: true
+    charts:
+      - database: analytics
+        table: vw_rural_segment_matrix
+        name: "Rural Segments comparison"
+        viz_type: handlebars
+        required_columns: [state, segment, segment_class, segment_order, size_pct, hh_count, cereal_spend_pct, edu_pct, mcpe_inr, internet_pct, high_online_pct, no_digital_pct, scst_pct, uhs_minor_pct, large_hh_pct, pmgky_pct, ayushman_pct, ration_pct]
+        groupby: [segment]
+        columns:
+          - segment_class
+          - segment_order
+          - size_pct
+          - hh_count
+          - cereal_spend_pct
+          - edu_pct
+          - mcpe_inr
+          - internet_pct
+          - high_online_pct
+          - no_digital_pct
+          - scst_pct
+          - uhs_minor_pct
+          - large_hh_pct
+          - pmgky_pct
+          - ayushman_pct
+          - ration_pct
+        metric: {column: hh_count, aggregate: SUM}
+        emit_filter: true
+        cross_filter_source: true
+        row_limit: 1000
+        width: 12
+        height: 72
+        handlebars_template: |
+          <style>
+          .rsc-wrap {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #fff;
+            overflow: auto;
+          }
+          .rsc-body {
+            padding: 0 4px 8px;
+          }
+          .rsc-cat-row,
+          .rsc-sub-row,
+          .rsc-row {
+            display: grid;
+            grid-template-columns: 140px 68px repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr));
+            align-items: center;
+          }
+          .rsc-cat-row {
+            margin-top: 6px;
+          }
+          .rsc-cat-row > div:first-child {
+            grid-column: span 1;
+          }
+          .rsc-cat {
+            padding: 7px 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #fff;
+            text-align: center;
+            border-radius: 3px 3px 0 0;
+            grid-column: span 3;
+            margin: 0 1px;
+          }
+          .rsc-cat-size {
+            grid-column: span 1;
+            background: #475569;
+          }
+          .rsc-cat-econ { background: #1d4ed8; }
+          .rsc-cat-dig  { background: #047857; }
+          .rsc-cat-hum  { background: #5b21b6; }
+          .rsc-cat-wel  { background: #92400e; }
+          .rsc-sub-row {
+            background: #f1f5f9;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 2px solid #cbd5e1;
+            margin-bottom: 2px;
+          }
+          .rsc-sub {
+            padding: 5px 3px;
+            font-size: 8.5px;
+            font-weight: 600;
+            color: #475569;
+            text-align: center;
+            line-height: 1.3;
+          }
+          .rsc-sub-lbl {
+            text-align: left;
+            padding-left: 10px;
+          }
+          .rsc-row {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 10px 0;
+            min-height: 64px;
+          }
+          .rsc-row:last-child {
+            border-bottom: none;
+          }
+          .rsc-seg {
+            padding-left: 10px;
+          }
+          .rsc-seg-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            line-height: 1.2;
+          }
+          .rsc-seg-id {
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 2px;
+          }
+          .rural-aspirant .rsc-seg-name    { color: #f97316; }
+          .rural-disconnected .rsc-seg-name { color: #ea580c; }
+          .rural-constrained .rsc-seg-name  { color: #7c3aed; }
+          .rsc-mc {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2px 3px;
+            gap: 5px;
+          }
+          .rsc-v {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            white-space: nowrap;
+          }
+          .rsc-inr {
+            font-size: 12px;
+          }
+          .rsc-wel {
+            color: #92400e;
+          }
+          .rsc-bw {
+            width: 44px;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+          }
+          .rsc-b {
+            height: 100%;
+            border-radius: 2px;
+          }
+          .rsc-b-size { background: #64748b; }
+          .rsc-b-econ { background: #2563eb; }
+          .rsc-b-dig  { background: #059669; }
+          .rsc-b-grey { background: #94a3b8; }
+          .rsc-b-hum  { background: #6d28d9; }
+          .rsc-b-wel  { background: #92400e; }
+          </style>
+          <div class="rsc-wrap">
+            <div class="rsc-body">
+              <div class="rsc-cat-row">
+                <div></div>
+                <div class="rsc-cat rsc-cat-size">SIZE</div>
+                <div class="rsc-cat rsc-cat-econ">ECONOMIC CONDITION</div>
+                <div class="rsc-cat rsc-cat-dig">DIGITAL CONNECTIVITY</div>
+                <div class="rsc-cat rsc-cat-hum">HUMAN CAPITAL</div>
+                <div class="rsc-cat rsc-cat-wel">WELFARE &amp; VULNERABILITY</div>
+              </div>
+              <div class="rsc-sub-row">
+                <div class="rsc-sub rsc-sub-lbl">Segment</div>
+                <div class="rsc-sub">Size (%)</div>
+                <div class="rsc-sub">Food<br>spend &gt;50%</div>
+                <div class="rsc-sub">Edu<br>spend &gt;5%</div>
+                <div class="rsc-sub">MCPE<br>(INR)</div>
+                <div class="rsc-sub">Family<br>internet use</div>
+                <div class="rsc-sub">High online<br>connect.</div>
+                <div class="rsc-sub">No digital<br>purchase</div>
+                <div class="rsc-sub">SC-ST<br>compos.</div>
+                <div class="rsc-sub">UHS minors<br>&gt;3</div>
+                <div class="rsc-sub">HH size<br>&gt;6</div>
+                <div class="rsc-sub">Has<br>PMGKY</div>
+                <div class="rsc-sub">Ayushman<br>card</div>
+                <div class="rsc-sub">Ration<br>card</div>
+              </div>
+              {{#each data}}
+              <div class="rsc-row {{segment_class}}">
+                <div class="rsc-seg">
+                  <div class="rsc-seg-name">{{segment}}</div>
+                  <div class="rsc-seg-id">R{{segment_order}}</div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{size_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-size" style="width:{{size_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{cereal_spend_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-econ" style="width:{{cereal_spend_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{edu_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-econ" style="width:{{edu_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v rsc-inr">&#8377;{{mcpe_inr}}</div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{internet_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-dig" style="width:{{internet_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{high_online_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-dig" style="width:{{high_online_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{no_digital_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-grey" style="width:{{no_digital_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{scst_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-hum" style="width:{{scst_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{uhs_minor_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-hum" style="width:{{uhs_minor_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{large_hh_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-hum" style="width:{{large_hh_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v rsc-wel">{{pmgky_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-wel" style="width:{{pmgky_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v rsc-wel">{{ayushman_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-wel" style="width:{{ayushman_pct}}%"></div></div>
+                </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v rsc-wel">{{ration_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-wel" style="width:{{ration_pct}}%"></div></div>
+                </div>
+              </div>
+              {{/each}}
+            </div>
+          </div>
+        css_styles: |
+          .rsc-wrap {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #fff;
+            overflow: auto;
+          }
+          .rsc-body {
+            padding: 0 4px 8px;
+          }
+          .rsc-cat-row,
+          .rsc-sub-row,
+          .rsc-row {
+            display: grid;
+            grid-template-columns: 140px 68px repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr)) repeat(3, minmax(52px,1fr));
+            align-items: center;
+          }
+          .rsc-cat-row {
+            margin-top: 6px;
+          }
+          .rsc-cat-row > div:first-child {
+            grid-column: span 1;
+          }
+          .rsc-cat {
+            padding: 7px 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #fff;
+            text-align: center;
+            border-radius: 3px 3px 0 0;
+            grid-column: span 3;
+            margin: 0 1px;
+          }
+          .rsc-cat-size {
+            grid-column: span 1;
+            background: #475569;
+          }
+          .rsc-cat-econ { background: #1d4ed8; }
+          .rsc-cat-dig  { background: #047857; }
+          .rsc-cat-hum  { background: #5b21b6; }
+          .rsc-cat-wel  { background: #92400e; }
+          .rsc-sub-row {
+            background: #f1f5f9;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 2px solid #cbd5e1;
+            margin-bottom: 2px;
+          }
+          .rsc-sub {
+            padding: 5px 3px;
+            font-size: 8.5px;
+            font-weight: 600;
+            color: #475569;
+            text-align: center;
+            line-height: 1.3;
+          }
+          .rsc-sub-lbl {
+            text-align: left;
+            padding-left: 10px;
+          }
+          .rsc-row {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 10px 0;
+            min-height: 64px;
+          }
+          .rsc-row:last-child {
+            border-bottom: none;
+          }
+          .rsc-seg {
+            padding-left: 10px;
+          }
+          .rsc-seg-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            line-height: 1.2;
+          }
+          .rsc-seg-id {
+            font-size: 10px;
+            color: #94a3b8;
+            margin-top: 2px;
+          }
+          .rural-aspirant .rsc-seg-name    { color: #f97316; }
+          .rural-disconnected .rsc-seg-name { color: #ea580c; }
+          .rural-constrained .rsc-seg-name  { color: #7c3aed; }
+          .rsc-mc {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2px 3px;
+            gap: 5px;
+          }
+          .rsc-v {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+            white-space: nowrap;
+          }
+          .rsc-inr {
+            font-size: 12px;
+          }
+          .rsc-wel {
+            color: #92400e;
+          }
+          .rsc-bw {
+            width: 44px;
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            overflow: hidden;
+          }
+          .rsc-b {
+            height: 100%;
+            border-radius: 2px;
+          }
+          .rsc-b-size { background: #64748b; }
+          .rsc-b-econ { background: #2563eb; }
+          .rsc-b-dig  { background: #059669; }
+          .rsc-b-grey { background: #94a3b8; }
+          .rsc-b-hum  { background: #6d28d9; }
+          .rsc-b-wel  { background: #92400e; }
