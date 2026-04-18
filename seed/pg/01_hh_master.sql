@@ -1437,15 +1437,6 @@ SELECT
     rs.segment,
     COUNT(rs.hhid) AS hh_count,
     ROUND(COUNT(rs.hhid) * 100.0 / SUM(COUNT(rs.hhid)) OVER (PARTITION BY rs.state), 1) AS size_pct,
-    -- Pre-computed stroke-dashoffset for SVG progress ring (radius 15 → circumference ≈ 94.25).
-    -- offset = circumference * (1 - percent/100) = circumference - (percent/100) * circumference
-    COALESCE(
-        ROUND(
-            (2 * PI() * 15 * (1 - COUNT(rs.hhid) * 1.0 / SUM(COUNT(rs.hhid)) OVER (PARTITION BY rs.state)))::NUMERIC,
-            2
-        ),
-        94.25
-    ) AS size_offset,
     -- Economic Condition
     ROUND(AVG(rs.cereal_spend)::NUMERIC, 0) AS cereal_spend,
     ROUND(AVG(rs.cereal_spend) / NULLIF(sm.max_cereal_spend, 0) * 100, 1) AS cereal_spend_pct,

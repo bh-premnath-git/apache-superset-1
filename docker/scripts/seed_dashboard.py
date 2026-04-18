@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Config-driven dashboard seeder — reads seed/chart_config.yaml; no code changes needed for new tables."""
+"""Config-driven dashboard seeder.
+
+Loads shared config from ``seed/chart_config.yaml`` and per-dashboard specs from
+``seed/charts/*.yaml`` so dashboards can be maintained as smaller YAML files.
+"""
 
 from __future__ import annotations
 

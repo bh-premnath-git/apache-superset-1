@@ -51,7 +51,7 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 1. **DB migrations** (`superset db upgrade`)
 2. **Admin user** creation
 3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.hh_master` in the Superset UI
-4. **Dashboard seeding** from `seed/chart_config.yaml` — creates the LCA Dashboard
+4. **Dashboard seeding** from `seed/chart_config.yaml` and `seed/charts/*.yaml` — creates the seeded LCA dashboards
 
 ### Seeded databases, tables and views
 
@@ -59,15 +59,16 @@ Open **http://localhost:8088** and log in with the credentials in `.env`
 |----------------|---------------|-------------------------------------|-------|---------|
 | `analytics`    | Postgres      | `hh_master`                         | table | ~261 953 |
 
-### LCA Dashboard (3 charts)
+### Seeded dashboards
 
-| Chart                             | Type              | Source                                |
-|-----------------------------------|-------------------|---------------------------------------|
-| Households by State               | Bar chart         | analytics.hh_master                   |
-| Households by Sector              | Pie chart         | analytics.hh_master                   |
-| Total Households                  | Big number        | analytics.hh_master                   |
+| Dashboard | Slug | Notes |
+|-----------|------|-------|
+| `LCA Overview Dashboard` | `lca-overview-dashboard` | Country-level KPIs, India choropleth, and selected-state drill-down |
+| `LCA District Drill Dashboard` | `lca-district-drill-dashboard` | District-level drill analysis with cross-filtered breakdowns |
+| `LCA Household & Segment Explorer` | `lca-household-segment-explorer` | Household KPIs, heatmap, and detail table |
+| `LCA Rural Segments Comparison` | `lca-rural-segments-comparison` | Handlebars comparison grid for rural segment KPIs |
 
-In the current image build, `chart_config.yaml` can use the verified
+In the current image build, chart YAML can use the verified
 `visualization_type` labels wired into the Python seeder, including
 `Bar Chart`, `Line Chart`, `Pie Chart`, `World Map`, `Country Map`,
 `Big Number`, `Big Number with Trendline`, `Histogram`, `Heatmap`,
@@ -100,7 +101,7 @@ analytics.hh_master
 seed/import_datasources.yaml
         │
         ▼
-seed/chart_config.yaml
+seed/chart_config.yaml + seed/charts/*.yaml
         │
         ▼
 docker/scripts/seed_dashboard.py
@@ -109,6 +110,9 @@ docker/scripts/seed_dashboard.py
 The SQL seed script loads the CSV into `analytics.hh_master` while preserving
 the source column names from the extract, including mixed case and headers with
 spaces, so the imported table mirrors the raw dataset faithfully.
+
+`seed/chart_config.yaml` is now the shared base config, and each dashboard lives
+in its own file under `seed/charts/`.
 
 ---
 
@@ -171,17 +175,26 @@ Superset treats views exactly like tables — no special flag needed.
 ### Adding a chart
 
 Point it at the seeded table or view you registered in `import_datasources.yaml`.
+Add the chart under the appropriate dashboard file in `seed/charts/`.
+
+If you are creating a brand new dashboard, add a new YAML file in `seed/charts/`
+with a `dashboards:` list and keep `seed/chart_config.yaml` for shared base config
+and reusable anchors only.
 
 ```yaml
-- database: analytics
-  table: my_new_table_summary
-  name: "Weighted Value by Category"
-  visualization_type: Bar Chart     # see chart_config.yaml header for all types
-  required_columns: [category, weighted_value]
-  x_axis: category
-  metrics:
-    - {column: weighted_value, aggregate: SUM}
-  groupby: []
+dashboards:
+  - title: "My Dashboard"
+    slug: my-dashboard
+    charts:
+      - database: analytics
+        table: my_new_table_summary
+        name: "Weighted Value by Category"
+        visualization_type: Bar Chart
+        required_columns: [category, weighted_value]
+        x_axis: category
+        metrics:
+          - {column: weighted_value, aggregate: SUM}
+        groupby: []
 ```
 
 Then rebuild and wipe volumes to re-run init:
@@ -193,7 +206,7 @@ docker compose up -d --build
 
 ### Supported `visualization_type` values
 
-These are the human-facing visualization labels used in `chart_config.yaml`.
+These are the human-facing visualization labels used in the dashboard YAML files.
 The Python seeder maps them to the internal keys required by the Superset API.
 
 | `visualization_type`        | Mapped internal key         | Key fields |
@@ -242,11 +255,16 @@ environment and Docker Compose config.
 │       ├── init.sh                 # one-time init: migrate, seed, dashboard
 │       └── seed_dashboard.py       # config-driven chart/dashboard creator
 └── seed/
-    ├── import_datasources.yaml     # DB connections + table registrations
-    ├── chart_config.yaml           # dashboard + chart definitions (YAML-only)
-    └── pg/
-        ├── 01_hh_master.sql        # CSV loader + views for hh_master
-        └── HH.master.csv           # source household master data
+│   ├── import_datasources.yaml     # DB connections + table registrations
+│   ├── chart_config.yaml           # shared base config + reusable YAML anchors only
+│   ├── charts/
+│   │   ├── lca-overview-dashboard.yaml
+│   │   ├── lca-district-drill-dashboard.yaml
+│   │   ├── lca-household-segment-explorer.yaml
+│   │   └── lca-rural-segments-comparison.yaml
+│   └── pg/
+│       ├── 01_hh_master.sql        # CSV loader + analytical views for hh_master
+│       └── HH.master.csv           # source household master data
 ```
 
 ---
@@ -329,7 +347,7 @@ placed there is visible to server-side `COPY ... FROM`.
    worked example that preserves the source headers exactly as delivered).
 3. Register the new table in `seed/import_datasources.yaml` under the
    `analytics` database.
-4. Add chart entries in `seed/chart_config.yaml` pointing at the new table.
+4. Add chart entries in the appropriate `seed/charts/*.yaml` dashboard file.
 
 The `shillelagh` driver is still installed and usable for ad-hoc SQL Lab
 queries against external sources such as Google Sheets, but the seed pipeline
@@ -340,7 +358,7 @@ not into the long-running `superset` / `celery-worker` services.
 
 ### India State Choropleth Map + Selected State drill-down
 
-The LCA Dashboard's "India State Choropleth" uses Superset's built-in
+The overview dashboard's `Overview India State Choropleth` chart uses Superset's built-in
 `country_map` plugin. It ships an India GeoJSON inside Superset itself,
 renders without Mapbox or any API key, and needs no external boundary
 file or loader script.
@@ -367,11 +385,15 @@ or page navigation needed:
 The cross-filter scope is configured in the dashboard's
 `chart_configuration` (built by `docker/scripts/seed_dashboard.py`
 from the `cross_filter_source` / `cross_filter_target` keys in
-`seed/chart_config.yaml`) so that clicking the map only drills the
+the dashboard YAML files in `seed/charts/`) so that clicking the map only drills the
 "Selected State *" charts. The country-wide KPIs and "Households by
 State" bar stay at country totals, which keeps the national context
 visible while exploring one state. Click an empty area of the map (or
 re-click the same state) to clear the filter.
+
+The same folder-based structure is also used by the `LCA Rural Segments Comparison`
+dashboard, whose Handlebars chart spec now lives in
+`seed/charts/lca-rural-segments-comparison.yaml`.
 
 ### Notes for document and non-SQL databases
 
