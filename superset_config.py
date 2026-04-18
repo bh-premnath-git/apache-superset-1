@@ -115,6 +115,7 @@ APP_FAVICON = os.getenv("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg"
 THEME_DEFAULT = {
     "algorithm": "default",
     "token": {
+        "appName": APP_NAME,
         "brandAppName": APP_NAME,
         "brandLogoUrl": APP_ICON,
         "brandLogoAlt": APP_NAME,
@@ -124,6 +125,7 @@ THEME_DEFAULT = {
 THEME_DARK = {
     "algorithm": "dark",
     "token": {
+        "appName": APP_NAME,
         "brandAppName": APP_NAME,
         "brandLogoUrl": APP_ICON,
         "brandLogoAlt": APP_NAME,
@@ -136,6 +138,9 @@ def COMMON_BOOTSTRAP_OVERRIDES_FUNC(bootstrap_data: dict) -> dict:
     return {
         "appName": APP_NAME,
         "appIcon": APP_ICON,
+        "brandAppName": APP_NAME,
+        "brandLogoUrl": APP_ICON,
+        "brandLogoAlt": APP_NAME,
     }
 
 
