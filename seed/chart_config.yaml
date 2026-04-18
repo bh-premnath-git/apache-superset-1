@@ -408,6 +408,10 @@ dashboards:
       - name: "State"
         column: state
         targets: [vw_rural_segment_matrix, vw_rural_segments]
+      - name: "Segment"
+        column: segment
+        targets: [vw_rural_segment_matrix]
+        multi_select: true
     charts:
 
       - database: analytics
@@ -434,6 +438,8 @@ dashboards:
           - ayushman_pct
           - ration_pct
         metric: {column: hh_count, aggregate: SUM}
+        emit_filter: true
+        cross_filter_source: true
         row_limit: 1000
         width: 12
         height: 72
@@ -546,24 +552,11 @@ dashboards:
             align-items: center;
             gap: 3px;
           }
-          .rsc-pie {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, #94a3b8 calc(var(--pct) * 1%), #e2e8f0 0);
-            position: relative;
-          }
-          .rsc-pie::after {
-            content: '';
-            position: absolute;
-            inset: 9px;
-            background: #fff;
-            border-radius: 50%;
-          }
-          .rural-stable .rsc-pie      { background: conic-gradient(from 0deg, #64748b calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-aspirant .rsc-pie    { background: conic-gradient(from 0deg, #f97316 calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-disconnected .rsc-pie { background: conic-gradient(from 0deg, #ea580c calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-constrained .rsc-pie  { background: conic-gradient(from 0deg, #7c3aed calc(var(--pct) * 1%), #e2e8f0 0); }
+          .rsc-arc { stroke: #94a3b8; }
+          .rural-stable .rsc-arc      { stroke: #64748b; }
+          .rural-aspirant .rsc-arc    { stroke: #f97316; }
+          .rural-disconnected .rsc-arc { stroke: #ea580c; }
+          .rural-constrained .rsc-arc  { stroke: #7c3aed; }
           .rsc-pie-lbl {
             font-size: 10px;
             font-weight: 700;
@@ -638,7 +631,12 @@ dashboards:
                   <div class="rsc-seg-id">R{{this.segment_order}}</div>
                 </div>
                 <div class="rsc-pie-cell">
-                  <div class="rsc-pie" style="--pct:{{this.size_pct}};"></div>
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="15.9155" fill="none" stroke="#e2e8f0" stroke-width="6"/>
+                    <circle class="rsc-arc" cx="22" cy="22" r="15.9155" fill="none" stroke-width="6"
+                      stroke-dasharray="{{this.size_pct}} 100"
+                      transform="rotate(-90 22 22)"/>
+                  </svg>
                   <div class="rsc-pie-lbl">{{this.size_pct}}%</div>
                 </div>
                 <div class="rsc-mc">
@@ -783,24 +781,11 @@ dashboards:
             align-items: center;
             gap: 3px;
           }
-          .rsc-pie {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, #94a3b8 calc(var(--pct) * 1%), #e2e8f0 0);
-            position: relative;
-          }
-          .rsc-pie::after {
-            content: '';
-            position: absolute;
-            inset: 9px;
-            background: #fff;
-            border-radius: 50%;
-          }
-          .rural-stable .rsc-pie      { background: conic-gradient(from 0deg, #64748b calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-aspirant .rsc-pie    { background: conic-gradient(from 0deg, #f97316 calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-disconnected .rsc-pie { background: conic-gradient(from 0deg, #ea580c calc(var(--pct) * 1%), #e2e8f0 0); }
-          .rural-constrained .rsc-pie  { background: conic-gradient(from 0deg, #7c3aed calc(var(--pct) * 1%), #e2e8f0 0); }
+          .rsc-arc { stroke: #94a3b8; }
+          .rural-stable .rsc-arc      { stroke: #64748b; }
+          .rural-aspirant .rsc-arc    { stroke: #f97316; }
+          .rural-disconnected .rsc-arc { stroke: #ea580c; }
+          .rural-constrained .rsc-arc  { stroke: #7c3aed; }
           .rsc-pie-lbl {
             font-size: 10px;
             font-weight: 700;
