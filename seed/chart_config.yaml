@@ -631,11 +631,9 @@ dashboards:
                   <div class="rsc-seg-name">{{segment}}</div>
                   <div class="rsc-seg-id">R{{segment_order}}</div>
                 </div>
-                <div class="rsc-pie-cell">
-                  <div class="rsc-progress-ring">
-                    <progress value="{{size_pct}}" max="100" class="rsc-progress"></progress>
-                    <div class="rsc-pie-lbl">{{size_pct}}%</div>
-                  </div>
+                <div class="rsc-mc">
+                  <div class="rsc-v">{{size_pct}}%</div>
+                  <div class="rsc-bw"><div class="rsc-b rsc-b-size" style="width:{{size_pct}}%"></div></div>
                 </div>
                 <div class="rsc-mc">
                   <div class="rsc-v">{{cereal_spend_pct}}%</div>
@@ -711,6 +709,33 @@ dashboards:
           .rsc-body {
             padding: 0 4px 8px;
           }
+          .rsc-progress {
+            width: 44px;
+            height: 8px;
+            border-radius: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+          }
+          .rsc-progress::-webkit-progress-bar {
+            background: #e5e7eb;
+            border-radius: 4px;
+          }
+          .rsc-progress::-webkit-progress-value {
+            background: #94a3b8;
+            border-radius: 4px;
+          }
+          .rsc-progress::-moz-progress-bar {
+            background: #94a3b8;
+            border-radius: 4px;
+          }
+          .rural-stable .rsc-progress::-webkit-progress-value { background: #64748b; }
+          .rural-stable .rsc-progress::-moz-progress-bar { background: #64748b; }
+          .rural-aspirant .rsc-progress::-webkit-progress-value { background: #f97316; }
+          .rural-aspirant .rsc-progress::-moz-progress-bar { background: #f97316; }
+          .rural-disconnected .rsc-progress::-webkit-progress-value { background: #ea580c; }
+          .rural-disconnected .rsc-progress::-moz-progress-bar { background: #ea580c; }
+          .rural-constrained .rsc-progress::-webkit-progress-value { background: #7c3aed; }
+          .rural-constrained .rsc-progress::-moz-progress-bar { background: #7c3aed; }
           .rsc-cat-row,
           .rsc-sub-row,
           .rsc-row {
