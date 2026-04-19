@@ -9,7 +9,7 @@
 
 This repository ships a working Docker Compose stack with Apache Superset,
 PostgreSQL (metadata + sample analytics), Redis, Celery worker/beat, Keycloak
-(optional OIDC), and a runtime seeder that creates a sample
+(OIDC), and a runtime seeder that creates a sample
 database/dataset/chart/dashboard via the Superset REST API.
 
 ### Prerequisites
@@ -28,7 +28,7 @@ cp .env.example .env
 # 2. Build and start the stack
 docker compose up -d --build
 
-# 3. Watch init/seed progress
+# 3. Watch init/seed progress (wait for superset-runtime-seed to exit)
 docker compose logs -f superset-init superset-runtime-seed
 ```
 
@@ -37,12 +37,47 @@ Once the `superset-runtime-seed` container exits successfully:
 - Superset UI: <http://localhost:8088>
 - Default admin login: the `SUPERSET_ADMIN_USERNAME` / `SUPERSET_ADMIN_PASSWORD`
   from `.env` (defaults `admin` / `admin123`)
-- Keycloak admin console (optional): <http://localhost:8080> with
+- Keycloak admin console: <http://localhost:8080> with
   `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`
 
 The seeded dashboard is titled **Executive Overview** (slug `executive-overview`)
 and contains a **Monthly Revenue** chart on top of the `mart_sales.orders`
 sample dataset.
+
+### OIDC Client Secret Setup
+
+The Keycloak bootstrap creates a confidential client (`bighammer-admin`) and prints
+the generated secret to logs. To enable SSO:
+
+```bash
+# 1. Retrieve the client secret from bootstrap logs
+docker compose logs --no-color keycloak-bootstrap | grep "CLIENT SECRET"
+```
+
+You will see output like:
+
+```
+============================================================
+CLIENT ID: bighammer-admin
+CLIENT SECRET: a1b2c3d4e5f6...
+============================================================
+```
+
+Copy the secret into your `.env` file:
+
+```bash
+# 2. Edit .env and set the client secret
+KEYCLOAK_CLIENT_SECRET=a1b2c3d4e5f6...
+```
+
+Then restart Superset to pick up the new secret:
+
+```bash
+# 3. Restart Superset to apply the secret
+docker compose restart superset
+```
+
+SSO via Keycloak will now be active at <http://localhost:8088>.
 
 ### Common operations
 

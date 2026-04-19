@@ -23,6 +23,12 @@ KEYCLOAK_ROLE_CLAIM = os.getenv("KEYCLOAK_ROLE_CLAIM", "role_keys")
 SUPERSET_ROLE_NAMES = ["superset_admin", "superset_alpha", "superset_gamma"]
 
 
+def generate_client_secret() -> str:
+    """Generate a random 32-character hex client secret."""
+    import secrets
+    return secrets.token_hex(32)
+
+
 def request(
     method: str,
     url: str,
@@ -179,18 +185,35 @@ def ensure_role_mapper(token: str, client_id: str) -> None:
     print("Created Keycloak role mapper: superset-role-keys")
 
 
-def ensure_client(token: str) -> None:
+def get_client_secret(token: str, client_id: str) -> str | None:
+    """Retrieve the client secret from Keycloak."""
+    response = request(
+        "GET",
+        f"{KEYCLOAK_INTERNAL_URL}/admin/realms/{KEYCLOAK_REALM}/clients/{client_id}/client-secret",
+        token=token,
+    )
+    if response:
+        return response.get("value")
+    return None
+
+
+def ensure_client(token: str) -> str:
+    """Create or update client and return the client secret."""
     query = urllib.parse.quote(KEYCLOAK_CLIENT_ID)
     url = f"{KEYCLOAK_INTERNAL_URL}/admin/realms/{KEYCLOAK_REALM}/clients?clientId={query}"
     clients = request("GET", url, token=token) or []
     redirect_uris = [KEYCLOAK_REDIRECT_URI]
     web_origins = sorted({"http://localhost:8088", "http://localhost:8080"})
+    
+    # Generate or use provided secret
+    client_secret = KEYCLOAK_CLIENT_SECRET or generate_client_secret()
+    
     payload = {
         "clientId": KEYCLOAK_CLIENT_ID,
         "enabled": True,
         "protocol": "openid-connect",
-        "publicClient": not bool(KEYCLOAK_CLIENT_SECRET),
-        "secret": KEYCLOAK_CLIENT_SECRET or None,
+        "publicClient": False,  # Always create confidential client
+        "secret": client_secret,
         "redirectUris": redirect_uris,
         "webOrigins": web_origins,
         "standardFlowEnabled": True,
@@ -200,7 +223,6 @@ def ensure_client(token: str) -> None:
             "post.logout.redirect.uris": "+",
         },
     }
-    payload = {k: v for k, v in payload.items() if v is not None}
 
     if clients:
         client_id = clients[0]["id"]
@@ -210,8 +232,10 @@ def ensure_client(token: str) -> None:
             payload=payload,
             token=token,
         )
+        # Get the actual secret from Keycloak
+        actual_secret = get_client_secret(token, client_id)
         print(f"Updated Keycloak client: {KEYCLOAK_CLIENT_ID}")
-        return
+        return actual_secret or client_secret
 
     request(
         "POST",
@@ -219,7 +243,14 @@ def ensure_client(token: str) -> None:
         payload=payload,
         token=token,
     )
-    print(f"Created Keycloak client: {KEYCLOAK_CLIENT_ID}")
+    # Get the client ID to retrieve the secret
+    clients = request("GET", url, token=token) or []
+    if clients:
+        actual_secret = get_client_secret(token, clients[0]["id"])
+        print(f"Created Keycloak client: {KEYCLOAK_CLIENT_ID}")
+        return actual_secret or client_secret
+    
+    return client_secret
 
 
 def get_user_internal_id(token: str) -> str | None:
@@ -313,7 +344,7 @@ def main() -> None:
     token = get_admin_token()
     for role_name in SUPERSET_ROLE_NAMES:
         ensure_realm_role(token, role_name)
-    ensure_client(token)
+    client_secret = ensure_client(token)
     client_internal_id = get_client_internal_id(token)
     ensure_role_mapper(token, client_internal_id)
     ensure_user(token)
@@ -322,6 +353,10 @@ def main() -> None:
         raise RuntimeError(f"Unable to find Keycloak user after creation: {KEYCLOAK_BOOTSTRAP_USERNAME}")
     assign_realm_role_to_user(token, user_internal_id, KEYCLOAK_BOOTSTRAP_ROLE)
     print("Keycloak bootstrap completed.")
+    print(f"\n{'='*60}")
+    print(f"CLIENT ID: {KEYCLOAK_CLIENT_ID}")
+    print(f"CLIENT SECRET: {client_secret}")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":

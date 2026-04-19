@@ -57,7 +57,10 @@ APP_ICON = env("SUPERSET_APP_ICON", "/static/assets/images/logo.svg")
 FAVICONS = [{"href": env("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg")}]
 
 # Optional Keycloak OAuth integration.
+# KEYCLOAK_SERVER_URL: browser-facing URL (e.g., http://localhost:8080 for local dev)
+# KEYCLOAK_API_BASE_URL: internal URL for server-to-server calls (e.g., http://keycloak:8080)
 KEYCLOAK_SERVER_URL = env("KEYCLOAK_SERVER_URL")
+KEYCLOAK_API_BASE_URL = env("KEYCLOAK_API_BASE_URL")
 KEYCLOAK_REALM = env("KEYCLOAK_REALM")
 KEYCLOAK_CLIENT_ID = env("KEYCLOAK_CLIENT_ID")
 KEYCLOAK_CLIENT_SECRET = env("KEYCLOAK_CLIENT_SECRET")
@@ -74,6 +77,11 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
         "superset_alpha": ["Alpha"],
         "superset_gamma": ["Gamma"],
     }
+
+    # Use internal URL for server-to-server calls, browser URL for authorize redirect
+    internal_base = (KEYCLOAK_API_BASE_URL or KEYCLOAK_SERVER_URL).rstrip("/")
+    browser_base = KEYCLOAK_SERVER_URL.rstrip("/")
+
     OAUTH_PROVIDERS = [
         {
             "name": "keycloak",
@@ -82,11 +90,11 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
             "remote_app": {
                 "client_id": KEYCLOAK_CLIENT_ID,
                 "client_secret": KEYCLOAK_CLIENT_SECRET,
-                "api_base_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect",
-                "access_token_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
-                "authorize_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
+                "api_base_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect",
+                "access_token_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
+                "authorize_url": f"{browser_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
                 "client_kwargs": {"scope": "openid profile email roles"},
-                "server_metadata_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration",
+                "server_metadata_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration",
             },
         }
     ]
