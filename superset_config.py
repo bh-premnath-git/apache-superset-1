@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from celery.schedules import crontab
 from flask_appbuilder.security.manager import AUTH_OAUTH
+from custom_sso_security_manager import CustomSsoSecurityManager
 
 
 def env(key: str, default: str = "") -> str:
@@ -69,6 +70,7 @@ KEYCLOAK_ROLE_CLAIM = env("KEYCLOAK_ROLE_CLAIM", "role_keys")
 
 if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
     AUTH_TYPE = AUTH_OAUTH
+    CUSTOM_SECURITY_MANAGER = CustomSsoSecurityManager
     AUTH_USER_REGISTRATION = True
     AUTH_USER_REGISTRATION_ROLE = "Gamma"
     AUTH_ROLES_SYNC_AT_LOGIN = True
@@ -94,6 +96,7 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
                 "access_token_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
                 "authorize_url": f"{browser_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
                 "jwks_uri": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs",
+                "userinfo_endpoint": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/userinfo",
                 "client_kwargs": {"scope": "openid profile email roles"},
                 # Note: server_metadata_url removed to prevent Keycloak from overriding
                 # our explicit URLs with its advertised hostname
