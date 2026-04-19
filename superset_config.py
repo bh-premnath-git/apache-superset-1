@@ -93,8 +93,10 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
                 "api_base_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect",
                 "access_token_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
                 "authorize_url": f"{browser_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
+                "jwks_uri": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs",
                 "client_kwargs": {"scope": "openid profile email roles"},
-                "server_metadata_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration",
+                # Note: server_metadata_url removed to prevent Keycloak from overriding
+                # our explicit URLs with its advertised hostname
             },
         }
     ]

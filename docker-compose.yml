@@ -51,10 +51,8 @@ x-keycloak-env: &keycloak-env
   KC_PROXY_HEADERS:               xforwarded
   KC_HTTP_ENABLED:                true
   KC_HEALTH_ENABLED:              true
-  KC_HOSTNAME:                    ${KEYCLOAK_HOSTNAME:-localhost}
-  KC_HOSTNAME_STRICT:             false
-  KC_HOSTNAME_STRICT_HTTPS:       false
-  KC_HOSTNAME_STRICT_BACKCHANNEL: false
+  KC_HOSTNAME:                    http://${KEYCLOAK_HOSTNAME:-localhost}:8080
+  KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
   KEYCLOAK_INTERNAL_URL:          http://keycloak:8080
   KEYCLOAK_BOOTSTRAP_USERNAME:    ${KEYCLOAK_BOOTSTRAP_USERNAME:-superset-user}
   KEYCLOAK_BOOTSTRAP_PASSWORD:    ${KEYCLOAK_BOOTSTRAP_PASSWORD:-superset123}
@@ -125,7 +123,7 @@ services:
         condition: service_healthy
     environment:
       <<: *keycloak-env
-    command: ["start-dev", "--proxy-headers=xforwarded"]
+    command: ["start-dev"]
     networks:
       - superset-net
 
