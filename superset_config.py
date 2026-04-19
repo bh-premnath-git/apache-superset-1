@@ -62,12 +62,18 @@ KEYCLOAK_REALM = env("KEYCLOAK_REALM")
 KEYCLOAK_CLIENT_ID = env("KEYCLOAK_CLIENT_ID")
 KEYCLOAK_CLIENT_SECRET = env("KEYCLOAK_CLIENT_SECRET")
 KEYCLOAK_REDIRECT_URI = env("KEYCLOAK_REDIRECT_URI")
+KEYCLOAK_ROLE_CLAIM = env("KEYCLOAK_ROLE_CLAIM", "role_keys")
 
 if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
     AUTH_TYPE = AUTH_OAUTH
     AUTH_USER_REGISTRATION = True
     AUTH_USER_REGISTRATION_ROLE = "Gamma"
     AUTH_ROLES_SYNC_AT_LOGIN = True
+    AUTH_ROLES_MAPPING = {
+        "superset_admin": ["Admin"],
+        "superset_alpha": ["Alpha"],
+        "superset_gamma": ["Gamma"],
+    }
     OAUTH_PROVIDERS = [
         {
             "name": "keycloak",
@@ -79,13 +85,14 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
                 "api_base_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect",
                 "access_token_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
                 "authorize_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
-                "client_kwargs": {"scope": "openid profile email"},
+                "client_kwargs": {"scope": "openid profile email roles"},
                 "server_metadata_url": f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration",
             },
         }
     ]
 
     OAUTH_PROVIDERS[0]["remote_app"]["redirect_uri"] = KEYCLOAK_REDIRECT_URI
+    OAUTH_PROVIDERS[0]["remote_app"]["role_keys"] = KEYCLOAK_ROLE_CLAIM
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"

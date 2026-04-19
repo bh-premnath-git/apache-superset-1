@@ -55,6 +55,10 @@ x-keycloak-env: &keycloak-env
   KC_HOSTNAME_STRICT:             false
   KC_HOSTNAME_STRICT_HTTPS:       false
   KC_HOSTNAME_STRICT_BACKCHANNEL: false
+  KEYCLOAK_INTERNAL_URL:          http://keycloak:8080
+  KEYCLOAK_BOOTSTRAP_USERNAME:    ${KEYCLOAK_BOOTSTRAP_USERNAME:-superset-user}
+  KEYCLOAK_BOOTSTRAP_PASSWORD:    ${KEYCLOAK_BOOTSTRAP_PASSWORD:-superset123}
+  KEYCLOAK_BOOTSTRAP_EMAIL:       ${KEYCLOAK_BOOTSTRAP_EMAIL:-superset@example.com}
 
 services:
 
@@ -148,6 +152,22 @@ services:
     networks:
       - superset-net
 
+  # ── Keycloak bootstrap ──────────────────────────────────────────────────────
+  keycloak-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset-keycloak-bootstrap
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      <<: [*superset-env, *keycloak-env]
+    entrypoint: ["python", "/app/docker/scripts/bootstrap_keycloak.py"]
+    networks:
+      - superset-net
+
   # ── Superset web ───────────────────────────────────────────────────────────
   superset-init:
     build:
@@ -162,6 +182,8 @@ services:
         condition: service_healthy
       analytics-db:
         condition: service_healthy
+      keycloak-bootstrap:
+        condition: service_completed_successfully
     environment:
       <<: *superset-env
     entrypoint: ["/app/init.sh"]
