@@ -1,302 +1,949 @@
-# Apache Superset — Local Starter (BigHammer)
+# Superset Control Plane
 
-A Docker Compose setup for running Apache Superset locally with a pre-seeded analytics database,
-auto-imported datasets, and a config-driven dashboard seeder.
-
-- **Superset 6.0.0** — custom image with extra DB drivers + custom branding
-- **PostgreSQL 16** — Superset metadata DB
-- **Redis 7** — cache + Celery broker/backend
-- **Celery worker + beat** — async queries and scheduled alerts/reports
-- **PostgreSQL 16** — sample `analytics` database with `hh_master` seeded on first start
+> **A GitOps-native, declarative orchestration engine for Apache Superset.**  
+> Treats analytics assets like Kubernetes treats workloads: declared in Git, continuously reconciled, drift-detected, and self-healing.
 
 ---
 
-## Quick start
+## Table of Contents
+
+1. [Why This Exists](#1-why-this-exists)
+2. [Design Philosophy](#2-design-philosophy)
+3. [System Architecture](#3-system-architecture)
+4. [Core Engine Design](#4-core-engine-design)
+   - 4.1 [Asset Loader](#41-asset-loader)
+   - 4.2 [Schema Validator and Versioning](#42-schema-validator-and-versioning)
+   - 4.3 [Dependency Graph](#43-dependency-graph)
+   - 4.4 [State Store](#44-state-store)
+   - 4.5 [Reconciler Loop](#45-reconciler-loop)
+   - 4.6 [Diff Engine](#46-diff-engine)
+   - 4.7 [Partial Failure and Retry](#47-partial-failure-and-retry)
+5. [Superset Integration Layer](#5-superset-integration-layer)
+   - 5.1 [Authentication Strategy](#51-authentication-strategy)
+   - 5.2 [Import/Export API Usage](#52-importexport-api-usage)
+   - 5.3 [REST API Client](#53-rest-api-client)
+6. [MCP Layer](#6-mcp-layer)
+   - 6.1 [Architecture](#61-architecture)
+   - 6.2 [Transport and Protocol](#62-transport-and-protocol)
+   - 6.3 [Tool Catalog](#63-tool-catalog)
+   - 6.4 [Authentication Flow](#64-authentication-flow)
+7. [Identity and Auth Layer](#7-identity-and-auth-layer)
+8. [Asset Model](#8-asset-model)
+9. [Runtime Modes](#9-runtime-modes)
+10. [Serve Mode and Watcher](#10-serve-mode-and-watcher)
+11. [Secrets Management](#11-secrets-management)
+12. [Branding and White-Labeling](#12-branding-and-white-labeling)
+13. [Environment Overlays](#13-environment-overlays)
+14. [Observability](#14-observability)
+15. [Security Model](#15-security-model)
+16. [CI/CD Integration](#16-cicd-integration)
+17. [Repository Structure](#17-repository-structure)
+18. [Configuration Reference](#18-configuration-reference)
+19. [Deployment Targets](#19-deployment-targets)
+20. [Versioning and Release Strategy](#20-versioning-and-release-strategy)
+21. [License](#license)
+
+---
+
+## 1. Why This Exists
+
+Apache Superset is powerful, but once you have multiple environments, multiple teams, row-level security rules, custom roles, white-label branding, and promotion flows across environments, managing everything manually in the UI becomes difficult to govern and almost impossible to standardize.
+
+Common pain points include:
+
+- Dashboard IDs are environment-specific and not portable.
+- There is no built-in drift detection when someone edits assets directly in the UI.
+- Bootstrap is manual and repetitive.
+- Promotion from dev to staging to production is fragile.
+- There is no clean Git-based source of truth for analytics assets.
+
+This project solves that by treating Superset the same way GitOps platforms treat infrastructure: **Git is the source of truth, and the engine continuously reconciles desired state into the runtime system.**
+
+---
+
+## 2. Design Philosophy
+
+### 2.1 Non-Negotiable Principles
+
+| Principle | Meaning |
+|---|---|
+| Declarative over imperative | Assets are defined in YAML. The engine decides how to apply them. |
+| Idempotent by construction | Running reconcile many times must produce the same result. |
+| No hardcoded Superset IDs | Runtime IDs are discovered and stored, not authored. |
+| Dependency-aware ordering | Database → Dataset → Chart → Dashboard, always. |
+| Platform-agnostic core | The core knows nothing about Docker, Kubernetes, ECS, or any single target. |
+| Fail loudly, recover safely | Partial failures are tracked clearly and retried safely. |
+| Security first | RBAC, RLS, secret injection, and auditability are first-class. |
+| Extensible by default | Branding, plugins, extensions, and MCP are built into the design. |
+
+### 2.2 Non-Goals
+
+This project does **not** aim to:
+
+- Replace Superset internals
+- Store secrets in YAML
+- Be Kubernetes-only or cloud-only
+- Manage Superset metadata DB schema itself
+- Make UI-exported assets the only source of truth
+
+---
+
+## 3. System Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Git Repository                               │
+│   assets/  config/  env/  branding/  plugins/                      │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   Control Plane Engine                              │
+│                                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌───────────────┐   │
+│  │  Loader  │→ │Validator │→ │ Dep. Graph   │→ │   Reconciler  │   │
+│  └──────────┘  └──────────┘  └──────────────┘  └───────┬───────┘   │
+│                                                          │           │
+│  ┌──────────────────────────┐   ┌──────────────────┐    │           │
+│  │      State Store         │◄──│    Diff Engine   │◄───┘           │
+│  │  (SQLite / PostgreSQL)   │   │  (checksum+spec) │                │
+│  └──────────────────────────┘   └──────────────────┘                │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │ REST API calls / import APIs
+                            ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Superset Runtime                               │
+│                                                                     │
+│  ┌──────────┐  ┌─────────┐  ┌────────────┐  ┌──────────────────┐   │
+│  │ Web/API  │  │ Celery  │  │ Celery Beat│  │   PostgreSQL     │   │
+│  │ :8088    │  │ Worker  │  │            │  │   (metadata DB)  │   │
+│  └──────────┘  └─────────┘  └────────────┘  └──────────────────┘   │
+│                                                                     │
+│  ┌──────────┐  ┌──────────────────────────────────────────────┐    │
+│  │  Redis   │  │         MCP Service / AI Access              │    │
+│  │  :6379   │  │   (Superset MCP + control-plane tools)       │    │
+│  └──────────┘  └──────────────────────────────────────────────┘    │
+└───────────────────────────┬─────────────────────────────────────────┘
+                            │
+              ┌─────────────┴──────────────┐
+              ▼                            ▼
+┌─────────────────────┐      ┌─────────────────────────┐
+│  Keycloak           │      │   Connected Data Sources │
+│  OIDC / SSO         │      │   Postgres, Snowflake,   │
+│                     │      │   ClickHouse, BigQuery   │
+└─────────────────────┘      └─────────────────────────┘
+```
+
+### 3.1 Reconcile Data Flow
+
+```text
+Git change detected
+      ↓
+Load YAML assets
+      ↓
+Validate schemas + references
+      ↓
+Build dependency graph
+      ↓
+Resolve logical refs
+      ↓
+Compare desired state vs stored state vs live Superset state
+      ↓
+Create / update / skip / retry
+      ↓
+Emit reconcile report + audit events
+```
+
+---
+
+## 4. Core Engine Design
+
+### 4.1 Asset Loader
+
+The asset loader scans the `assets/` tree, loads YAML, optionally renders Jinja templates, and builds typed models.
+
+Responsibilities:
+
+- Load all YAML files from the repository
+- Support environment-specific rendering
+- Normalize raw YAML into internal asset models
+- Preserve logical asset keys for reconciliation
+
+### 4.2 Schema Validator and Versioning
+
+Each asset contains an `apiVersion` and `kind`.
+
+Example:
+
+```yaml
+apiVersion: analytics/v1
+kind: Chart
+```
+
+Rules:
+
+- New optional fields can be added safely
+- Breaking changes require a new version
+- Version converters should normalize older asset versions into the latest internal shape
+
+### 4.3 Dependency Graph
+
+The resolver builds a directed acyclic graph from references such as:
+
+- `databaseRef`
+- `datasetRef`
+- `chartRefs`
+- `filterRefs`
+
+Creation order is always enforced as:
+
+```text
+Database → Dataset → Chart → Dashboard
+```
+
+Cycles are validation errors and must fail before any mutation happens.
+
+### 4.4 State Store
+
+The state store is the engine’s memory. It tracks:
+
+- logical key
+- kind
+- runtime Superset ID
+- checksum of last applied spec
+- sync status
+- last reconcile timestamp
+- drift events
+- retry metadata
+
+Recommended backends:
+
+- SQLite for local or single-node development
+- PostgreSQL for shared or production deployments
+
+### 4.5 Reconciler Loop
+
+For each asset in dependency order, the reconciler should:
+
+1. Compute canonical checksum of the rendered spec
+2. Load prior state from the state store
+3. Decide whether to create, update, skip, or mark drift
+4. Apply changes through Superset APIs
+5. Persist the new runtime mapping and checksum
+6. Emit logs, metrics, and audit records
+
+### 4.6 Diff Engine
+
+Two layers of diffing are recommended:
+
+**Spec diff**
+- Compare YAML-derived checksum vs stored checksum
+
+**Live diff**
+- Compare live Superset representation vs stored live hash
+- Detects UI edits and drift
+
+Possible outcomes:
+
+- no change
+- spec changed
+- drift detected
+- asset missing
+
+### 4.7 Partial Failure and Retry
+
+Partial failure must not corrupt the whole run.
+
+Example:
+
+```text
+Database   → success
+Dataset    → success
+Chart A    → failed
+Chart B    → success
+Dashboard  → skipped (because it depends on Chart A)
+```
+
+Retry strategy:
+
+- persist failures
+- exponential backoff
+- resume on next reconcile
+- clearly distinguish failed vs skipped vs pending
+
+---
+
+## 5. Superset Integration Layer
+
+### 5.1 Authentication Strategy
+
+The control plane should authenticate to Superset through a dedicated service account or a controlled token flow.
+
+Recommendations:
+
+- do not use human admin credentials as the automation identity
+- keep API auth separate from interactive user login
+- store tokens securely
+- support token refresh and CSRF handling where needed
+
+### 5.2 Import/Export API Usage
+
+The control plane should support both:
+
+- direct REST operations for granular assets
+- asset bundle import/export for bulk workflows
+
+Recommended model:
+
+```text
+Custom YAML model
+    ↓ compiler
+Superset-compatible asset structure
+    ↓ packager
+ZIP bundle or REST payload
+    ↓
+Superset import or create/update APIs
+```
+
+Use cases:
+
+- first-run bootstrap
+- migration from golden environment
+- backup/export of live state
+- drift comparison
+
+### 5.3 REST API Client
+
+The Superset API client is responsible for:
+
+- authentication
+- CSRF token handling where required
+- create/update/read operations
+- bulk asset import/export
+- role, user, alert, and RLS synchronization
+- retries and structured errors
+
+---
+
+## 6. MCP Layer
+
+### 6.1 Architecture
+
+MCP provides AI-facing access to governed Superset capabilities.
+
+Use cases:
+
+- list dashboards
+- inspect datasets
+- run SQL
+- create charts
+- create dashboards
+- check control-plane status
+
+Recommended split:
+
+- **Superset MCP tools** for analytics interactions
+- **Control Plane MCP tools** for reconcile, drift, and asset-state inspection
+
+### 6.2 Transport and Protocol
+
+Support common MCP transports such as:
+
+- SSE / streamable HTTP for remote agents
+- stdio for local integrations
+
+### 6.3 Tool Catalog
+
+Suggested control-plane MCP tools:
+
+- `control_plane.reconcile_status`
+- `control_plane.asset_status`
+- `control_plane.trigger_sync`
+- `control_plane.drift_report`
+- `control_plane.list_managed_assets`
+
+### 6.4 Authentication Flow
+
+MCP should use governed identity:
+
+- Keycloak-issued JWTs for service or agent access
+- Superset RBAC remains the source of authorization
+- MCP must not bypass dashboard, dataset, or RLS controls
+
+---
+
+## 7. Identity and Auth Layer
+
+### 7.1 Browser SSO
+
+Interactive users should log in through Keycloak using OIDC redirect-based SSO.
+
+Flow:
+
+```text
+User → Superset → Redirect to Keycloak → Authenticate → Return to Superset → Session created
+```
+
+### 7.2 Role Mapping
+
+Keycloak groups or claims should map into Superset roles.
+
+Examples:
+
+- `superset_admin` → `Admin`
+- `superset_analyst` → `Alpha`
+- `superset_viewer` → `Gamma`
+- custom business groups → custom managed roles
+
+### 7.3 Service Accounts
+
+The control plane itself should use a dedicated machine identity, separate from browser login users.
+
+### 7.4 Direct Token Sign-In
+
+Direct “raw Keycloak token → browser session in Superset” should be treated as an optional custom extension, not a baseline assumption.
+
+---
+
+## 8. Asset Model
+
+### 8.1 Supported Asset Types
+
+- Database
+- Dataset
+- Chart
+- Dashboard
+- DashboardFilter
+- Role
+- User
+- RLS
+- Theme
+- Branding
+- Alert
+- Report
+- Embedding
+- Plugin
+- Extension
+
+### 8.2 Example Assets
+
+**Database**
+```yaml
+apiVersion: analytics/v1
+kind: Database
+metadata:
+  key: db.analytics
+  name: Analytics Warehouse
+spec:
+  engine: postgresql
+  sqlalchemyUriFromEnv: ANALYTICS_DB_URI
+```
+
+**Dataset**
+```yaml
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.sales.orders
+  name: sales_orders
+spec:
+  databaseRef: db.analytics
+  schema: mart_sales
+  table: orders
+  timeColumn: order_date
+```
+
+**Chart**
+```yaml
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.sales.monthly_revenue
+  name: Monthly Revenue
+spec:
+  datasetRef: dataset.sales.orders
+  vizType: echarts_timeseries_bar
+  params:
+    metrics:
+      - sum_revenue
+    x_axis: order_date
+```
+
+**Dashboard**
+```yaml
+apiVersion: analytics/v1
+kind: Dashboard
+metadata:
+  key: dashboard.exec.overview
+  name: Executive Overview
+spec:
+  slug: executive-overview
+  chartRefs:
+    - chart.sales.monthly_revenue
+```
+
+**RLS**
+```yaml
+apiVersion: analytics/v1
+kind: RLS
+metadata:
+  key: rls.sales.country_restriction
+spec:
+  datasetRefs:
+    - dataset.sales.orders
+  clause: "country = '{{ current_user.country }}'"
+  roles:
+    - role.regional_viewer
+```
+
+---
+
+## 9. Runtime Modes
+
+### 9.1 Bootstrap
+
+Used for first-run setup.
 
 ```bash
-# 1. Copy the env template and fill in your secret key
-cp .env.example .env
-# Edit .env: set SUPERSET_SECRET_KEY to a random 32-char string
-
-# 2. Build and start all services
-docker compose up -d --build
-
-# 3. Watch init progress (migrations, admin creation, dashboard seeding)
-docker compose logs -f superset-init
+control-plane bootstrap --env dev
 ```
 
-Open **http://localhost:8088** and log in with the credentials in `.env`
-(default: `admin` / `admin123`).
+Responsibilities:
 
----
+- verify Superset health
+- verify metadata DB readiness
+- validate assets
+- build initial state
+- create all missing resources
 
-## Service summary
+### 9.2 Reconcile
 
-| Service          | Container name            | Port  | Purpose                        |
-|------------------|---------------------------|-------|--------------------------------|
-| `superset`       | superset-app              | 8088  | Superset web UI                |
-| `superset-init`  | superset-init             | —     | One-time migrations + seeding  |
-| `celery-worker`  | superset-celery-worker    | —     | Async query execution          |
-| `celery-beat`    | superset-celery-beat      | —     | Scheduled alerts/reports       |
-| `metadata-db`    | superset-metadata-db      | —     | Superset internal metadata     |
-| `redis`          | superset-redis            | —     | Cache + Celery broker/backend  |
-| `analytics-db`   | superset-analytics-db     | —     | Seeded household master dataset |
-
----
-
-## What gets auto-seeded on first start
-
-`superset-init` runs once and sets up everything automatically:
-
-1. **DB migrations** (`superset db upgrade`)
-2. **Admin user** creation
-3. **Datasource import** from `seed/import_datasources.yaml` — registers `analytics.hh_master` in the Superset UI
-4. **Dashboard seeding** from `seed/chart_config.yaml` and `seed/charts/*.yaml` — creates the seeded LCA dashboards
-
-### Seeded databases, tables and views
-
-| Database       | Engine        | Object                              | Kind  | Rows    |
-|----------------|---------------|-------------------------------------|-------|---------|
-| `analytics`    | Postgres      | `hh_master`                         | table | ~261 953 |
-
-### Seeded dashboards
-
-| Dashboard | Slug | Notes |
-|-----------|------|-------|
-| `LCA Overview Dashboard` | `lca-overview-dashboard` | Country-level KPIs, India choropleth, and selected-state drill-down |
-| `LCA District Drill Dashboard` | `lca-district-drill-dashboard` | District-level drill analysis with cross-filtered breakdowns |
-| `LCA Household & Segment Explorer` | `lca-household-segment-explorer` | Household KPIs, heatmap, and detail table |
-| `LCA Rural Segments Comparison` | `lca-rural-segments-comparison` | Handlebars comparison grid for rural segment KPIs |
-| `LCA Segment Geography` | `lca-segment-geography` | State-level KPIs plus a state-filtered Handlebars "proportion of segments by district" pie grid (R1–R4 / U1–U3); use the State filter to drill to one or more states |
-
-In the current image build, chart YAML can use the verified
-`visualization_type` labels wired into the Python seeder, including
-`Bar Chart`, `Line Chart`, `Pie Chart`, `World Map`, `Country Map`,
-`Big Number`, `Big Number with Trendline`, `Histogram`, `Heatmap`,
-`Treemap`, `Sunburst`, `Sankey`, `MapBox`, `Scatter Plot`,
-`deck.gl Scatterplot`, `deck.gl Heatmap`, and `deck.gl Polygon`.
-The Python seeder maps those labels to the internal Superset `viz_type` keys
-required by the API.
-For categorical comparisons such as segment/state bars, this repo intentionally
-uses the `Bar Chart` visualization type with a categorical `x_axis`, because that is the
-registered bar-capable plugin available in the running Superset build.
-
-
----
-
-## Current seed pipeline
-
-This repo now uses a single Postgres-backed seed flow for the household master
-dataset:
-
-```
-seed/pg/HH.master.csv
-        │
-        ▼
-seed/pg/01_hh_master.sql
-        │  COPY
-        ▼
-analytics.hh_master
-        │
-        ▼
-seed/import_datasources.yaml
-        │
-        ▼
-seed/chart_config.yaml + seed/charts/*.yaml
-        │
-        ▼
-docker/scripts/seed_dashboard.py
-```
-
-The SQL seed script loads the CSV into `analytics.hh_master` while preserving
-the source column names from the extract, including mixed case and headers with
-spaces, so the imported table mirrors the raw dataset faithfully.
-
-`seed/chart_config.yaml` is now the shared base config, and each dashboard lives
-in its own file under `seed/charts/`.
-
----
-
-## Adding new seed data — no code changes needed
-
-The seeding pipeline is fully config-driven. The workflow differs slightly
-depending on whether you're adding a raw fact table or a curated analytical
-view.
-
-### Adding a new raw table
-
-**Step 1 — Drop a SQL seed file**
-
-```
-seed/pg/NN_name.sql       ← auto-loaded by Postgres on fresh volume
-```
-
-Files are executed alphabetically, so prefix with `01_`, `02_`, etc. For
-time-series- or geo-aware tables, include `created_at TIMESTAMPTZ` and
-`lat` / `lon` / `state_code` up-front — it is much cheaper to add them now
-than to backfill later.
-
-**Step 2 — Register the table in `seed/import_datasources.yaml`**
-
-```yaml
-- database_name: analytics
-  ...
-  tables:
-    - table_name: my_new_table   # ← add this line
-```
-
-### Adding a new analytical view (recommended for charts)
-
-Views own the business semantics — put weighting, bucketing and rollups here,
-not in YAML and not in Python.
-
-**Step 1 — Define the view in the same SQL seed file as its source table**
-
-```sql
-CREATE OR REPLACE VIEW my_new_table_summary AS
-SELECT
-    category,
-    COUNT(*)                                                                  AS rows,
-    ROUND((SUM(value * weight) / NULLIF(SUM(weight), 0))::numeric, 2)         AS weighted_value
-FROM my_new_table
-GROUP BY category;
-```
-
-**Step 2 — Register the view alongside the table**
-
-```yaml
-- database_name: analytics
-  tables:
-    - table_name: my_new_table           # raw
-    - table_name: my_new_table_summary   # view
-```
-
-Superset treats views exactly like tables — no special flag needed.
-
-### Adding a chart
-
-Point it at the seeded table or view you registered in `import_datasources.yaml`.
-Add the chart under the appropriate dashboard file in `seed/charts/`.
-
-If you are creating a brand new dashboard, add a new YAML file in `seed/charts/`
-with a `dashboards:` list and keep `seed/chart_config.yaml` for shared base config
-and reusable anchors only.
-
-```yaml
-dashboards:
-  - title: "My Dashboard"
-    slug: my-dashboard
-    charts:
-      - database: analytics
-        table: my_new_table_summary
-        name: "Weighted Value by Category"
-        visualization_type: Bar Chart
-        required_columns: [category, weighted_value]
-        x_axis: category
-        metrics:
-          - {column: weighted_value, aggregate: SUM}
-        groupby: []
-```
-
-Then rebuild and wipe volumes to re-run init:
+Used for CI/CD, manual syncs, or scheduled syncs.
 
 ```bash
-docker compose down -v
-docker compose up -d --build
+control-plane reconcile --env prod
 ```
 
-### Supported `visualization_type` values
+Responsibilities:
 
-These are the human-facing visualization labels used in the dashboard YAML files.
-The Python seeder maps them to the internal keys required by the Superset API.
+- detect changes
+- apply only required updates
+- report drift and failures
+- keep runtime aligned with Git
 
-| `visualization_type`        | Mapped internal key         | Key fields |
-|-----------------------------|-----------------------------|------------|
-| `Bar Chart`                 | `echarts_timeseries_bar`    | `x_axis`, `metrics[]`, `groupby` (`time_grain` optional) |
-| `Line Chart`                | `echarts_timeseries_line`   | `x_axis`, `time_grain`, `metrics[]`, `groupby`  |
-| `Pie Chart`                 | `pie`                       | `groupby[]`, `metric{}` |
-| `World Map`                 | `world_map`                 | `entity`, `country_fieldtype`, `metric{}` |
-| `Country Map`               | `country_map`               | `entity` (ISO 3166-2 column, e.g. `IN-KL`), `select_country` (e.g. `india`), `metric{}`. Ships GeoJSON, no Mapbox key needed. |
-| `Big Number`                | `big_number_total`          | `metric{}` or `metrics[]` |
-| `Big Number with Trendline` | `big_number`                | `metric{}` or `metrics[]` |
-| `Histogram`                 | `histogram_v2`              | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
-| `Heatmap`                   | `heatmap_v2`                | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
-| `Treemap`                   | `treemap_v2`                | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
-| `Sunburst`                  | `sunburst_v2`               | `groupby[]` / `columns[]` / `x_axis` + `metric{}` or `metrics[]` |
-| `Sankey`                    | `sankey_v2`                 | `source`, `target`, `metric{}` or `metrics[]` |
-| `MapBox`                    | `mapbox`                    | `longitude`, `latitude`, optional map params, `MAPBOX_API_KEY` |
-| `Scatter Plot`              | `deck_scatter`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
-| `deck.gl Scatterplot`       | `deck_scatter`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
-| `deck.gl Heatmap`           | `deck_heatmap`              | `longitude`, `latitude`, optional metrics, `MAPBOX_API_KEY` |
-| `deck.gl Polygon`           | `deck_polygon`              | polygon/geojson columns, optional metrics, `MAPBOX_API_KEY` |
+### 9.3 Serve
 
-The Python seeder validates chart configs against this supported set and also
-accepts legacy `viz_type` aliases `dist_bar` and `echarts_bar`, mapping both
-to the internal bar plugin for backward compatibility.
+Used for always-on operator behavior.
 
-Mapbox and deck.gl charts require a valid public `MAPBOX_API_KEY` in your
-environment and Docker Compose config.
+```bash
+control-plane serve --env prod
+```
+
+Responsibilities:
+
+- host webhook endpoints
+- expose health/metrics/status
+- run drift scans
+- trigger reconcile on changes
 
 ---
 
-## Project layout
+## 10. Serve Mode and Watcher
 
+Recommended design:
+
+- **webhook-first**
+- **polling as fallback**
+
+Typical flow:
+
+```text
+Git push
+  → webhook received
+  → signature verified
+  → changed files inspected
+  → reconcile triggered only when relevant paths changed
 ```
-.
-├── docker-compose.yml              # all services + volume mounts
-├── Dockerfile                      # custom Superset image (drivers + branding)
-├── superset_config.py              # Superset config (mounted read-only)
-├── .env                            # local secrets — git-ignored
-├── .env.example                    # committed template
-├── docker/
-│   ├── assets/
-│   │   └── logo.svg                # custom branding icon
-│   └── scripts/
-│       ├── bootstrap.sh            # gunicorn entrypoint (web + workers)
-│       ├── init.sh                 # one-time init: migrate, seed, dashboard
-│       └── seed_dashboard.py       # config-driven chart/dashboard creator
-└── seed/
-│   ├── import_datasources.yaml     # DB connections + table registrations
-│   ├── chart_config.yaml           # shared base config + reusable YAML anchors only
+
+Suggested watched paths:
+
+- `assets/`
+- `config/`
+- `env/<current-env>/`
+
+---
+
+## 11. Secrets Management
+
+Hard rules:
+
+- secrets never live in YAML
+- YAML stores only references
+- control plane must not log secret values
+
+Supported secret providers:
+
+- environment variables
+- HashiCorp Vault
+- AWS Secrets Manager
+- GCP Secret Manager
+- Azure Key Vault
+- mounted files
+
+Example:
+
+```yaml
+spec:
+  sqlalchemyUriFromEnv: ANALYTICS_DB_URI
+```
+
+---
+
+## 12. Branding and White-Labeling
+
+Branding should be declarative and environment-aware.
+
+Supported items:
+
+- application name
+- logo
+- favicon
+- loader SVG
+- color palette
+- font family
+- tenant-specific branding overlays
+
+Example:
+
+```yaml
+apiVersion: analytics/v1
+kind: Branding
+metadata:
+  key: branding.default
+spec:
+  appName: "Acme Analytics"
+  logoPath: branding/logos/acme-logo.png
+  faviconPath: branding/favicons/acme.ico
+  loaderSvgPath: branding/loaders/spinner.svg
+  theme:
+    colorPrimary: "#1A3C6E"
+    colorSecondary: "#E87722"
+    fontFamily: "Inter, sans-serif"
+```
+
+---
+
+## 13. Environment Overlays
+
+Use layered configuration:
+
+```text
+config/
+  base.yaml
+env/
+  dev.yaml
+  staging.yaml
+  prod.yaml
+```
+
+Base config contains shared defaults. Environment files override what differs.
+
+Typical differences:
+
+- database connections
+- branding
+- feature flags
+- auth config
+- drift policy
+- cache settings
+
+---
+
+## 14. Observability
+
+### 14.1 Metrics
+
+Suggested metrics:
+
+- reconcile runs total
+- reconcile duration
+- assets synced / skipped / failed
+- drift events total
+- Superset API request counts
+- token refresh counts
+- state counts by status
+
+### 14.2 Structured Logging
+
+Logs should be JSON and include:
+
+- logical key
+- asset kind
+- action
+- duration
+- run ID
+- environment
+
+### 14.3 Audit Logging
+
+Every state mutation should be auditable:
+
+- create
+- update
+- delete
+- drift remediation
+
+### 14.4 Health Endpoints
+
+Recommended endpoints:
+
+- `/health/live`
+- `/health/ready`
+- `/metrics`
+- `/status`
+
+---
+
+## 15. Security Model
+
+### 15.1 Principle of Least Privilege
+
+The control plane should use the smallest required Superset permissions.
+
+### 15.2 Webhook Security
+
+All webhook-triggered reconcile events must validate signatures.
+
+### 15.3 MCP Security
+
+MCP must inherit Superset RBAC and RLS, not bypass it.
+
+### 15.4 RLS Enforcement
+
+The control plane registers RLS policies. Superset enforces them at query time.
+
+### 15.5 Supply Chain Safety
+
+Recommendations:
+
+- pin versions
+- avoid floating `latest`
+- sign commits for protected branches
+- generate SBOMs for images when needed
+
+---
+
+## 16. CI/CD Integration
+
+### 16.1 Typical Pipeline
+
+1. validate YAML and schema
+2. run dry-run reconcile
+3. apply to dev
+4. promote to staging
+5. require approval for prod
+6. reconcile prod
+
+### 16.2 Rollback Model
+
+Rollback should be Git-native:
+
+```text
+revert commit
+→ pipeline runs again
+→ previous desired state is reconciled back
+```
+
+For targeted rollback, allow scoping by asset key and revision.
+
+---
+
+## 17. Repository Structure
+
+```text
+superset-control-plane/
+├── README.md
+├── assets/
+│   ├── databases/
+│   ├── datasets/
 │   ├── charts/
-│   │   ├── lca-overview-dashboard.yaml
-│   │   ├── lca-district-drill-dashboard.yaml
-│   │   ├── lca-household-segment-explorer.yaml
-│   │   └── lca-rural-segments-comparison.yaml
-│   └── pg/
-│       ├── 01_hh_master.sql        # CSV loader + analytical views for hh_master
-│       └── HH.master.csv           # source household master data
+│   ├── dashboards/
+│   ├── dashboard-filters/
+│   ├── roles/
+│   ├── users/
+│   ├── rls/
+│   ├── themes/
+│   ├── branding/
+│   ├── alerts/
+│   ├── reports/
+│   ├── embedding/
+│   ├── plugins/
+│   └── extensions/
+├── config/
+│   ├── base.yaml
+│   ├── feature_flags.yaml
+│   ├── security.yaml
+│   ├── cache.yaml
+│   └── auth.yaml
+├── env/
+│   ├── dev.yaml
+│   ├── staging.yaml
+│   └── prod.yaml
+├── core/
+│   ├── models/
+│   ├── schemas/
+│   ├── loader/
+│   ├── resolver/
+│   ├── compiler/
+│   ├── diff/
+│   ├── reconciler/
+│   └── state/
+├── integrations/
+│   ├── superset/
+│   ├── keycloak/
+│   ├── mcp/
+│   ├── secrets/
+│   ├── branding/
+│   └── plugins/
+├── runtime/
+│   ├── cli/
+│   ├── server/
+│   └── jobs/
+├── deployments/
+│   ├── docker/
+│   ├── kubernetes/
+│   ├── nomad/
+│   └── vm/
+└── tests/
 ```
 
 ---
 
-## Branding
+## 18. Configuration Reference
 
-Custom logo and favicon are baked into the image at build time:
+### 18.1 Required
 
+```env
+SUPERSET_URL=http://superset:8088
+SUPERSET_SERVICE_ACCOUNT_USER=control-plane
+SUPERSET_SERVICE_ACCOUNT_SECRET=change-me
+SECRET_KEY=change-me
+ASSETS_PATH=/app/assets
+ENV=prod
 ```
-docker/assets/logo.svg  →  /app/superset/static/assets/images/logo.svg
-                        →  /app/superset/static/assets/images/favicon.png
+
+### 18.2 State Store
+
+```env
+STATE_BACKEND=postgresql
+STATE_DB_URL=postgresql://cp:pass@state-db:5432/control_plane
 ```
 
-Override the app name or icon paths at runtime via `.env`:
+### 18.3 Keycloak
 
-```bash
-SUPERSET_APP_NAME=MyPlatform
-SUPERSET_APP_ICON=/static/assets/images/logo.svg
-SUPERSET_APP_FAVICON=/static/assets/images/logo.svg
+```env
+KEYCLOAK_URL=https://auth.example.com
+KEYCLOAK_REALM=analytics
+KEYCLOAK_CLIENT_ID=superset-control-plane
+KEYCLOAK_CLIENT_SECRET=change-me
+```
+
+### 18.4 Redis and Celery
+
+```env
+REDIS_URL=redis://redis:6379/0
+CELERY_BROKER_URL=redis://redis:6379/1
+CELERY_RESULT_BACKEND=redis://redis:6379/2
+```
+
+### 18.5 Serve Mode
+
+```env
+SERVE_PORT=9000
+WEBHOOK_SECRET=change-me
+DRIFT_SCAN_INTERVAL=300
+POLL_INTERVAL=300
 ```
 
 ---
 
-## Connection URIs (manual setup)
+## 19. Deployment Targets
 
-All containers share the `superset-net` bridge network — use the container name as the hostname.
+The core engine remains platform agnostic. Deployment targets are packaging adapters only.
 
-**PostgreSQL — analytics**
-```
-postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics
-```
+Supported packaging targets can include:
+
+- Docker Compose
+- Kubernetes
+- Nomad
+- VM / systemd
+- other container or scheduler platforms
+
+### 19.1 Docker Compose
+
+Good for:
+
+- local development
+- demos
+- single-node integration testing
+
+### 19.2 Kubernetes
+
+Good for:
+
+- production clusters
+- CronJob-based reconcile
+- GitOps sidecars / synced config
+- managed secrets injection
+
+### 19.3 VM / systemd
+
+Good for:
+
+- simple installations
+- air-gapped environments
+- controlled internal hosting
+
+---
+
+## 20. Versioning and Release Strategy
+
+### 20.1 Superset Version
+
+Pin Superset to an exact tested version.
+
+Recommended baseline:
+
+- Superset `6.0.0`
+
+### 20.2 Control Plane Versioning
+
+Use semantic versioning:
+
+- **MAJOR** for breaking schema or runtime changes
+- **MINOR** for new features and asset types
+- **PATCH** for fixes
+
+### 20.3 Schema Versioning
+
+Schema version should be independent from app version.
+
+Example:
+
+- app version: `1.4.2`
+- schema version: `analytics/v1`
+
+### 20.4 Pinned Baseline
+
+Suggested baseline:
+
+| Component | Version |
+|---|---|
+| Superset | 6.0.0 |
+| Keycloak | 26.6.1 |
+| Redis | 8.x |
+| PostgreSQL | 16.x |
+| Python | 3.12 |
 
 ---
 
@@ -334,145 +981,6 @@ dialect and Python driver installed in the image.
 | **CSV Files** | **`shillelagh`** | **`shillelagh://`** (query with `SELECT * FROM "/path/to/file.csv"`) |
 | Google Sheets | `shillelagh[gsheetsapi]` | `gsheets://` |
 
-### CSV files as seeded tables
-
-CSV-sourced datasets are loaded into the analytics Postgres DB at init time,
-not queried in-place by shillelagh. The `./seed/pg` directory is mounted into
-the `analytics-db` container at `/docker-entrypoint-initdb.d`, so any CSV
-placed there is visible to server-side `COPY ... FROM`.
-
-**To add a new CSV dataset:**
-1. Drop the CSV into `seed/pg/` (alongside the SQL loaders).
-2. Add a numbered SQL file in `seed/pg/` that `CREATE TABLE`s the target and
-   `COPY`s the CSV into a Postgres table (see `seed/pg/01_hh_master.sql` for a
-   worked example that preserves the source headers exactly as delivered).
-3. Register the new table in `seed/import_datasources.yaml` under the
-   `analytics` database.
-4. Add chart entries in the appropriate `seed/charts/*.yaml` dashboard file.
-
-The `shillelagh` driver is still installed and usable for ad-hoc SQL Lab
-queries against external sources such as Google Sheets, but the seed pipeline
-no longer points charts at CSV paths through it — doing so failed at chart
-render time because (a) shillelagh's CSV adapter is disabled under its default
-safe mode, and (b) `./seed` is only mounted into the one-shot init container,
-not into the long-running `superset` / `celery-worker` services.
-
-### India State Choropleth Map + Selected State drill-down
-
-The overview dashboard's `Overview India State Choropleth` chart uses Superset's built-in
-`country_map` plugin. It ships an India GeoJSON inside Superset itself,
-renders without Mapbox or any API key, and needs no external boundary
-file or loader script.
-
-State matching is done on ISO 3166-2 codes (`IN-KL`, `IN-MH`, …). The
-single SQL function `state_to_iso(text)` in `seed/pg/01_hh_master.sql`
-maps every `State_label` value (including legacy/alternate spellings
-like Orissa/Pondicherry/Uttaranchal and the merged Dadra/Daman UT) to
-its ISO code. Every analytical view that participates in the drill-down
-exposes `iso_code` via this function so a single cross-filter column
-lines up across all of them.
-
-**Drill-down behavior.** Click any state on the choropleth and a
-dedicated "Selected State Detail" block updates in place — no popups
-or page navigation needed:
-
-| Receiver chart                          | Source view              | Shows for the clicked state                |
-|-----------------------------------------|--------------------------|--------------------------------------------|
-| Selected State District Breakdown       | `vw_district_summary`    | Households per district                    |
-| Selected State Welfare Coverage         | `vw_welfare_kpis_long`   | Ayushman / LPG / Ration / school KPIs      |
-| Selected State Sector Mix               | `vw_state_sector_summary`| Rural vs Urban household share             |
-| Selected State Digital Adoption         | `vw_digital_kpis_long`   | Internet + online channel adoption rates   |
-
-The cross-filter scope is configured in the dashboard's
-`chart_configuration` (built by `docker/scripts/seed_dashboard.py`
-from the `cross_filter_source` / `cross_filter_target` keys in
-the dashboard YAML files in `seed/charts/`) so that clicking the map only drills the
-"Selected State *" charts. The country-wide KPIs and "Households by
-State" bar stay at country totals, which keeps the national context
-visible while exploring one state. Click an empty area of the map (or
-re-click the same state) to clear the filter.
-
-The same folder-based structure is also used by the `LCA Rural Segments Comparison`
-dashboard, whose Handlebars chart spec now lives in
-`seed/charts/lca-rural-segments-comparison.yaml`.
-
-### Notes for document and non-SQL databases
-
-- **MongoDB**
-  - MongoDB is **not listed as a direct built-in Superset 6.0.0 connector** in the official docs.
-  - To use it with Superset, you typically need a **SQL interface**, a compatible
-    SQLAlchemy dialect, or an intermediate engine such as Trino.
-
-- **Document, time-series, and search engines**
-  - Superset can work with non-traditional backends when they expose a stable SQL
-    interface and Python driver.
-  - Examples in the official docs include **Druid**, **Elasticsearch**,
-    **ClickHouse**, **DynamoDB**, **Couchbase**, and **TDengine**.
-
-- **General rule**
-  - If your source is not on the official list, the main requirement is the
-    existence of a functional SQLAlchemy dialect and Python driver.
-
----
-
-## Common commands
-
-```bash
-# Stop everything (volumes preserved)
-docker compose down
-
-# Wipe all data and re-seed from scratch
-docker compose down -v && docker compose up -d --build
-
-# Rebuild only the Superset image (e.g. after Dockerfile change)
-docker compose build --no-cache
-
-# Follow all logs
-docker compose logs -f
-
-# Follow only the init logs
-docker compose logs -f superset-init
-
-# Open a shell inside the running Superset container
-docker compose exec superset bash
-
-# Re-import datasources manually
-docker compose exec superset \
-  superset import_datasources -p /app/seed/import_datasources.yaml -u admin
-
-# Re-run dashboard seeding manually
-docker compose exec superset python /app/docker/scripts/seed_dashboard.py
-```
-
----
-
-## Customising the image
-
-Add extra Python packages (DB drivers, extensions) in `Dockerfile`:
-
-```dockerfile
-RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
-    trino \
-    sqlalchemy-bigquery
-```
-
-Then rebuild: `docker compose build --no-cache`.
-
----
-
-## Troubleshooting
-
-### Charts missing after adding a new seed
-
-`docker-entrypoint-initdb.d` only runs on a **fresh volume**. If you add a new
-seed file to an existing setup, wipe volumes and rebuild:
-
-```bash
-docker compose down -v
-docker compose up -d --build
-```
-
----
 
 ## Reference docs
 
@@ -483,12 +991,6 @@ docker compose up -d --build
 
 ---
 
-## Production checklist
+## License
 
-- [ ] Set `SUPERSET_SECRET_KEY` to a strong random value (32+ chars)
-- [ ] Set `SESSION_COOKIE_SECURE = True` and `TALISMAN_ENABLED = True` behind HTTPS
-- [ ] Use a managed Postgres and Redis — not the Compose services
-- [ ] Configure SMTP in `superset_config.py` for alert/report emails
-- [ ] Change `SUPERSET_ADMIN_PASSWORD` from the default
-- [ ] Pin image tags for `metadata-db`, `redis`, and `analytics-db`
-- [ ] Remove or restrict the `analytics-db` sample service
+Apache-2.0

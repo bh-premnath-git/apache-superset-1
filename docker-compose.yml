@@ -11,6 +11,8 @@ volumes:
   redis-data:
   analytics-db-data:
   superset-home:
+  keycloak-db-data:
+  keycloak-ssl:
 
 # ── Re-usable anchor for Superset env vars ────────────────────────────────────
 x-superset-env: &superset-env
@@ -18,6 +20,9 @@ x-superset-env: &superset-env
   SUPERSET_ADMIN_USERNAME:  ${SUPERSET_ADMIN_USERNAME}
   SUPERSET_ADMIN_PASSWORD:  ${SUPERSET_ADMIN_PASSWORD}
   SUPERSET_ADMIN_EMAIL:     ${SUPERSET_ADMIN_EMAIL}
+  SUPERSET_APP_NAME:        ${SUPERSET_APP_NAME:-BigHammer}
+  SUPERSET_APP_ICON:        ${SUPERSET_APP_ICON:-/static/assets/images/logo.svg}
+  SUPERSET_APP_FAVICON:     ${SUPERSET_APP_FAVICON:-/static/assets/images/logo.svg}
   METADATA_DB_USER:         ${METADATA_DB_USER}
   METADATA_DB_PASS:         ${METADATA_DB_PASS}
   METADATA_DB_NAME:         ${METADATA_DB_NAME}
@@ -28,8 +33,29 @@ x-superset-env: &superset-env
   ANALYTICS_DB_HOST:        ${ANALYTICS_DB_HOST:-analytics-db}
   ANALYTICS_DB_PORT:        ${ANALYTICS_DB_PORT:-5432}
   MAPBOX_API_KEY:           ${MAPBOX_API_KEY:-}
+  KEYCLOAK_SERVER_URL:      ${KEYCLOAK_SERVER_URL:-}
+  KEYCLOAK_REALM:           ${KEYCLOAK_REALM:-}
+  KEYCLOAK_CLIENT_ID:       ${KEYCLOAK_CLIENT_ID:-}
+  KEYCLOAK_CLIENT_SECRET:   ${KEYCLOAK_CLIENT_SECRET:-}
+  KEYCLOAK_REDIRECT_URI:    ${KEYCLOAK_REDIRECT_URI:-}
+  KEYCLOAK_API_BASE_URL:    ${KEYCLOAK_API_BASE_URL:-}
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
+
+x-keycloak-env: &keycloak-env
+  KEYCLOAK_ADMIN:                 ${KEYCLOAK_ADMIN:-admin}
+  KEYCLOAK_ADMIN_PASSWORD:        ${KEYCLOAK_ADMIN_PASSWORD:-password}
+  KC_DB:                          postgres
+  KC_DB_URL:                      jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB_NAME:-keycloak}
+  KC_DB_USERNAME:                 ${KEYCLOAK_DB_USER:-keycloak}
+  KC_DB_PASSWORD:                 ${KEYCLOAK_DB_PASS:-keycloak}
+  KC_PROXY_HEADERS:               xforwarded
+  KC_HTTP_ENABLED:                true
+  KC_HEALTH_ENABLED:              true
+  KC_HOSTNAME:                    ${KEYCLOAK_HOSTNAME:-localhost}
+  KC_HOSTNAME_STRICT:             false
+  KC_HOSTNAME_STRICT_HTTPS:       false
+  KC_HOSTNAME_STRICT_BACKCHANNEL: false
 
 services:
 
@@ -64,6 +90,62 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - superset-net
+
+  # ── Keycloak metadata DB ────────────────────────────────────────────────────
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: superset-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASS:-keycloak}
+      POSTGRES_DB:       ${KEYCLOAK_DB_NAME:-keycloak}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superset-net
+
+  # ── Keycloak ────────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.1
+    container_name: superset-keycloak
+    restart: unless-stopped
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      <<: *keycloak-env
+    command: ["start-dev", "--proxy-headers=xforwarded"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/realms/master || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - superset-net
+
+  # ── Keycloak nginx proxy ────────────────────────────────────────────────────
+  keycloak-nginx:
+    build:
+      context: .
+      dockerfile: docker/keycloak-nginx/Dockerfile
+    container_name: superset-keycloak-nginx
+    restart: unless-stopped
+    depends_on:
+      keycloak:
+        condition: service_started
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - keycloak-ssl:/etc/nginx/ssl
     networks:
       - superset-net
 

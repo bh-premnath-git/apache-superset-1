@@ -27,6 +27,7 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     pydruid \
     elasticsearch-dbapi \
     shillelagh \
+    Authlib \
     cryptography
 
 # Copy startup bootstrap script.
