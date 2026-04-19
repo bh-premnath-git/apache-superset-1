@@ -5,6 +5,63 @@
 
 ---
 
+## Quick Start (Docker Compose)
+
+This repository ships a working Docker Compose stack with Apache Superset,
+PostgreSQL (metadata + sample analytics), Redis, Celery worker/beat, Keycloak
+(optional OIDC), and a runtime seeder that creates a sample
+database/dataset/chart/dashboard via the Superset REST API.
+
+### Prerequisites
+
+- Docker Engine 24+ and Docker Compose v2
+- ~4 GB free RAM
+
+### Steps
+
+```bash
+# 1. Copy and edit environment defaults
+cp .env.example .env
+# At a minimum, replace SUPERSET_SECRET_KEY with a random 32+ character string:
+#   python -c "import secrets; print(secrets.token_hex(32))"
+
+# 2. Build and start the stack
+docker compose up -d --build
+
+# 3. Watch init/seed progress
+docker compose logs -f superset-init superset-runtime-seed
+```
+
+Once the `superset-runtime-seed` container exits successfully:
+
+- Superset UI: <http://localhost:8088>
+- Default admin login: the `SUPERSET_ADMIN_USERNAME` / `SUPERSET_ADMIN_PASSWORD`
+  from `.env` (defaults `admin` / `admin123`)
+- Keycloak admin console (optional): <http://localhost:8080> with
+  `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`
+
+The seeded dashboard is titled **Executive Overview** (slug `executive-overview`)
+and contains a **Monthly Revenue** chart on top of the `mart_sales.orders`
+sample dataset.
+
+### Common operations
+
+```bash
+# Tail Superset logs
+docker compose logs -f superset
+
+# Re-run seeding (safe to repeat, idempotent)
+docker compose run --rm superset-runtime-seed
+
+# Stop everything (preserve volumes)
+docker compose down
+
+# Stop and wipe state (destructive)
+docker compose down -v
+```
+
+---
+
 ## Table of Contents
 
 1. [Why This Exists](#1-why-this-exists)
