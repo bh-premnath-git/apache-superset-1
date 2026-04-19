@@ -11,7 +11,7 @@ fi
 exec gunicorn \
   --bind "0.0.0.0:8088" \
   --workers "${GUNICORN_WORKERS:-3}" \
-  --worker-class "${GUNICORN_WORKER_CLASS:-gevent}" \
+  --worker-class "${GUNICORN_WORKER_CLASS:-gthread}" \
   --timeout "${GUNICORN_TIMEOUT:-120}" \
   --limit-request-line 0 \
   --limit-request-field_size 0 \
