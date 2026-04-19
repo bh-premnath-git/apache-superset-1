@@ -9,7 +9,7 @@ def env(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
-SUPERSET_SECRET_KEY = env("SUPERSET_SECRET_KEY", "please_change_me")
+SECRET_KEY = env("SUPERSET_SECRET_KEY", "please_change_me")
 SQLALCHEMY_DATABASE_URI = (
     f"postgresql+psycopg2://{env('METADATA_DB_USER', 'superset')}:"
     f"{env('METADATA_DB_PASS', 'superset')}@"

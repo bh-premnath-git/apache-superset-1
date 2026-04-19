@@ -114,15 +114,38 @@ def ensure_dataset(token: str, database_id: int) -> int:
     listing = _request("GET", "/api/v1/dataset/?page_size=200", token=token)
     existing = _first_by_name(listing, "table_name", DATASET_NAME)
     if existing:
-        return int(existing["id"])
+        dataset_id = int(existing["id"])
+    else:
+        payload = {
+            "database": database_id,
+            "schema": "mart_sales",
+            "table_name": DATASET_NAME,
+        }
+        created = _request("POST", "/api/v1/dataset/", payload=payload, token=token)
+        dataset_id = int(created["id"])
 
-    payload = {
-        "database": database_id,
-        "schema": "mart_sales",
-        "table_name": DATASET_NAME,
-    }
-    created = _request("POST", "/api/v1/dataset/", payload=payload, token=token)
-    return int(created["id"])
+    # Ensure a revenue sum metric exists so charts referencing ``sum__revenue``
+    # can resolve. Superset auto-creates ``sum__<column>`` metrics only when the
+    # dataset is refreshed in the UI, so we explicitly create one here.
+    detail = _request("GET", f"/api/v1/dataset/{dataset_id}", token=token)
+    metrics = detail.get("result", {}).get("metrics", [])
+    if not any(m.get("metric_name") == "sum__revenue" for m in metrics):
+        _request(
+            "PUT",
+            f"/api/v1/dataset/{dataset_id}?override_columns=false",
+            payload={
+                "metrics": [
+                    {
+                        "metric_name": "sum__revenue",
+                        "expression": "SUM(revenue)",
+                        "verbose_name": "Total Revenue",
+                        "metric_type": "sum",
+                    }
+                ]
+            },
+            token=token,
+        )
+    return dataset_id
 
 
 def ensure_chart(token: str, dataset_id: int) -> int:
@@ -149,15 +172,61 @@ def ensure_chart(token: str, dataset_id: int) -> int:
     return int(created["id"])
 
 
-def ensure_dashboard(token: str) -> int:
+def ensure_dashboard(token: str, chart_id: int) -> int:
     listing = _request("GET", "/api/v1/dashboard/?page_size=200", token=token)
     existing = _first_by_name(listing, "dashboard_title", DASHBOARD_TITLE)
     if existing:
-        return int(existing["id"])
+        dashboard_id = int(existing["id"])
+    else:
+        payload = {
+            "dashboard_title": DASHBOARD_TITLE,
+            "slug": DASHBOARD_SLUG,
+            "published": True,
+        }
+        created = _request("POST", "/api/v1/dashboard/", payload=payload, token=token)
+        dashboard_id = int(created["id"])
 
-    payload = {"dashboard_title": DASHBOARD_TITLE, "slug": DASHBOARD_SLUG, "published": True}
-    created = _request("POST", "/api/v1/dashboard/", payload=payload, token=token)
-    return int(created["id"])
+    detail = _request("GET", f"/api/v1/dashboard/{dashboard_id}", token=token)
+    result = detail.get("result", {})
+    existing_position = result.get("position_json") or ""
+
+    if f"CHART-{chart_id}" not in existing_position:
+        chart_uuid = f"CHART-{chart_id}"
+        position = {
+            "DASHBOARD_VERSION_KEY": "v2",
+            "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"]},
+            "GRID_ID": {
+                "type": "GRID",
+                "id": "GRID_ID",
+                "children": ["ROW-1"],
+                "parents": ["ROOT_ID"],
+            },
+            "ROW-1": {
+                "type": "ROW",
+                "id": "ROW-1",
+                "children": [chart_uuid],
+                "parents": ["ROOT_ID", "GRID_ID"],
+                "meta": {"background": "BACKGROUND_TRANSPARENT"},
+            },
+            chart_uuid: {
+                "type": "CHART",
+                "id": chart_uuid,
+                "children": [],
+                "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+                "meta": {
+                    "width": 12,
+                    "height": 50,
+                    "chartId": chart_id,
+                },
+            },
+        }
+        _request(
+            "PUT",
+            f"/api/v1/dashboard/{dashboard_id}",
+            payload={"position_json": json.dumps(position)},
+            token=token,
+        )
+    return dashboard_id
 
 
 def main() -> None:
@@ -166,7 +235,7 @@ def main() -> None:
     db_id = ensure_database(token)
     dataset_id = ensure_dataset(token, db_id)
     chart_id = ensure_chart(token, dataset_id)
-    dashboard_id = ensure_dashboard(token)
+    dashboard_id = ensure_dashboard(token, chart_id)
     print(
         "Seeded via REST API:",
         f"database_id={db_id}",
