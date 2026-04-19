@@ -1,0 +1,8 @@
+apiVersion: analytics/v1
+kind: Database
+metadata:
+  key: db.analytics
+  name: Analytics Warehouse
+spec:
+  engine: postgresql
+  sqlalchemyUriFromEnv: ANALYTICS_DB_URI

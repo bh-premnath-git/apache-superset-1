@@ -1,0 +1,7 @@
+state:
+  backend: sqlite
+  sqlitePath: superset_home/control_plane_state.db
+reconcile:
+  driftPolicy: detect
+  maxRetries: 5
+  backoffSeconds: 30

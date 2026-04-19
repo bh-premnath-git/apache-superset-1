@@ -41,6 +41,7 @@ x-superset-env: &superset-env
   KEYCLOAK_API_BASE_URL:    ${KEYCLOAK_API_BASE_URL:-}
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
+  SUPERSET_URL:             ${SUPERSET_URL:-http://superset:8088}
 
 x-keycloak-env: &keycloak-env
   KEYCLOAK_ADMIN:                 ${KEYCLOAK_ADMIN:-admin}
@@ -61,7 +62,7 @@ services:
 
   # ── Superset metadata DB ───────────────────────────────────────────────────
   metadata-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     container_name: superset-metadata-db
     restart: unless-stopped
     environment:
@@ -80,7 +81,7 @@ services:
 
   # ── Redis ──────────────────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: superset-redis
     restart: unless-stopped
     volumes:
@@ -95,7 +96,7 @@ services:
 
   # ── Keycloak metadata DB ────────────────────────────────────────────────────
   keycloak-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     container_name: superset-keycloak-db
     restart: unless-stopped
     environment:
@@ -114,7 +115,7 @@ services:
 
   # ── Keycloak ────────────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.1
+    image: quay.io/keycloak/keycloak:26.6.1
     container_name: superset-keycloak
     restart: unless-stopped
     depends_on:
@@ -235,7 +236,7 @@ services:
 
   # ── Sample Analytics Postgres DB ───────────────────────────────────────────
   analytics-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     container_name: superset-analytics-db
     restart: unless-stopped
     environment:
@@ -250,5 +251,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - superset-net
+
+  # ── Runtime REST seeding ───────────────────────────────────────────────────
+  superset-runtime-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superset-runtime-seed
+    restart: "no"
+    depends_on:
+      superset:
+        condition: service_started
+    environment:
+      <<: *superset-env
+    entrypoint: ["python", "/app/docker/scripts/seed_dashboard.py"]
+    volumes:
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
     networks:
       - superset-net
