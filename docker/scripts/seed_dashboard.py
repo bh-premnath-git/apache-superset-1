@@ -21,7 +21,7 @@ USERNAME = os.getenv("SUPERSET_ADMIN_USERNAME", "admin")
 PASSWORD = os.getenv("SUPERSET_ADMIN_PASSWORD", "admin")
 
 ANALYTICS_DB_NAME = "Analytics Warehouse"
-DATASET_NAME = "sales_orders"
+DATASET_TABLE = "orders"
 CHART_NAME = "Monthly Revenue"
 DASHBOARD_TITLE = "Executive Overview"
 DASHBOARD_SLUG = "executive-overview"
@@ -126,14 +126,14 @@ def ensure_database(token: str, csrf_token: str) -> int:
 
 def ensure_dataset(token: str, database_id: int, csrf_token: str) -> int:
     listing = _request("GET", "/api/v1/dataset/?page_size=200", token=token)
-    existing = _first_by_name(listing, "table_name", DATASET_NAME)
+    existing = _first_by_name(listing, "table_name", DATASET_TABLE)
     if existing:
         dataset_id = int(existing["id"])
     else:
         payload = {
             "database": database_id,
             "schema": "mart_sales",
-            "table_name": DATASET_NAME,
+            "table_name": DATASET_TABLE,
         }
         created = _request("POST", "/api/v1/dataset/", payload=payload, token=token, csrf_token=csrf_token)
         dataset_id = int(created["id"])
