@@ -1,0 +1,10 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.sales.orders
+  name: sales_orders
+spec:
+  databaseRef: db.analytics
+  schema: mart_sales
+  table: orders
+  timeColumn: order_date

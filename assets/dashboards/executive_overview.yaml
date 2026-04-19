@@ -1,0 +1,9 @@
+apiVersion: analytics/v1
+kind: Dashboard
+metadata:
+  key: dashboard.exec.overview
+  name: Executive Overview
+spec:
+  slug: executive-overview
+  chartRefs:
+    - chart.sales.monthly_revenue

@@ -16,7 +16,7 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     psycopg2-binary \
     snowflake-sqlalchemy \
     sqlalchemy-bigquery \
-    cx_Oracle \
+    oracledb \
     pymssql \
     sqlalchemy-redshift \
     "pyathena[pandas]" \

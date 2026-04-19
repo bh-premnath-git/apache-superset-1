@@ -887,6 +887,8 @@ Good for:
 - demos
 - single-node integration testing
 
+Runtime bootstrap in this repository follows the design principle of runtime reconciliation: a dedicated `superset-runtime-seed` service performs sample resource creation through Superset REST APIs after the web service starts.
+
 ### 19.2 Kubernetes
 
 Good for:
@@ -942,7 +944,7 @@ Suggested baseline:
 | Superset | 6.0.0 |
 | Keycloak | 26.6.1 |
 | Redis | 8.x |
-| PostgreSQL | 16.x |
+| PostgreSQL | 18.x |
 | Python | 3.12 |
 
 ---
