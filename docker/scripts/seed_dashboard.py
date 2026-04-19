@@ -7,6 +7,7 @@ idempotently.
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import time
@@ -24,6 +25,8 @@ DATASET_NAME = "sales_orders"
 CHART_NAME = "Monthly Revenue"
 DASHBOARD_TITLE = "Executive Overview"
 DASHBOARD_SLUG = "executive-overview"
+COOKIE_JAR = http.cookiejar.CookieJar()
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR))
 
 
 def _request(
@@ -31,11 +34,14 @@ def _request(
     path: str,
     payload: dict[str, Any] | None = None,
     token: str | None = None,
+    csrf_token: str | None = None,
 ) -> dict[str, Any]:
     body = None
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if csrf_token:
+        headers["X-CSRFToken"] = csrf_token
 
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
@@ -43,7 +49,7 @@ def _request(
     req = urllib.request.Request(
         f"{SUPERSET_URL}{path}", data=body, headers=headers, method=method
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with OPENER.open(req, timeout=30) as resp:
         content = resp.read().decode("utf-8")
     return json.loads(content) if content else {}
 
@@ -52,7 +58,7 @@ def wait_for_api(timeout_seconds: int = 300) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(f"{SUPERSET_URL}/health", timeout=10) as resp:
+            with OPENER.open(f"{SUPERSET_URL}/health", timeout=10) as resp:
                 if resp.status == 200:
                     print("Superset API is healthy.")
                     return
@@ -79,6 +85,14 @@ def login() -> str:
     return token
 
 
+def get_csrf_token(token: str) -> str:
+    response = _request("GET", "/api/v1/security/csrf_token/", token=token)
+    csrf_token = response.get("result")
+    if not csrf_token:
+        raise RuntimeError("Unable to obtain CSRF token from Superset")
+    return csrf_token
+
+
 def _first_by_name(result: dict[str, Any], key: str, expected: str) -> dict[str, Any] | None:
     for row in result.get("result", []):
         if row.get(key) == expected:
@@ -86,7 +100,7 @@ def _first_by_name(result: dict[str, Any], key: str, expected: str) -> dict[str,
     return None
 
 
-def ensure_database(token: str) -> int:
+def ensure_database(token: str, csrf_token: str) -> int:
     listing = _request("GET", "/api/v1/database/?page_size=200", token=token)
     existing = _first_by_name(listing, "database_name", ANALYTICS_DB_NAME)
     if existing:
@@ -106,11 +120,11 @@ def ensure_database(token: str) -> int:
         "allow_cvas": False,
         "allow_dml": False,
     }
-    created = _request("POST", "/api/v1/database/", payload=payload, token=token)
+    created = _request("POST", "/api/v1/database/", payload=payload, token=token, csrf_token=csrf_token)
     return int(created["id"])
 
 
-def ensure_dataset(token: str, database_id: int) -> int:
+def ensure_dataset(token: str, database_id: int, csrf_token: str) -> int:
     listing = _request("GET", "/api/v1/dataset/?page_size=200", token=token)
     existing = _first_by_name(listing, "table_name", DATASET_NAME)
     if existing:
@@ -121,7 +135,7 @@ def ensure_dataset(token: str, database_id: int) -> int:
             "schema": "mart_sales",
             "table_name": DATASET_NAME,
         }
-        created = _request("POST", "/api/v1/dataset/", payload=payload, token=token)
+        created = _request("POST", "/api/v1/dataset/", payload=payload, token=token, csrf_token=csrf_token)
         dataset_id = int(created["id"])
 
     # Ensure a revenue sum metric exists so charts referencing ``sum__revenue``
@@ -144,11 +158,12 @@ def ensure_dataset(token: str, database_id: int) -> int:
                 ]
             },
             token=token,
+            csrf_token=csrf_token,
         )
     return dataset_id
 
 
-def ensure_chart(token: str, dataset_id: int) -> int:
+def ensure_chart(token: str, dataset_id: int, csrf_token: str) -> int:
     listing = _request("GET", "/api/v1/chart/?page_size=200", token=token)
     existing = _first_by_name(listing, "slice_name", CHART_NAME)
     if existing:
@@ -168,11 +183,11 @@ def ensure_chart(token: str, dataset_id: int) -> int:
         "datasource_type": "table",
         "params": json.dumps(params),
     }
-    created = _request("POST", "/api/v1/chart/", payload=payload, token=token)
+    created = _request("POST", "/api/v1/chart/", payload=payload, token=token, csrf_token=csrf_token)
     return int(created["id"])
 
 
-def ensure_dashboard(token: str, chart_id: int) -> int:
+def ensure_dashboard(token: str, chart_id: int, csrf_token: str) -> int:
     listing = _request("GET", "/api/v1/dashboard/?page_size=200", token=token)
     existing = _first_by_name(listing, "dashboard_title", DASHBOARD_TITLE)
     if existing:
@@ -183,7 +198,7 @@ def ensure_dashboard(token: str, chart_id: int) -> int:
             "slug": DASHBOARD_SLUG,
             "published": True,
         }
-        created = _request("POST", "/api/v1/dashboard/", payload=payload, token=token)
+        created = _request("POST", "/api/v1/dashboard/", payload=payload, token=token, csrf_token=csrf_token)
         dashboard_id = int(created["id"])
 
     detail = _request("GET", f"/api/v1/dashboard/{dashboard_id}", token=token)
@@ -225,6 +240,7 @@ def ensure_dashboard(token: str, chart_id: int) -> int:
             f"/api/v1/dashboard/{dashboard_id}",
             payload={"position_json": json.dumps(position)},
             token=token,
+            csrf_token=csrf_token,
         )
     return dashboard_id
 
@@ -232,10 +248,11 @@ def ensure_dashboard(token: str, chart_id: int) -> int:
 def main() -> None:
     wait_for_api()
     token = login()
-    db_id = ensure_database(token)
-    dataset_id = ensure_dataset(token, db_id)
-    chart_id = ensure_chart(token, dataset_id)
-    dashboard_id = ensure_dashboard(token, chart_id)
+    csrf_token = get_csrf_token(token)
+    db_id = ensure_database(token, csrf_token)
+    dataset_id = ensure_dataset(token, db_id, csrf_token)
+    chart_id = ensure_chart(token, dataset_id, csrf_token)
+    dashboard_id = ensure_dashboard(token, chart_id, csrf_token)
     print(
         "Seeded via REST API:",
         f"database_id={db_id}",
