@@ -12,6 +12,16 @@ volumes:
   keycloak-db-data:
   keycloak-ssl:
 
+# ── Re-usable anchor: MCP-specific env (merged on top of *superset-env) ──────
+x-mcp-env: &mcp-env
+  MCP_DEV_USERNAME:       ${MCP_DEV_USERNAME:-${SUPERSET_ADMIN_USERNAME:-admin}}
+  MCP_AUTH_ENABLED:       ${MCP_AUTH_ENABLED:-False}
+  MCP_JWT_ALGORITHM:      ${MCP_JWT_ALGORITHM:-RS256}
+  MCP_JWT_ISSUER:         ${MCP_JWT_ISSUER:-}
+  MCP_JWT_AUDIENCE:       ${MCP_JWT_AUDIENCE:-}
+  MCP_JWKS_URI:           ${MCP_JWKS_URI:-}
+  MCP_JWT_SECRET:         ${MCP_JWT_SECRET:-}
+
 # ── Re-usable anchor for Superset env vars ────────────────────────────────────
 x-superset-env: &superset-env
   SUPERSET_SECRET_KEY:      ${SUPERSET_SECRET_KEY}
@@ -156,6 +166,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-keycloak-bootstrap
     restart: "no"
     depends_on:
@@ -172,6 +184,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-init
     restart: "no"
     depends_on:
@@ -199,6 +213,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-app
     restart: unless-stopped
     depends_on:
@@ -226,6 +242,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-celery-worker
     restart: unless-stopped
     depends_on:
@@ -247,6 +265,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-celery-beat
     restart: unless-stopped
     depends_on:
@@ -285,11 +305,59 @@ services:
     networks:
       - superset-net
 
+  # ── MCP server (built-in Superset ``superset mcp run`` CLI) ───────────────
+  #
+  # Runs alongside the Superset web container, shares the same image and
+  # superset_config.py, and exposes the Model Context Protocol over HTTP at
+  # ${MCP_PORT}.  Auth mode is env-driven (see README §6.4).
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    container_name: superset-mcp
+    restart: unless-stopped
+    depends_on:
+      superset:
+        condition: service_healthy
+    environment:
+      <<: [*superset-env, *mcp-env]
+    entrypoint:
+      - superset
+      - mcp
+      - run
+      - --host
+      - 0.0.0.0
+      - --port
+      - "${MCP_PORT:-5008}"
+    ports:
+      - "${MCP_PORT:-5008}:${MCP_PORT:-5008}"
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+      - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import socket,sys,os; s=socket.socket();
+          s.settimeout(2);
+          sys.exit(0 if s.connect_ex(('127.0.0.1', int(os.environ.get('MCP_PORT','5008'))))==0 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - superset-net
+
   # ── Runtime REST seeding ───────────────────────────────────────────────────
   superset-runtime-seed:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
     container_name: superset-runtime-seed
     restart: unless-stopped
     depends_on:

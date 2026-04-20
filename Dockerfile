@@ -1,5 +1,11 @@
 # Custom Superset image with common SQLAlchemy DB drivers.
-FROM apache/superset:6.0.0
+#
+# The base tag is parameterised so operators can bump between release
+# candidates or pinned stable versions without editing this file.  The
+# default targets the 6.1 line because it bundles the built-in ``superset
+# mcp run`` CLI (see README §6).
+ARG SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2
+FROM ${SUPERSET_BASE_IMAGE}
 
 USER root
 
