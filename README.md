@@ -122,11 +122,11 @@ docker compose down -v
    - 5.2 [Import/Export API Usage](#52-importexport-api-usage)
    - 5.3 [REST API Client](#53-rest-api-client)
 6. [MCP Layer](#6-mcp-layer)
-   - 6.0 [Why MCP is Off by Default](#60-why-mcp-is-off-by-default-in-this-repository)
-   - 6.1 [Enabling the MCP Service](#61-enabling-the-mcp-service)
+   - 6.1 [Architecture](#61-architecture)
    - 6.2 [Transport and Protocol](#62-transport-and-protocol)
    - 6.3 [Tool Catalog](#63-tool-catalog)
    - 6.4 [Authentication Flow](#64-authentication-flow)
+   - 6.5 [Verifying the Service](#65-verifying-the-service)
 7. [Identity and Auth Layer](#7-identity-and-auth-layer)
 8. [Asset Model](#8-asset-model)
 9. [Runtime Modes](#9-runtime-modes)
@@ -220,8 +220,8 @@ This project does **not** aim to:
 │  └──────────┘  └─────────┘  └────────────┘  └──────────────────┘   │
 │                                                                     │
 │  ┌──────────┐  ┌──────────────────────────────────────────────┐    │
-│  │  Redis   │  │         MCP Service / AI Access              │    │
-│  │  :6379   │  │   (Superset MCP + control-plane tools)       │    │
+│  │  Redis   │  │   MCP Server (`superset mcp run`, :5008)     │    │
+│  │  :6379   │  │   streamable-HTTP, JWT/dev-impersonation     │    │
 │  └──────────┘  └──────────────────────────────────────────────┘    │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
@@ -427,102 +427,78 @@ The Superset API client is responsible for:
 
 ## 6. MCP Layer
 
-### 6.0 Why MCP is Off by Default in This Repository
-
 Apache Superset exposes a built-in Model Context Protocol server through the
-`superset mcp run` CLI.  That CLI **first shipped in the Superset 6.1 line**,
-which is still in release-candidate (`6.1.0rc2` at the time of writing — see
-the [Superset releases page](https://github.com/apache/superset/releases) and
-the [6.1 MCP docker discussion](https://github.com/apache/superset/discussions/38703)).
+`superset mcp run` CLI, available in the Superset 6.1 line (currently
+`6.1.0rc2` — see the [Superset releases page](https://github.com/apache/superset/releases)
+and the [6.1 MCP docker discussion](https://github.com/apache/superset/discussions/38703)).
+This repository pins `apache/superset:6.1.0rc2` as the default base image so
+the `mcp` subcommand is present out of the box, and wires a dedicated `mcp`
+service into `docker-compose.yml` that starts automatically with the rest of
+the stack.  Everything — image tag, port, auth mode, credentials — is driven
+by environment variables; nothing is hardcoded in compose or config.
 
-This repository pins the **stable** baseline (`apache/superset:6.0.0`), so
-the `mcp` subcommand does not exist in the default image.  The MCP service is
-therefore wired into `docker-compose.yml` behind a Compose **profile** and is
-**inactive unless explicitly opted in**.  Everything is parameterised through
-environment variables — no hardcoded image tags, ports, or credentials.
+### 6.1 Architecture
 
-### 6.1 Enabling the MCP Service
+```text
+┌──────────────┐  JWT / dev-impersonation   ┌──────────────┐
+│ MCP Clients  │ ─────────────────────────▶ │   mcp:5008   │
+│ (Claude,     │    streamable HTTP         │ (Superset    │
+│  Cursor,     │ ◀───────────────────────── │  mcp CLI)    │
+│  Agents SDK) │                            └──────┬───────┘
+└──────────────┘                                   │ in-process
+                                                   │ Flask app ctx
+                                                   ▼
+                                         ┌────────────────────┐
+                                         │  Superset RBAC /   │
+                                         │  metadata DB /     │
+                                         │  query engine      │
+                                         └────────────────────┘
+```
 
-1. **Pick a Superset image that contains the MCP CLI** — either a 6.1
-   release-candidate or any later stable 6.1.x once published:
+Design principles this layout enforces:
 
-   ```bash
-   # .env
-   SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2
-   ```
-
-   The `Dockerfile` consumes this as `ARG SUPERSET_BASE_IMAGE`, so rebuild the
-   image after changing it:
-
-   ```bash
-   docker compose build
-   ```
-
-2. **Activate the `mcp` profile** so Compose starts the service:
-
-   ```bash
-   # .env
-   COMPOSE_PROFILES=mcp
-   ```
-
-   Or on the command line:
-
-   ```bash
-   docker compose --profile mcp up -d
-   ```
-
-3. **Choose an auth mode** (see §6.4).
-
-4. **Verify the server is up**:
-
-   ```bash
-   curl -s http://localhost:${MCP_PORT:-5008}/healthz
-   docker compose logs -f superset-mcp
-   ```
+| Principle | How it's realised |
+|---|---|
+| **Single responsibility** | The `mcp` container only runs `superset mcp run`; web/API traffic remains on `superset:8088`. |
+| **Shared source of truth** | Both containers mount the same `superset_config.py`, so feature flags, DB URIs, and Keycloak settings cannot drift. |
+| **Configuration over code** | All tunables (image tag, port, auth mode, JWT issuer) are injected via env — no conditional Python branches. |
+| **Least privilege** | MCP inherits Superset's RBAC/RLS; JWT-mode resolves a Superset user and Superset enforces authorization. |
+| **Composability** | Health-checked service with `depends_on: superset (service_healthy)` so the start-up graph is deterministic. |
 
 ### 6.2 Transport and Protocol
 
-The upstream `superset mcp run` CLI exposes the service over **streamable
-HTTP**, which is directly compatible with MCP clients such as Claude Desktop,
-Cursor, Windsurf, and the OpenAI Agents SDK.  The port (default `5008`) is
-exposed on the host via the `MCP_PORT` env var.  No stdio transport is
-required — agents connect remotely over HTTP.
+The upstream `superset mcp run` CLI exposes MCP over **streamable HTTP**,
+compatible with Claude Desktop, Cursor, Windsurf, and the OpenAI Agents SDK.
+The host port is controlled by `MCP_PORT` (default `5008`).
 
 ### 6.3 Tool Catalog
 
-The built-in server surfaces Superset's own API as MCP tools.  The catalog
-reflects whatever the chosen Superset image ships with — it is **not** hard
-coded on our side.  Typical categories include dashboard listing, chart
-creation, dataset inspection, and SQL Lab execution.
-
-See the upstream reference for the authoritative, version-specific list:
-[Apache Superset — MCP Integration](https://superset.apache.org/developer-docs/extensions/mcp/).
+The server surfaces Superset's own capabilities as MCP tools — dashboards,
+charts, datasets, SQL Lab — discovered dynamically from the running Superset
+instance.  The exact catalog is owned upstream; see
+[Apache Superset — MCP Integration](https://superset.apache.org/developer-docs/extensions/mcp/)
+for the version-specific list.
 
 Control-plane-specific MCP tools (reconcile status, drift report, etc.) are a
-future addition on top of the upstream MCP server and are intentionally not
-implemented in this repository yet.
+future addition on top of the upstream server.
 
 ### 6.4 Authentication Flow
 
-Configuration is entirely env-driven — see `superset_config.py` and
-`.env.example`.  Two modes are supported out of the box.
+Two modes, both env-driven (see `superset_config.py` and `.env.example`).
 
-**Development — impersonation (no token validation)**
-
-Use only on trusted networks.  Every MCP request runs as the configured user:
+**Development — impersonation (no token validation).** Use only on trusted
+networks; every MCP request runs as the configured user:
 
 ```bash
-# .env
+# .env — defaults suitable for the Docker Compose stack
 MCP_AUTH_ENABLED=False
-MCP_DEV_USERNAME=admin   # must already exist in the Superset user db
+MCP_DEV_USERNAME=admin   # must exist in the Superset user database
 ```
 
-**Production — JWT validation (e.g. Keycloak)**
-
-The MCP server validates the incoming `Authorization: Bearer <jwt>` header
-against the configured issuer/audience and JWKS, then resolves the Superset
-user from the token's `sub` / `email` / `preferred_username` claim.  Superset
-RBAC and RLS are enforced exactly as they are for interactive users.
+**Production — JWT validation (e.g. Keycloak).** The MCP server validates the
+incoming `Authorization: Bearer <jwt>` header against the configured
+issuer/audience and JWKS, then resolves the Superset user from the token's
+`sub` / `email` / `preferred_username` claim:
 
 ```bash
 # .env
@@ -533,12 +509,21 @@ MCP_JWT_AUDIENCE=bighammer-admin
 MCP_JWKS_URI=http://keycloak:8080/realms/master/protocol/openid-connect/certs
 ```
 
-Because Keycloak is already part of the stack, reusing those issuer / JWKS
-URLs keeps the MCP identity model aligned with browser SSO.
+Because Keycloak is already part of the stack, reusing its issuer and JWKS
+URL keeps the MCP identity model aligned with browser SSO.
+
+### 6.5 Verifying the Service
+
+```bash
+docker compose ps mcp                       # STATE should be "healthy"
+docker compose logs -f mcp                  # watch MCP requests
+curl -s http://localhost:${MCP_PORT:-5008}/ # transport handshake
+```
 
 References:
 
 - [MCP Server Deployment & Authentication — Superset docs](https://superset.apache.org/admin-docs/configuration/mcp-server/)
+- [MCP Integration — Superset developer docs](https://superset.apache.org/developer-docs/extensions/mcp/)
 - [Using AI with Superset](https://superset.apache.org/user-docs/using-superset/using-ai-with-superset/)
 
 ---
@@ -1133,8 +1118,7 @@ Suggested baseline:
 
 | Component | Version | Notes |
 |---|---|---|
-| Superset (stable) | `6.0.0` | Default in `.env.example`; MCP CLI not yet included. |
-| Superset (MCP-enabled) | `6.1.0rc2` | Set `SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2` to use the built-in `superset mcp run` CLI. See §6. |
+| Superset | `6.1.0rc2` | Default base image. Ships the built-in `superset mcp run` CLI (see §6). Override via `SUPERSET_BASE_IMAGE`. |
 | Keycloak | `26.6.1` | |
 | Redis | `8.x` | |
 | PostgreSQL | `18.x` | |
