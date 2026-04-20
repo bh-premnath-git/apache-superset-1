@@ -64,11 +64,13 @@ LOGO_TARGET_PATH = "/"
 THEME_DEFAULT = {
     "token": {
         "brandLogoUrl": "/static/assets/images/logo.svg",
+        "brandLogoHref": "/",
     },
 }
 THEME_DARK = {
     "token": {
         "brandLogoUrl": "/static/assets/images/logo.svg",
+        "brandLogoHref": "/",
     },
     "algorithm": "dark",
 }

@@ -34,7 +34,8 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     elasticsearch-dbapi \
     shillelagh \
     Authlib \
-    cryptography
+    cryptography \
+    fastmcp
 
 # Copy startup bootstrap script.
 COPY docker/scripts/bootstrap.sh /app/bootstrap.sh
