@@ -127,3 +127,28 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
 WTF_CSRF_ENABLED = True
+
+
+# ── MCP (Model Context Protocol) Server ──────────────────────────────────────
+# The built-in ``superset mcp run`` CLI is available in Superset 6.1.x+.
+# Configuration is entirely driven by environment — nothing is hardcoded so
+# operators can flip between dev-impersonation mode and JWT-auth (e.g. against
+# Keycloak) without editing code.
+#
+# Dev mode (simple, no token validation):
+#   MCP_DEV_USERNAME=admin   # must exist in the Superset user database
+#
+# Production mode (OIDC / JWT-validated, typically against Keycloak):
+#   MCP_AUTH_ENABLED=True
+#   MCP_JWT_ALGORITHM=RS256
+#   MCP_JWT_ISSUER=https://auth.example.com/realms/analytics
+#   MCP_JWT_AUDIENCE=superset-mcp
+#   MCP_JWKS_URI=https://auth.example.com/realms/analytics/protocol/openid-connect/certs
+MCP_DEV_USERNAME = env("MCP_DEV_USERNAME", "")
+MCP_AUTH_ENABLED = env("MCP_AUTH_ENABLED", "False").lower() == "true"
+MCP_JWT_ALGORITHM = env("MCP_JWT_ALGORITHM", "")
+MCP_JWT_ISSUER = env("MCP_JWT_ISSUER", "")
+MCP_JWT_AUDIENCE = env("MCP_JWT_AUDIENCE", "")
+MCP_JWKS_URI = env("MCP_JWKS_URI", "")
+MCP_JWT_SECRET = env("MCP_JWT_SECRET", "")
+MCP_JWT_PUBLIC_KEY = env("MCP_JWT_PUBLIC_KEY", "")

@@ -28,11 +28,13 @@ cp .env.example .env
 # 2. Build and start the stack
 docker compose up -d --build
 
-# 3. Watch init/seed progress (wait for superset-runtime-seed to exit)
+# 3. Watch init/seed progress — superset-runtime-seed is a long-lived
+#    reconciler: it performs the first sync then keeps watching `assets/`
+#    for YAML changes and re-syncs automatically.
 docker compose logs -f superset-init superset-runtime-seed
 ```
 
-Once the `superset-runtime-seed` container exits successfully:
+Once the `superset-runtime-seed` container logs `Reconcile complete`:
 
 - Superset UI: <http://localhost:8088>
 - Default admin login: the `SUPERSET_ADMIN_USERNAME` / `SUPERSET_ADMIN_PASSWORD`
@@ -41,8 +43,13 @@ Once the `superset-runtime-seed` container exits successfully:
   `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`
 
 The seeded dashboard is titled **Executive Overview** (slug `executive-overview`)
-and contains a **Monthly Revenue** chart on top of the `mart_sales.orders`
-sample dataset.
+and contains three charts — **Monthly Revenue**, **Revenue by Country**, and
+**Order Count Trend** — on top of the `mart_sales.orders` sample dataset.
+
+The dataset's metrics (`count`, `sum__revenue`) are declared in
+`assets/datasets/sales_orders.yaml` and are reconciled declaratively via
+Superset's `PUT /api/v1/dataset/{id}` API — the chart specs reference those
+metric names, not any hardcoded ID.
 
 ### OIDC Client Secret Setup
 
@@ -115,7 +122,8 @@ docker compose down -v
    - 5.2 [Import/Export API Usage](#52-importexport-api-usage)
    - 5.3 [REST API Client](#53-rest-api-client)
 6. [MCP Layer](#6-mcp-layer)
-   - 6.1 [Architecture](#61-architecture)
+   - 6.0 [Why MCP is Off by Default](#60-why-mcp-is-off-by-default-in-this-repository)
+   - 6.1 [Enabling the MCP Service](#61-enabling-the-mcp-service)
    - 6.2 [Transport and Protocol](#62-transport-and-protocol)
    - 6.3 [Tool Catalog](#63-tool-catalog)
    - 6.4 [Authentication Flow](#64-authentication-flow)
@@ -419,48 +427,119 @@ The Superset API client is responsible for:
 
 ## 6. MCP Layer
 
-### 6.1 Architecture
+### 6.0 Why MCP is Off by Default in This Repository
 
-MCP provides AI-facing access to governed Superset capabilities.
+Apache Superset exposes a built-in Model Context Protocol server through the
+`superset mcp run` CLI.  That CLI **first shipped in the Superset 6.1 line**,
+which is still in release-candidate (`6.1.0rc2` at the time of writing — see
+the [Superset releases page](https://github.com/apache/superset/releases) and
+the [6.1 MCP docker discussion](https://github.com/apache/superset/discussions/38703)).
 
-Use cases:
+This repository pins the **stable** baseline (`apache/superset:6.0.0`), so
+the `mcp` subcommand does not exist in the default image.  The MCP service is
+therefore wired into `docker-compose.yml` behind a Compose **profile** and is
+**inactive unless explicitly opted in**.  Everything is parameterised through
+environment variables — no hardcoded image tags, ports, or credentials.
 
-- list dashboards
-- inspect datasets
-- run SQL
-- create charts
-- create dashboards
-- check control-plane status
+### 6.1 Enabling the MCP Service
 
-Recommended split:
+1. **Pick a Superset image that contains the MCP CLI** — either a 6.1
+   release-candidate or any later stable 6.1.x once published:
 
-- **Superset MCP tools** for analytics interactions
-- **Control Plane MCP tools** for reconcile, drift, and asset-state inspection
+   ```bash
+   # .env
+   SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2
+   ```
+
+   The `Dockerfile` consumes this as `ARG SUPERSET_BASE_IMAGE`, so rebuild the
+   image after changing it:
+
+   ```bash
+   docker compose build
+   ```
+
+2. **Activate the `mcp` profile** so Compose starts the service:
+
+   ```bash
+   # .env
+   COMPOSE_PROFILES=mcp
+   ```
+
+   Or on the command line:
+
+   ```bash
+   docker compose --profile mcp up -d
+   ```
+
+3. **Choose an auth mode** (see §6.4).
+
+4. **Verify the server is up**:
+
+   ```bash
+   curl -s http://localhost:${MCP_PORT:-5008}/healthz
+   docker compose logs -f superset-mcp
+   ```
 
 ### 6.2 Transport and Protocol
 
-Support common MCP transports such as:
-
-- SSE / streamable HTTP for remote agents
-- stdio for local integrations
+The upstream `superset mcp run` CLI exposes the service over **streamable
+HTTP**, which is directly compatible with MCP clients such as Claude Desktop,
+Cursor, Windsurf, and the OpenAI Agents SDK.  The port (default `5008`) is
+exposed on the host via the `MCP_PORT` env var.  No stdio transport is
+required — agents connect remotely over HTTP.
 
 ### 6.3 Tool Catalog
 
-Suggested control-plane MCP tools:
+The built-in server surfaces Superset's own API as MCP tools.  The catalog
+reflects whatever the chosen Superset image ships with — it is **not** hard
+coded on our side.  Typical categories include dashboard listing, chart
+creation, dataset inspection, and SQL Lab execution.
 
-- `control_plane.reconcile_status`
-- `control_plane.asset_status`
-- `control_plane.trigger_sync`
-- `control_plane.drift_report`
-- `control_plane.list_managed_assets`
+See the upstream reference for the authoritative, version-specific list:
+[Apache Superset — MCP Integration](https://superset.apache.org/developer-docs/extensions/mcp/).
+
+Control-plane-specific MCP tools (reconcile status, drift report, etc.) are a
+future addition on top of the upstream MCP server and are intentionally not
+implemented in this repository yet.
 
 ### 6.4 Authentication Flow
 
-MCP should use governed identity:
+Configuration is entirely env-driven — see `superset_config.py` and
+`.env.example`.  Two modes are supported out of the box.
 
-- Keycloak-issued JWTs for service or agent access
-- Superset RBAC remains the source of authorization
-- MCP must not bypass dashboard, dataset, or RLS controls
+**Development — impersonation (no token validation)**
+
+Use only on trusted networks.  Every MCP request runs as the configured user:
+
+```bash
+# .env
+MCP_AUTH_ENABLED=False
+MCP_DEV_USERNAME=admin   # must already exist in the Superset user db
+```
+
+**Production — JWT validation (e.g. Keycloak)**
+
+The MCP server validates the incoming `Authorization: Bearer <jwt>` header
+against the configured issuer/audience and JWKS, then resolves the Superset
+user from the token's `sub` / `email` / `preferred_username` claim.  Superset
+RBAC and RLS are enforced exactly as they are for interactive users.
+
+```bash
+# .env
+MCP_AUTH_ENABLED=True
+MCP_JWT_ALGORITHM=RS256
+MCP_JWT_ISSUER=http://keycloak:8080/realms/master
+MCP_JWT_AUDIENCE=bighammer-admin
+MCP_JWKS_URI=http://keycloak:8080/realms/master/protocol/openid-connect/certs
+```
+
+Because Keycloak is already part of the stack, reusing those issuer / JWKS
+URLs keeps the MCP identity model aligned with browser SSO.
+
+References:
+
+- [MCP Server Deployment & Authentication — Superset docs](https://superset.apache.org/admin-docs/configuration/mcp-server/)
+- [Using AI with Superset](https://superset.apache.org/user-docs/using-superset/using-ai-with-superset/)
 
 ---
 
@@ -979,7 +1058,28 @@ Good for:
 - demos
 - single-node integration testing
 
-Runtime bootstrap in this repository follows the design principle of runtime reconciliation: a dedicated `superset-runtime-seed` service performs sample resource creation through Superset REST APIs after the web service starts.
+Runtime bootstrap in this repository follows the design principle of runtime
+reconciliation: a dedicated `superset-runtime-seed` service performs resource
+creation through Superset REST APIs after the web service starts.
+
+The reconciler (`docker/scripts/seed_dashboard.py`) implements a small,
+fully-dynamic control plane:
+
+- Every `*.yaml` under `assets/` is discovered recursively — directory layout
+  is informational only; the authoritative `kind` comes from the document.
+- Reconcilers are registered as classes (`DatabaseReconciler`,
+  `DatasetReconciler`, `ChartReconciler`, `DashboardReconciler`).  Adding a
+  new asset type is a matter of appending one class to `RECONCILERS` — no
+  hardcoded kind/path tables.
+- Execution order is derived from each reconciler's declared `depends_on`
+  via a topological sort, so the rule *Database → Dataset → Chart →
+  Dashboard* is enforced by the graph rather than by the order of function
+  calls.
+- Cross-asset references (`databaseRef`, `datasetRef`, `chartRefs`) are
+  resolved through a shared `ReconcileContext` keyed on `metadata.key`,
+  never on Superset's runtime numeric IDs.
+- Dataset metrics declared under `spec.metrics` (e.g. `sum__revenue`) are
+  synced with an upsert-by-name PUT so existing metric IDs are preserved.
 
 ### 19.2 Kubernetes
 
@@ -1031,13 +1131,14 @@ Example:
 
 Suggested baseline:
 
-| Component | Version |
-|---|---|
-| Superset | 6.0.0 |
-| Keycloak | 26.6.1 |
-| Redis | 8.x |
-| PostgreSQL | 18.x |
-| Python | 3.12 |
+| Component | Version | Notes |
+|---|---|---|
+| Superset (stable) | `6.0.0` | Default in `.env.example`; MCP CLI not yet included. |
+| Superset (MCP-enabled) | `6.1.0rc2` | Set `SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2` to use the built-in `superset mcp run` CLI. See §6. |
+| Keycloak | `26.6.1` | |
+| Redis | `8.x` | |
+| PostgreSQL | `18.x` | |
+| Python | `3.12` | |
 
 ---
 
