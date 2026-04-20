@@ -56,6 +56,22 @@ MAPBOX_API_KEY = env("MAPBOX_API_KEY", "")
 APP_NAME = env("SUPERSET_APP_NAME", "BigHammer")
 APP_ICON = env("SUPERSET_APP_ICON", "/static/assets/images/logo.svg")
 FAVICONS = [{"href": env("SUPERSET_APP_FAVICON", "/static/assets/images/logo.svg")}]
+LOGO_RIGHT_TEXT = ""
+LOGO_TARGET_PATH = "/"
+
+# Superset 6: APP_ICON is deprecated for logo rendering.
+# Use THEME_DEFAULT / THEME_DARK with brandLogoUrl instead.
+THEME_DEFAULT = {
+    "token": {
+        "brandLogoUrl": "/static/assets/images/logo.svg",
+    },
+}
+THEME_DARK = {
+    "token": {
+        "brandLogoUrl": "/static/assets/images/logo.svg",
+    },
+    "algorithm": "dark",
+}
 
 # Optional Keycloak OAuth integration.
 # KEYCLOAK_SERVER_URL: browser-facing URL (e.g., http://localhost:8080 for local dev)

@@ -28,8 +28,12 @@ x-superset-env: &superset-env
   METADATA_DB_PORT:         ${METADATA_DB_PORT}
   REDIS_HOST:               ${REDIS_HOST}
   REDIS_PORT:               ${REDIS_PORT}
+  ANALYTICS_DB_USER:        ${ANALYTICS_DB_USER:-sample_user}
+  ANALYTICS_DB_PASS:        ${ANALYTICS_DB_PASS:-sample_pass}
+  ANALYTICS_DB_NAME:        ${ANALYTICS_DB_NAME:-analytics}
   ANALYTICS_DB_HOST:        ${ANALYTICS_DB_HOST:-analytics-db}
   ANALYTICS_DB_PORT:        ${ANALYTICS_DB_PORT:-5432}
+  ANALYTICS_DB_URI:         ${ANALYTICS_DB_URI:-postgresql+psycopg2://sample_user:sample_pass@analytics-db:5432/analytics}
   MAPBOX_API_KEY:           ${MAPBOX_API_KEY:-}
   KEYCLOAK_SERVER_URL:      ${KEYCLOAK_SERVER_URL:-}
   KEYCLOAK_REALM:           ${KEYCLOAK_REALM:-}
@@ -268,6 +272,8 @@ services:
       POSTGRES_USER:     ${ANALYTICS_DB_USER}
       POSTGRES_PASSWORD: ${ANALYTICS_DB_PASS}
       POSTGRES_DB:       ${ANALYTICS_DB_NAME}
+    ports:
+      - "5433:5432"
     volumes:
       - analytics-db-data:/var/lib/postgresql/data
       - ./seed/pg:/docker-entrypoint-initdb.d:ro
@@ -285,7 +291,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: superset-runtime-seed
-    restart: "no"
+    restart: unless-stopped
     depends_on:
       superset:
         condition: service_healthy
@@ -293,9 +299,10 @@ services:
         condition: service_healthy
     environment:
       <<: *superset-env
-    entrypoint: ["python", "/app/docker/scripts/seed_dashboard.py"]
+    entrypoint: ["python", "-u", "/app/docker/scripts/seed_dashboard.py"]
     volumes:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./assets:/app/assets
     networks:
       - superset-net

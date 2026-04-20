@@ -1,14 +1,14 @@
 apiVersion: analytics/v1
 kind: Chart
 metadata:
-  key: chart.sales.monthly_revenue
-  name: Monthly Revenue
+  key: chart.sales.order_count_trend
+  name: Order Count Trend
 spec:
   datasetRef: dataset.sales.orders
-  vizType: echarts_timeseries_bar
+  vizType: echarts_timeseries_line
   params:
     metrics:
-      - sum__revenue
+      - count
     x_axis: order_date
-
+    groupby: []
 

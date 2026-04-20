@@ -7,3 +7,5 @@ spec:
   slug: executive-overview
   chartRefs:
     - chart.sales.monthly_revenue
+    - chart.sales.revenue_by_country
+    - chart.sales.order_count_trend

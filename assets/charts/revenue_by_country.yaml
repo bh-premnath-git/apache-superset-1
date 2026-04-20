@@ -1,0 +1,12 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.sales.revenue_by_country
+  name: Revenue by Country
+spec:
+  datasetRef: dataset.sales.orders
+  vizType: pie
+  params:
+    metric: sum__revenue
+    groupby:
+      - country

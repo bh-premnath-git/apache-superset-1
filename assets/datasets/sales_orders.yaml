@@ -8,3 +8,12 @@ spec:
   schema: mart_sales
   table: orders
   timeColumn: order_date
+  metrics:
+    - metric_name: count
+      expression: COUNT(*)
+      verbose_name: Count
+      metric_type: count
+    - metric_name: sum__revenue
+      expression: SUM(revenue)
+      verbose_name: Total Revenue
+      metric_type: sum

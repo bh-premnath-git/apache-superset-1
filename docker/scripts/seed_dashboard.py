@@ -1,34 +1,44 @@
-"""Runtime seeding via Superset REST API.
+"""Continuous reconciler for Superset analytics assets.
 
-This script waits for Superset API readiness, authenticates with admin credentials,
-and creates sample analytics resources (database, dataset, chart, dashboard)
-idempotently.
+Dynamically discovers asset manifests (Database, Dataset, Chart, Dashboard)
+from YAML files under an assets directory.  Cross-references between resources
+are resolved via ``metadata.key`` so nothing is hardcoded in this script.
+
+Runs as a long-lived process that polls the assets directory for changes and
+re-reconciles automatically — no manual container restarts needed.
 """
 
 from __future__ import annotations
 
+import glob
+import hashlib
 import http.cookiejar
 import json
 import os
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
+import yaml
+
+# ---------------------------------------------------------------------------
+# Configuration from environment
+# ---------------------------------------------------------------------------
 SUPERSET_URL = os.getenv("SUPERSET_URL", "http://superset:8088").rstrip("/")
 USERNAME = os.getenv("SUPERSET_ADMIN_USERNAME", "admin")
 PASSWORD = os.getenv("SUPERSET_ADMIN_PASSWORD", "admin")
+ASSETS_DIR = os.getenv("ASSETS_DIR", "/app/assets")
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
 
-ANALYTICS_DB_NAME = "Analytics Warehouse"
-DATASET_TABLE = "orders"
-CHART_NAME = "Monthly Revenue"
-DASHBOARD_TITLE = "Executive Overview"
-DASHBOARD_SLUG = "executive-overview"
 COOKIE_JAR = http.cookiejar.CookieJar()
 OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR))
 
 
+# ---------------------------------------------------------------------------
+# Low-level HTTP helper
+# ---------------------------------------------------------------------------
 def _request(
     method: str,
     path: str,
@@ -37,12 +47,11 @@ def _request(
     csrf_token: str | None = None,
 ) -> dict[str, Any]:
     body = None
-    headers = {"Content-Type": "application/json"}
+    headers: dict[str, str] = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if csrf_token:
         headers["X-CSRFToken"] = csrf_token
-
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
 
@@ -54,6 +63,9 @@ def _request(
     return json.loads(content) if content else {}
 
 
+# ---------------------------------------------------------------------------
+# Startup helpers
+# ---------------------------------------------------------------------------
 def wait_for_api(timeout_seconds: int = 300) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
@@ -93,178 +105,339 @@ def get_csrf_token(token: str) -> str:
     return csrf_token
 
 
-def _first_by_name(result: dict[str, Any], key: str, expected: str) -> dict[str, Any] | None:
-    for row in result.get("result", []):
-        if row.get(key) == expected:
-            return row
+# ---------------------------------------------------------------------------
+# Asset manifest loader
+# ---------------------------------------------------------------------------
+def _load_manifests(kind: str) -> list[dict[str, Any]]:
+    """Load all YAML manifests of a given *kind* from the assets directory."""
+    manifests: list[dict[str, Any]] = []
+    kind_dir = {
+        "Database": "databases",
+        "Dataset": "datasets",
+        "Chart": "charts",
+        "Dashboard": "dashboards",
+    }.get(kind)
+    if not kind_dir:
+        return manifests
+
+    search_path = os.path.join(ASSETS_DIR, kind_dir)
+    for filepath in sorted(glob.glob(os.path.join(search_path, "*.yaml"))):
+        with open(filepath) as fh:
+            doc = yaml.safe_load(fh)
+        if doc and doc.get("kind") == kind:
+            manifests.append(doc)
+    return manifests
+
+
+# ---------------------------------------------------------------------------
+# Lookup helpers
+# ---------------------------------------------------------------------------
+def _find_existing(endpoint: str, field: str, value: str, token: str) -> int | None:
+    listing = _request("GET", f"{endpoint}?page_size=200", token=token)
+    for row in listing.get("result", []):
+        if row.get(field) == value:
+            return int(row["id"])
     return None
 
 
-def ensure_database(token: str, csrf_token: str) -> int:
-    listing = _request("GET", "/api/v1/database/?page_size=200", token=token)
-    existing = _first_by_name(listing, "database_name", ANALYTICS_DB_NAME)
-    if existing:
-        return int(existing["id"])
+# ---------------------------------------------------------------------------
+# Resource reconcilers — each returns {metadata.key: superset_id}
+# ---------------------------------------------------------------------------
+def reconcile_databases(token: str, csrf_token: str) -> dict[str, int]:
+    """Ensure every Database manifest exists in Superset."""
+    key_to_id: dict[str, int] = {}
+    for doc in _load_manifests("Database"):
+        key = doc["metadata"]["key"]
+        name = doc["metadata"]["name"]
+        spec = doc["spec"]
 
-    payload = {
-        "database_name": ANALYTICS_DB_NAME,
-        "sqlalchemy_uri": (
-            f"postgresql+psycopg2://{os.getenv('ANALYTICS_DB_USER', 'sample_user')}:"
-            f"{os.getenv('ANALYTICS_DB_PASS', 'sample_pass')}@"
-            f"{os.getenv('ANALYTICS_DB_HOST', 'analytics-db')}:"
-            f"{os.getenv('ANALYTICS_DB_PORT', '5432')}/"
-            f"{os.getenv('ANALYTICS_DB_NAME', 'analytics')}"
-        ),
-        "expose_in_sqllab": True,
-        "allow_ctas": False,
-        "allow_cvas": False,
-        "allow_dml": False,
-    }
-    created = _request("POST", "/api/v1/database/", payload=payload, token=token, csrf_token=csrf_token)
-    return int(created["id"])
+        existing_id = _find_existing("/api/v1/database/", "database_name", name, token)
+        if existing_id:
+            key_to_id[key] = existing_id
+            print(f"  Database '{name}' already exists (id={existing_id})")
+            continue
 
+        uri_env = spec.get("sqlalchemyUriFromEnv")
+        sqlalchemy_uri = os.getenv(uri_env, "") if uri_env else spec.get("sqlalchemyUri", "")
+        if not sqlalchemy_uri:
+            print(f"  WARN: Database '{name}' — no URI resolved, skipping")
+            continue
 
-def ensure_dataset(token: str, database_id: int, csrf_token: str) -> int:
-    listing = _request("GET", "/api/v1/dataset/?page_size=200", token=token)
-    existing = _first_by_name(listing, "table_name", DATASET_TABLE)
-    if existing:
-        dataset_id = int(existing["id"])
-    else:
-        payload = {
-            "database": database_id,
-            "schema": "mart_sales",
-            "table_name": DATASET_TABLE,
-        }
-        created = _request("POST", "/api/v1/dataset/", payload=payload, token=token, csrf_token=csrf_token)
-        dataset_id = int(created["id"])
-
-    # Ensure a revenue sum metric exists so charts referencing ``sum__revenue``
-    # can resolve. Superset auto-creates ``sum__<column>`` metrics only when the
-    # dataset is refreshed in the UI, so we explicitly create one here.
-    detail = _request("GET", f"/api/v1/dataset/{dataset_id}", token=token)
-    metrics = detail.get("result", {}).get("metrics", [])
-    if not any(m.get("metric_name") == "sum__revenue" for m in metrics):
-        _request(
-            "PUT",
-            f"/api/v1/dataset/{dataset_id}?override_columns=false",
+        created = _request(
+            "POST", "/api/v1/database/",
             payload={
-                "metrics": [
-                    {
-                        "metric_name": "sum__revenue",
-                        "expression": "SUM(revenue)",
-                        "verbose_name": "Total Revenue",
-                        "metric_type": "sum",
-                    }
-                ]
+                "database_name": name,
+                "sqlalchemy_uri": sqlalchemy_uri,
+                "expose_in_sqllab": True,
+                "allow_ctas": False,
+                "allow_cvas": False,
+                "allow_dml": False,
             },
-            token=token,
-            csrf_token=csrf_token,
+            token=token, csrf_token=csrf_token,
         )
-    return dataset_id
+        key_to_id[key] = int(created["id"])
+        print(f"  Database '{name}' created (id={key_to_id[key]})")
+    return key_to_id
 
 
-def ensure_chart(token: str, dataset_id: int, csrf_token: str) -> int:
-    listing = _request("GET", "/api/v1/chart/?page_size=200", token=token)
-    existing = _first_by_name(listing, "slice_name", CHART_NAME)
-    if existing:
-        return int(existing["id"])
+def reconcile_datasets(
+    token: str, csrf_token: str, db_ids: dict[str, int],
+) -> dict[str, int]:
+    """Ensure every Dataset manifest exists in Superset."""
+    key_to_id: dict[str, int] = {}
+    for doc in _load_manifests("Dataset"):
+        key = doc["metadata"]["key"]
+        name = doc["metadata"]["name"]
+        spec = doc["spec"]
 
-    params = {
-        "datasource": f"{dataset_id}__table",
-        "viz_type": "echarts_timeseries_bar",
-        "x_axis": "order_date",
-        "metrics": ["sum__revenue"],
-        "groupby": [],
-    }
-    payload = {
-        "slice_name": CHART_NAME,
-        "viz_type": "echarts_timeseries_bar",
-        "datasource_id": dataset_id,
-        "datasource_type": "table",
-        "params": json.dumps(params),
-    }
-    created = _request("POST", "/api/v1/chart/", payload=payload, token=token, csrf_token=csrf_token)
-    return int(created["id"])
+        db_ref = spec["databaseRef"]
+        database_id = db_ids.get(db_ref)
+        if database_id is None:
+            print(f"  WARN: Dataset '{name}' — unresolved databaseRef '{db_ref}', skipping")
+            continue
+
+        existing_id = _find_existing("/api/v1/dataset/", "table_name", spec["table"], token)
+        if existing_id:
+            dataset_id = existing_id
+            print(f"  Dataset '{name}' already exists (id={dataset_id})")
+        else:
+            payload: dict[str, Any] = {
+                "database": database_id,
+                "table_name": spec["table"],
+            }
+            if spec.get("schema"):
+                payload["schema"] = spec["schema"]
+            created = _request(
+                "POST", "/api/v1/dataset/",
+                payload=payload, token=token, csrf_token=csrf_token,
+            )
+            dataset_id = int(created["id"])
+            print(f"  Dataset '{name}' created (id={dataset_id})")
+
+        key_to_id[key] = dataset_id
+    return key_to_id
 
 
-def ensure_dashboard(token: str, chart_id: int, csrf_token: str) -> int:
-    listing = _request("GET", "/api/v1/dashboard/?page_size=200", token=token)
-    existing = _first_by_name(listing, "dashboard_title", DASHBOARD_TITLE)
-    if existing:
-        dashboard_id = int(existing["id"])
-    else:
-        payload = {
-            "dashboard_title": DASHBOARD_TITLE,
-            "slug": DASHBOARD_SLUG,
-            "published": True,
+def reconcile_charts(
+    token: str, csrf_token: str, dataset_ids: dict[str, int],
+) -> dict[str, int]:
+    """Ensure every Chart manifest exists in Superset."""
+    key_to_id: dict[str, int] = {}
+    for doc in _load_manifests("Chart"):
+        key = doc["metadata"]["key"]
+        name = doc["metadata"]["name"]
+        spec = doc["spec"]
+
+        viz_type = spec["vizType"]
+
+        ds_ref = spec["datasetRef"]
+        dataset_id = dataset_ids.get(ds_ref)
+        if dataset_id is None:
+            print(f"  WARN: Chart '{name}' — unresolved datasetRef '{ds_ref}', skipping")
+            continue
+
+        existing_id = _find_existing("/api/v1/chart/", "slice_name", name, token)
+        if existing_id:
+            # Update existing chart with correct dataset reference
+            params = {
+                "datasource": f"{dataset_id}__table",
+                "viz_type": viz_type,
+                **(spec.get("params") or {}),
+            }
+            _request(
+                "PUT", f"/api/v1/chart/{existing_id}",
+                payload={
+                    "datasource_id": dataset_id,
+                    "datasource_type": "table",
+                    "params": json.dumps(params),
+                },
+                token=token, csrf_token=csrf_token,
+            )
+            key_to_id[key] = existing_id
+            print(f"  Chart '{name}' updated (id={existing_id})")
+            continue
+
+        params = {
+            "datasource": f"{dataset_id}__table",
+            "viz_type": viz_type,
+            **(spec.get("params") or {}),
         }
-        created = _request("POST", "/api/v1/dashboard/", payload=payload, token=token, csrf_token=csrf_token)
-        dashboard_id = int(created["id"])
+        payload = {
+            "slice_name": name,
+            "viz_type": viz_type,
+            "datasource_id": dataset_id,
+            "datasource_type": "table",
+            "params": json.dumps(params),
+        }
+        created = _request(
+            "POST", "/api/v1/chart/",
+            payload=payload, token=token, csrf_token=csrf_token,
+        )
+        key_to_id[key] = int(created["id"])
+        print(f"  Chart '{name}' created (id={key_to_id[key]})")
+    return key_to_id
+
+
+def reconcile_dashboards(
+    token: str, csrf_token: str, chart_ids: dict[str, int],
+) -> dict[str, int]:
+    """Ensure every Dashboard manifest exists with its charts laid out."""
+    key_to_id: dict[str, int] = {}
+    for doc in _load_manifests("Dashboard"):
+        key = doc["metadata"]["key"]
+        name = doc["metadata"]["name"]
+        spec = doc["spec"]
+
+        existing_id = _find_existing(
+            "/api/v1/dashboard/", "dashboard_title", name, token,
+        )
+        if existing_id:
+            dashboard_id = existing_id
+            print(f"  Dashboard '{name}' already exists (id={dashboard_id})")
+        else:
+            payload: dict[str, Any] = {
+                "dashboard_title": name,
+                "published": True,
+            }
+            if spec.get("slug"):
+                payload["slug"] = spec["slug"]
+            created = _request(
+                "POST", "/api/v1/dashboard/",
+                payload=payload, token=token, csrf_token=csrf_token,
+            )
+            dashboard_id = int(created["id"])
+            print(f"  Dashboard '{name}' created (id={dashboard_id})")
+
+        resolved_chart_ids = []
+        for ref in spec.get("chartRefs", []):
+            cid = chart_ids.get(ref)
+            if cid is None:
+                print(f"  WARN: Dashboard '{name}' — unresolved chartRef '{ref}', skipping chart")
+                continue
+            resolved_chart_ids.append(cid)
+
+        _sync_dashboard_layout(token, csrf_token, dashboard_id, resolved_chart_ids)
+        key_to_id[key] = dashboard_id
+    return key_to_id
+
+
+def _sync_dashboard_layout(
+    token: str, csrf_token: str, dashboard_id: int, chart_ids: list[int],
+) -> None:
+    """Build a position layout for the given charts and sync slices."""
+    if not chart_ids:
+        return
 
     detail = _request("GET", f"/api/v1/dashboard/{dashboard_id}", token=token)
-    result = detail.get("result", {})
-    existing_position = result.get("position_json") or ""
+    existing_position = detail.get("result", {}).get("position_json") or ""
 
-    if f"CHART-{chart_id}" not in existing_position:
-        chart_uuid = f"CHART-{chart_id}"
-        position = {
-            "DASHBOARD_VERSION_KEY": "v2",
-            "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"]},
-            "GRID_ID": {
-                "type": "GRID",
-                "id": "GRID_ID",
-                "children": ["ROW-1"],
-                "parents": ["ROOT_ID"],
-            },
-            "ROW-1": {
-                "type": "ROW",
-                "id": "ROW-1",
-                "children": [chart_uuid],
-                "parents": ["ROOT_ID", "GRID_ID"],
-                "meta": {"background": "BACKGROUND_TRANSPARENT"},
-            },
-            chart_uuid: {
-                "type": "CHART",
-                "id": chart_uuid,
-                "children": [],
-                "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
-                "meta": {
-                    "width": 12,
-                    "height": 50,
-                    "chartId": chart_id,
-                },
-            },
+    missing = [cid for cid in chart_ids if f"CHART-{cid}" not in existing_position]
+    if not missing:
+        return
+
+    row_children = [f"CHART-{cid}" for cid in chart_ids]
+    position: dict[str, Any] = {
+        "DASHBOARD_VERSION_KEY": "v2",
+        "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"]},
+        "GRID_ID": {
+            "type": "GRID", "id": "GRID_ID",
+            "children": ["ROW-1"], "parents": ["ROOT_ID"],
+        },
+        "ROW-1": {
+            "type": "ROW", "id": "ROW-1",
+            "children": row_children,
+            "parents": ["ROOT_ID", "GRID_ID"],
+            "meta": {"background": "BACKGROUND_TRANSPARENT"},
+        },
+    }
+    width = max(1, 12 // len(chart_ids))
+    for cid in chart_ids:
+        chart_key = f"CHART-{cid}"
+        position[chart_key] = {
+            "type": "CHART", "id": chart_key,
+            "children": [],
+            "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+            "meta": {"width": width, "height": 50, "chartId": cid},
         }
-        _request(
-            "PUT",
-            f"/api/v1/dashboard/{dashboard_id}",
-            payload={"position_json": json.dumps(position)},
-            token=token,
-            csrf_token=csrf_token,
-        )
-    return dashboard_id
+
+    # json_metadata with "positions" triggers Superset's set_dash_metadata()
+    # which syncs charts into the dashboard_slices relationship table.
+    metadata = {"positions": position, "default_filters": "{}"}
+    _request(
+        "PUT", f"/api/v1/dashboard/{dashboard_id}",
+        payload={
+            "position_json": json.dumps(position),
+            "json_metadata": json.dumps(metadata),
+        },
+        token=token, csrf_token=csrf_token,
+    )
 
 
-def main() -> None:
-    wait_for_api()
+# ---------------------------------------------------------------------------
+# Change detection
+# ---------------------------------------------------------------------------
+def _compute_assets_checksum() -> str:
+    """SHA-256 over the sorted contents of every YAML file in ASSETS_DIR."""
+    h = hashlib.sha256()
+    for filepath in sorted(glob.glob(os.path.join(ASSETS_DIR, "**", "*.yaml"), recursive=True)):
+        with open(filepath, "rb") as fh:
+            h.update(filepath.encode())
+            h.update(fh.read())
+    return h.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Single reconcile pass
+# ---------------------------------------------------------------------------
+def reconcile_once() -> None:
+    """Authenticate and reconcile all asset manifests once."""
     token = login()
     csrf_token = get_csrf_token(token)
-    db_id = ensure_database(token, csrf_token)
-    dataset_id = ensure_dataset(token, db_id, csrf_token)
-    chart_id = ensure_chart(token, dataset_id, csrf_token)
-    dashboard_id = ensure_dashboard(token, chart_id, csrf_token)
-    print(
-        "Seeded via REST API:",
-        f"database_id={db_id}",
-        f"dataset_id={dataset_id}",
-        f"chart_id={chart_id}",
-        f"dashboard_id={dashboard_id}",
-    )
+
+    print(f"Reconciling asset manifests from {ASSETS_DIR} ...")
+    db_ids = reconcile_databases(token, csrf_token)
+    dataset_ids = reconcile_datasets(token, csrf_token, db_ids)
+    chart_ids = reconcile_charts(token, csrf_token, dataset_ids)
+    dashboard_ids = reconcile_dashboards(token, csrf_token, chart_ids)
+
+    print("Reconcile complete:")
+    print(f"  databases:  {db_ids}")
+    print(f"  datasets:   {dataset_ids}")
+    print(f"  charts:     {chart_ids}")
+    print(f"  dashboards: {dashboard_ids}")
+
+
+# ---------------------------------------------------------------------------
+# Main — continuous reconciler loop
+# ---------------------------------------------------------------------------
+def main() -> None:
+    wait_for_api()
+
+    # Initial reconcile
+    reconcile_once()
+    last_checksum = _compute_assets_checksum()
+    print(f"Watching {ASSETS_DIR} for changes (poll every {POLL_INTERVAL}s) ...")
+
+    while True:
+        time.sleep(POLL_INTERVAL)
+        try:
+            current_checksum = _compute_assets_checksum()
+            if current_checksum != last_checksum:
+                print("Asset change detected — re-reconciling ...")
+                reconcile_once()
+                last_checksum = current_checksum
+        except urllib.error.HTTPError as ex:
+            body = ex.read().decode("utf-8", errors="ignore")
+            print(f"Reconcile error (will retry): {ex.code} {body}")
+        except Exception as ex:
+            print(f"Reconcile error (will retry): {ex}")
 
 
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        print("Reconciler stopped.")
     except urllib.error.HTTPError as ex:
         body = ex.read().decode("utf-8", errors="ignore")
         raise SystemExit(f"Superset REST API error: {ex.code} {body}")
