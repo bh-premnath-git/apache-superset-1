@@ -81,26 +81,38 @@ This controls the vertical grid units allocated to charts. The Handlebars table 
 
 ### Charts per row configuration
 
-Dashboard YAML also supports an optional `chartsPerRow` field. The Superset
-dashboard grid is 12 columns wide; by default the reconciler places all
-chart refs in a single row and splits `12 // N` columns per chart.
+Dashboard YAML supports two optional layout fields on top of the 12-column
+grid. By default the reconciler places all chart refs in a single row and
+splits `12 // N` columns per chart.
 
-Setting `chartsPerRow: 1` stacks each chart in its own full-width row, which
-is how the Household Survey dashboard renders the India map and the rural
-segments table vertically instead of side-by-side.
+- `chartsPerRow` — default grouping once any `fullWidthFirst` prefix has
+  been consumed. `1` stacks each chart on its own full-width row; `2` pairs
+  them side-by-side; `null` keeps the legacy all-in-one-row behavior.
+- `fullWidthFirst` — how many leading charts get their own full-width row.
+  The rest fall back to `chartsPerRow`.
+
+The Household Survey dashboard uses the combination below to reproduce the
+reference layout (the two hero charts on their own rows, then three rows of
+two):
 
 ```yaml
 spec:
-  chartsPerRow: 1
+  fullWidthFirst: 2
+  chartsPerRow: 2
   chartRefs:
-    - chart.household.state_map
-    - chart.household.rural_segment_comparison
+    - chart.household.rural_segment_comparison    # full row
+    - chart.household.state_map                   # full row
+    - chart.household.district_pie_bihar          # row 3 col 1
+    - chart.household.district_pie_jharkhand      # row 3 col 2
+    - chart.household.district_pie_madhya_pradesh # row 4 col 1
+    - chart.household.minor_structure             # row 4 col 2
+    - chart.household.segment_distribution_pie    # row 5 col 1
+    - chart.household.state_segment_distribution_bar  # row 5 col 2
 ```
 
-The reconciler now also compares the desired and existing `position_json`
-and rewrites the layout when they differ, so changing `chartsPerRow` or
-`chartHeight` on a dashboard that already exists takes effect on the next
-reconcile pass.
+The reconciler compares the desired and existing `position_json` and
+rewrites the layout when they differ, so changing layout spec on a
+dashboard that already exists takes effect on the next reconcile pass.
 
 ## Operational significance
 

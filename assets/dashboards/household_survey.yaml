@@ -6,11 +6,19 @@ metadata:
 spec:
   slug: household-survey
   chartHeight: 100
-  # Stack each chart in its own full-width row (state map on top,
-  # rural segments comparison below). Without this, the auto layout
-  # places both charts side-by-side in a single row.
-  chartsPerRow: 1
+  # Layout rules:
+  # - `fullWidthFirst: 2` → the first two chartRefs each get their own
+  #   full-width row (Rural Segments table, then India state map).
+  # - `chartsPerRow: 2` → the remaining charts pair up two-per-row.
+  fullWidthFirst: 2
+  chartsPerRow: 2
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.state_map
+    - chart.household.district_pie_bihar
+    - chart.household.district_pie_jharkhand
+    - chart.household.district_pie_madhya_pradesh
+    - chart.household.minor_structure
+    - chart.household.segment_distribution_pie
+    - chart.household.state_segment_distribution_bar
   # Cross-filtering enabled: clicking states on the map filters the table

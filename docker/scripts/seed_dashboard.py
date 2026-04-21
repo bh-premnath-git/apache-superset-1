@@ -510,8 +510,14 @@ class DashboardReconciler(Reconciler):
         if chart_ids:
             chart_height = spec.get("chartHeight", 50)
             charts_per_row = spec.get("chartsPerRow")
+            full_width_first = spec.get("fullWidthFirst", 0)
             self._sync_layout(
-                client, dashboard_id, chart_ids, chart_height, charts_per_row
+                client,
+                dashboard_id,
+                chart_ids,
+                chart_height,
+                charts_per_row,
+                full_width_first,
             )
         return dashboard_id
 
@@ -522,6 +528,7 @@ class DashboardReconciler(Reconciler):
         chart_ids: list[int],
         chart_height: int = 50,
         charts_per_row: int | None = None,
+        full_width_first: int = 0,
     ) -> None:
         if not chart_ids:
             return
@@ -535,6 +542,7 @@ class DashboardReconciler(Reconciler):
             chart_ids,
             chart_height=chart_height,
             charts_per_row=charts_per_row,
+            full_width_first=full_width_first,
         )
         if existing_position == position:
             return
@@ -765,37 +773,57 @@ def _auto_grid_layout(
     *,
     chart_height: int = 50,
     charts_per_row: int | None = None,
+    full_width_first: int = 0,
 ) -> dict[str, Any]:
     """Auto layout that groups charts into rows.
 
     Superset's dashboard grid is 12 columns wide. By default all charts share
-    a single row with equal widths (12 // N). Setting ``charts_per_row``
-    changes how charts are distributed; ``charts_per_row=1`` stacks each
-    chart on its own row at full width.
+    a single row with equal widths (12 // N).
+
+    Options
+    -------
+    charts_per_row
+        Default grouping once ``full_width_first`` is exhausted. ``1`` stacks
+        each chart on its own row; ``2`` puts pairs side-by-side; ``None``
+        keeps the legacy "all charts in one row" behavior.
+    full_width_first
+        Number of leading charts that each get their own full-width row. The
+        remainder fall back to ``charts_per_row``. Set to ``2`` to make the
+        first two charts full width and the rest share rows.
     """
-    if charts_per_row is None or charts_per_row < 1:
-        charts_per_row = len(chart_ids)
-    charts_per_row = min(charts_per_row, len(chart_ids))
-    width = max(1, 12 // charts_per_row)
+    rows: list[list[int]] = []
+    # Leading full-width rows (one chart each).
+    head_count = max(0, min(full_width_first, len(chart_ids)))
+    for cid in chart_ids[:head_count]:
+        rows.append([cid])
+
+    # Remaining charts: pack into groups of `charts_per_row`.
+    remaining = chart_ids[head_count:]
+    if remaining:
+        if charts_per_row is None or charts_per_row < 1:
+            group = len(remaining)
+        else:
+            group = min(charts_per_row, len(remaining))
+        for i in range(0, len(remaining), group):
+            rows.append(remaining[i : i + group])
 
     position: dict[str, Any] = {
         "DASHBOARD_VERSION_KEY": "v2",
         "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"]},
     }
     row_ids: list[str] = []
-    for row_idx in range(0, len(chart_ids), charts_per_row):
-        row_id = f"ROW-{len(row_ids) + 1}"
+    for row_idx, row in enumerate(rows, start=1):
+        row_id = f"ROW-{row_idx}"
         row_ids.append(row_id)
-        row_chart_ids = chart_ids[row_idx : row_idx + charts_per_row]
-        row_children = [f"CHART-{cid}" for cid in row_chart_ids]
+        width = max(1, 12 // len(row))
         position[row_id] = {
             "type": "ROW",
             "id": row_id,
-            "children": row_children,
+            "children": [f"CHART-{cid}" for cid in row],
             "parents": ["ROOT_ID", "GRID_ID"],
             "meta": {"background": "BACKGROUND_TRANSPARENT"},
         }
-        for cid in row_chart_ids:
+        for cid in row:
             chart_key = f"CHART-{cid}"
             position[chart_key] = {
                 "type": "CHART",

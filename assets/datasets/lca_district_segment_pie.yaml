@@ -1,0 +1,11 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.district_segment_pie
+  name: lca_district_segment_pie
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_district_segment_pie
+  # One row per (state_label, district_code) with pre-computed segment
+  # percentages and cumulative endpoints for CSS conic-gradient pies.

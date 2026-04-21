@@ -15,6 +15,10 @@
 - [dataset.sales.orders](assets/dataset.sales.orders.md) — Sample sales dataset over `mart_sales.orders`.
 - [chart.household.state_map](assets/chart.household.state_map.md) — Interactive India map (Country Map viz) showing households by state.
 - [chart.household.rural_segment_comparison](assets/chart.household.rural_segment_comparison.md) — Handlebars-based rural segment comparison table.
+- `chart.household.district_pie_{bihar,jharkhand,madhya_pradesh}` — Handlebars CSS conic-gradient pie grid per district, one chart per state.
+- `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment.
+- `chart.household.segment_distribution_pie` — weighted overall segment mix across the three states.
+- `chart.household.state_segment_distribution_bar` — weighted segment mix within each state (3 bars).
 - [dashboard.household.survey](assets/dashboard.household.survey.md) — Household dashboard with India state map and rural comparison table, supports cross-filtering.
 - [dashboard.exec.overview](assets/dashboard.exec.overview.md) — Sample executive dashboard for sales analytics.
 

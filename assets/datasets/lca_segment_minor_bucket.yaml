@@ -1,0 +1,11 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.segment_minor_bucket
+  name: lca_segment_minor_bucket
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_segment_minor_bucket
+  # One row per (segment, minor_bucket) with weighted percentage of
+  # households. Rows per segment sum to 100.

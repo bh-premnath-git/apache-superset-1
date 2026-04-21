@@ -1,0 +1,10 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.segment_distribution
+  name: lca_segment_distribution
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_segment_distribution
+  # One row per segment with weighted count + share across the 3 states.

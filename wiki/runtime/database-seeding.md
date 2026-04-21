@@ -66,6 +66,7 @@ That was the root cause of the earlier `hh_master` dataset failures.
 - `docker-compose.yml`
 - `seed/pg/001_schema.sql`
 - `seed/pg/002_household_hh_master.sql`
+- `seed/pg/003_lca_segment_views.sql`
 - `seed/pg/HH.master.csv`
 
 ## Related pages
