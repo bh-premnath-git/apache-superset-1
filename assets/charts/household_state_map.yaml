@@ -9,12 +9,15 @@ spec:
   params:
     viz_type: country_map
     # ── Entity column ────────────────────────────────────────────────
-    # The Country Map plugin matches on the GeoJSON NAME_1 property.
-    # Our DB State_label values differ from the GeoJSON names (e.g.
-    # "Tamilnadu" vs "Tamil Nadu", "Chattisgarh" vs "Chhattisgarh").
-    # The `state_map_name` column is added by 002_household_hh_master.sql
-    # with corrected names that match india.geojson exactly.
-    entity: state_map_name
+    # The Country Map plugin matches the entity value against the
+    # GeoJSON feature's `ISO` property (see CountryMap.ts in
+    # legacy-plugin-chart-country-map). For india.geojson the ISO
+    # values are ISO 3166-2:IN codes (IN-BR, IN-MP, ...), not NAME_1
+    # state names. Using NAME_1 here produces a blank outline-only map
+    # because no feature matches, so every region falls through to the
+    # default 'none' fill. The `state_iso_code` column is populated by
+    # 002_household_hh_master.sql with the correct ISO codes.
+    entity: state_iso_code
     metric:
       expressionType: SIMPLE
       column:
@@ -28,7 +31,7 @@ spec:
     adhoc_filters:
       - clause: WHERE
         expressionType: SQL
-        sqlExpression: 'state_map_name IS NOT NULL'
+        sqlExpression: 'state_iso_code IS NOT NULL'
     # Country Map control key is `select_country` and values are lowercase
     # slugs (see apache/superset legacy-plugin-chart-country-map countries.ts).
     select_country: india
