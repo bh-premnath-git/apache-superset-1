@@ -141,7 +141,20 @@ docker compose down -v
 18. [Configuration Reference](#18-configuration-reference)
 19. [Deployment Targets](#19-deployment-targets)
 20. [Versioning and Release Strategy](#20-versioning-and-release-strategy)
-21. [License](#license)
+21. [Visualization Plugins](#21-visualization-plugins)
+    - 21.1 [Plugin Architecture](#211-plugin-architecture)
+    - 21.2 [Built-in Chart Types](#212-built-in-chart-types)
+    - 21.3 [Creating a Custom Visualization Plugin](#213-creating-a-custom-visualization-plugin)
+    - 21.4 [Plugin Registration and Deployment](#214-plugin-registration-and-deployment)
+22. [Extensions Framework](#22-extensions-framework)
+    - 22.1 [What Are Superset Extensions?](#221-what-are-superset-extensions)
+    - 22.2 [Extension Architecture](#222-extension-architecture)
+    - 22.3 [Frontend Contribution Types](#223-frontend-contribution-types)
+    - 22.4 [Backend Contribution Types](#224-backend-contribution-types)
+    - 22.5 [Building an Extension (Quick Start)](#225-building-an-extension-quick-start)
+    - 22.6 [Packaging and Deployment](#226-packaging-and-deployment)
+    - 22.7 [Extension Security](#227-extension-security)
+23. [License](#license)
 
 ---
 
@@ -652,6 +665,245 @@ spec:
     - role.regional_viewer
 ```
 
+**DashboardFilter**
+```yaml
+apiVersion: analytics/v1
+kind: DashboardFilter
+metadata:
+  key: filter.sales.country_selector
+  name: Country Selector
+spec:
+  dashboardRef: dashboard.exec.overview
+  filterType: filter_select
+  targets:
+    - datasetRef: dataset.sales.orders
+      column: country
+  defaultValue: []
+  isInstant: true
+  sortAscending: true
+```
+
+**Role**
+```yaml
+apiVersion: analytics/v1
+kind: Role
+metadata:
+  key: role.regional_viewer
+  name: Regional Viewer
+spec:
+  permissions:
+    - "[can_read].[Dashboard]"
+    - "[can_read].[Chart]"
+    - "[datasource_access].[Analytics Warehouse].[mart_sales.orders]"
+  copyFrom: Gamma                # optional: inherit from a built-in role
+```
+
+**User**
+```yaml
+apiVersion: analytics/v1
+kind: User
+metadata:
+  key: user.svc.control_plane
+  name: control-plane
+spec:
+  firstName: Control
+  lastName: Plane
+  email: control-plane@example.com
+  roles:
+    - role.admin
+  passwordFromEnv: CP_SVC_PASSWORD     # never stored in YAML
+  active: true
+```
+
+**Theme**
+```yaml
+apiVersion: analytics/v1
+kind: Theme
+metadata:
+  key: theme.corporate
+  name: Corporate Theme
+spec:
+  algorithm: light                      # light | dark
+  token:
+    colorPrimary: "#1A3C6E"
+    colorSecondary: "#E87722"
+    fontFamily: "Inter, sans-serif"
+    borderRadius: 6
+    brandLogoUrl: /static/assets/images/logo.svg
+    brandLogoHref: /
+```
+
+**Alert**
+```yaml
+apiVersion: analytics/v1
+kind: Alert
+metadata:
+  key: alert.sales.revenue_drop
+  name: Revenue Drop Alert
+spec:
+  type: Alert
+  databaseRef: db.analytics
+  sql: |
+    SELECT CASE WHEN SUM(revenue) < 1000 THEN 1 ELSE 0 END AS alert
+    FROM mart_sales.orders
+    WHERE order_date = CURRENT_DATE - INTERVAL '1 day'
+  validator:
+    type: operator
+    operator: "=="
+    threshold: 1
+  schedule:
+    crontab: "0 8 * * *"
+    timezone: UTC
+  recipients:
+    - type: Email
+      value: alerts@example.com
+  owners:
+    - user.svc.control_plane
+  active: true
+```
+
+**Report**
+```yaml
+apiVersion: analytics/v1
+kind: Report
+metadata:
+  key: report.exec.weekly_overview
+  name: Weekly Executive Overview
+spec:
+  type: Report
+  dashboardRef: dashboard.exec.overview
+  schedule:
+    crontab: "0 7 * * 1"
+    timezone: UTC
+  reportFormat: PNG                     # PNG | CSV
+  recipients:
+    - type: Email
+      value: executives@example.com
+  owners:
+    - user.svc.control_plane
+  active: true
+```
+
+**Embedding**
+```yaml
+apiVersion: analytics/v1
+kind: Embedding
+metadata:
+  key: embed.exec.overview
+  name: Executive Overview Embed
+spec:
+  dashboardRef: dashboard.exec.overview
+  allowedDomains:
+    - "https://app.example.com"
+    - "https://internal.example.com"
+```
+
+**Plugin**
+```yaml
+apiVersion: analytics/v1
+kind: Plugin
+metadata:
+  key: plugin.chart.custom_waterfall
+  name: Custom Waterfall Chart
+spec:
+  vizType: custom_waterfall
+  # Bundle URL injected from environment — dynamic plugin bundles must be
+  # built from source and self-hosted (CDN, S3, static server).
+  # See: https://github.com/apache-superset/dynamic-import-demo-plugin
+  #
+  # Workflow:
+  #   1. Fork the demo plugin repo or scaffold with @superset-ui/generator-superset
+  #   2. npm install && npm run build-prod
+  #   3. Host /dist/main.js on your infrastructure
+  #   4. Set WATERFALL_PLUGIN_BUNDLE_URL=https://your-cdn.example.com/.../main.js
+  bundleUrlFromEnv: WATERFALL_PLUGIN_BUNDLE_URL
+  description: "Waterfall chart with positive/negative deltas and subtotals"
+  featureFlag: DYNAMIC_PLUGINS          # required feature flag
+```
+
+**Extension**
+```yaml
+apiVersion: analytics/v1
+kind: Extension
+metadata:
+  key: ext.my_org.query_optimizer
+  name: Query Optimizer
+spec:
+  publisher: my-org
+  extensionName: query-optimizer
+  version: "1.2.0"
+  # .supx bundle path injected from environment — build with:
+  #   pip install apache-superset-extensions-cli
+  #   superset-extensions init && superset-extensions bundle
+  # Then set QUERY_OPTIMIZER_SUPX_PATH=/app/extensions/my-org.query-optimizer-1.2.0.supx
+  #
+  # OR use supxUrlFromEnv: QUERY_OPTIMIZER_SUPX_URL for remote registry pull
+  supxPathFromEnv: QUERY_OPTIMIZER_SUPX_PATH
+  featureFlag: ENABLE_EXTENSIONS        # required feature flag
+  permissions:
+    - can_read
+    - can_write
+```
+
+### 8.3 Asset YAML Schema Reference
+
+Every asset manifest follows a consistent envelope:
+
+```yaml
+apiVersion: analytics/v1       # schema version — allows safe evolution
+kind: <AssetType>              # determines which reconciler handles it
+metadata:
+  key: <kind>.<logical.key>    # globally unique, stable, human-readable
+  name: <Display Name>         # used as the resource name in Superset
+spec:
+  # kind-specific fields
+  # references use *Ref suffix: databaseRef, datasetRef, chartRefs, etc.
+  # secrets use *FromEnv suffix: sqlalchemyUriFromEnv, passwordFromEnv, etc.
+```
+
+| Convention | Rule |
+|---|---|
+| **`key`** | Dot-separated, globally unique. Format: `kind.namespace.name` (e.g., `chart.sales.monthly_revenue`) |
+| **`*Ref` fields** | Cross-asset references by key, never by runtime ID. Resolved via `ReconcileContext` |
+| **`*FromEnv` fields** | Secret values injected from environment variables at reconcile time |
+| **`apiVersion`** | Semantic — new optional fields are safe; breaking changes require a version bump |
+| **Directory layout** | Informational only. The authoritative kind comes from the `kind:` field |
+
+### 8.4 Reconciler Registry
+
+The reconciler framework (`docker/scripts/seed_dashboard.py`) uses a class-per-kind
+design.  Each reconciler declares its `kind` and `depends_on` tuple; the engine
+topologically sorts them to determine execution order.
+
+Currently implemented reconcilers:
+
+| Kind | Reconciler Class | `depends_on` | Superset API | Feature Flag Lifecycle |
+|---|---|---|---|---|
+| `Database` | `DatabaseReconciler` | *(none)* | `POST/GET /api/v1/database/` | *(core — always available)* |
+| `Dataset` | `DatasetReconciler` | `Database` | `POST/PUT/GET /api/v1/dataset/` | *(core)* |
+| `Chart` | `ChartReconciler` | `Dataset` | `POST/PUT/GET /api/v1/chart/` | *(core)* |
+| `Dashboard` | `DashboardReconciler` | `Chart` | `POST/PUT/GET /api/v1/dashboard/` | *(core)* |
+| `Plugin` | `PluginReconciler` | *(none)* | `POST/GET /api/v1/dynamic_plugins/` | `DYNAMIC_PLUGINS` — **testing** |
+| `Extension` | `ExtensionReconciler` | *(none)* | `POST/GET /api/v1/extensions/` | `ENABLE_EXTENSIONS` — **development** ⚠️ |
+
+Planned reconcilers (not yet implemented):
+
+| Kind | `depends_on` | Superset API |
+|---|---|---|
+| `Role` | *(none)* | `/api/v1/security/role/` |
+| `User` | `Role` | `/api/v1/security/user/` |
+| `RLS` | `Dataset`, `Role` | `/api/v1/rls/` |
+| `DashboardFilter` | `Dashboard`, `Dataset` | `/api/v1/dashboard/{id}` (embedded in position JSON) |
+| `Theme` | *(none)* | `superset_config.py` injection |
+| `Alert` | `Database` | `/api/v1/report/` (type=Alert) |
+| `Report` | `Dashboard` | `/api/v1/report/` (type=Report) |
+| `Embedding` | `Dashboard` | `/api/v1/embedded_dashboard/` |
+| `Branding` | *(none)* | `superset_config.py` + static asset injection |
+
+Adding a new kind is a matter of subclassing `Reconciler`, setting `kind` and
+`depends_on`, and appending the instance to `RECONCILERS` — no hardcoded
+kind/path tables.
+
 ---
 
 ## 9. Runtime Modes
@@ -916,6 +1168,56 @@ For targeted rollback, allow scoping by asset key and revision.
 
 ## 17. Repository Structure
 
+### 17.1 Current Layout (this repository)
+
+```text
+apache-superset-1/
+├── README.md
+├── Dockerfile                          # Custom Superset image (drivers, fastmcp)
+├── docker-compose.yml                  # Full stack: Superset, PG, Redis, Celery, Keycloak, MCP, Seeder
+├── .env / .env.example                 # Environment variables
+├── superset_config.py                  # Superset configuration (auth, MCP, themes, Celery)
+├── custom_sso_security_manager.py      # Keycloak OIDC integration
+├── assets/                             # Declarative YAML manifests (source of truth)
+│   ├── databases/
+│   │   └── analytics.yaml              # kind: Database
+│   ├── datasets/
+│   │   └── sales_orders.yaml           # kind: Dataset (metrics, timeColumn)
+│   ├── charts/
+│   │   ├── monthly_revenue.yaml        # kind: Chart (echarts_timeseries_bar)
+│   │   ├── revenue_by_country.yaml     # kind: Chart (pie)
+│   │   └── order_count_trend.yaml      # kind: Chart (echarts_timeseries_line)
+│   ├── dashboards/
+│   │   └── executive_overview.yaml     # kind: Dashboard (chartRefs)
+│   ├── plugins/
+│   │   └── custom_waterfall.yaml       # kind: Plugin (dynamic viz plugin)
+│   └── extensions/
+│       └── query_optimizer.yaml        # kind: Extension (.supx package)
+├── config/
+│   └── base.yaml                       # Control plane config (state backend, drift policy)
+├── env/
+│   ├── dev.yaml                        # Environment overlay — dev
+│   ├── staging.yaml                    # Environment overlay — staging
+│   └── prod.yaml                       # Environment overlay — prod
+├── seed/
+│   └── pg/
+│       └── 001_schema.sql              # Sample analytics data (mart_sales.orders)
+└── docker/
+    ├── assets/
+    │   └── logo.svg                    # Custom branding logo
+    ├── scripts/
+    │   ├── init.sh                     # Superset DB init + admin user creation
+    │   ├── bootstrap.sh                # Gunicorn launch wrapper
+    │   ├── seed_dashboard.py           # Reconciler engine (asset loader, topo sort, REST sync)
+    │   └── bootstrap_keycloak.py       # Keycloak realm/client/user bootstrap
+    └── keycloak-nginx/
+        ├── Dockerfile
+        ├── nginx.conf
+        └── entrypoint.sh
+```
+
+### 17.2 Target Layout (full control plane)
+
 ```text
 superset-control-plane/
 ├── README.md
@@ -1123,6 +1425,615 @@ Suggested baseline:
 | Redis | `8.x` | |
 | PostgreSQL | `18.x` | |
 | Python | `3.12` | |
+
+---
+
+## 21. Visualization Plugins
+
+Superset ships with 40+ pre-installed visualization types and a **plugin-based
+architecture** that makes it straightforward for developers to add custom chart
+types without modifying the core codebase. Every chart in Superset — including
+the built-in ones — is a plugin.
+
+### 21.1 Plugin Architecture
+
+Visualization plugins are npm packages built with React and TypeScript that
+conform to the `@superset-ui` plugin interface. Each plugin is a self-contained
+module that declares:
+
+| Concern | What the plugin provides |
+|---|---|
+| **Metadata** | Unique key (`vizType`), name, thumbnail, description |
+| **Control panel** | Which query controls the user sees (metrics, dimensions, filters, time grain, etc.) |
+| **Transform** | A `transformProps` function that maps the Superset query response into the props the chart component expects |
+| **Chart component** | A React component (or ECharts/D3 wrapper) that renders the visualization |
+
+The plugin contract is defined by the `@superset-ui/core` package:
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    Superset Frontend                            │
+│                                                                 │
+│  ┌──────────────┐   ┌────────────────┐   ┌──────────────────┐  │
+│  │  Plugin       │   │  Control Panel │   │  Chart Component │  │
+│  │  Registry     │──▶│  Config        │──▶│  (React)         │  │
+│  │  (MainPreset) │   │  (sections,    │   │                  │  │
+│  │               │   │   controls)    │   │  transformProps() │  │
+│  └──────────────┘   └────────────────┘   └──────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Key packages in the `@superset-ui` ecosystem:
+
+| Package | Purpose |
+|---|---|
+| `@superset-ui/core` | Shared types, color schemes, number/time formatters, query object builders |
+| `@superset-ui/chart-controls` | Reusable control panel sections and individual controls |
+| `@superset-ui/plugin-chart-echarts` | All ECharts-based chart plugins (bar, line, pie, treemap, gauge, etc.) |
+| `@superset-ui/plugin-chart-table` | Table / Pivot Table plugin |
+| `@superset-ui/plugin-chart-word-cloud` | Word Cloud plugin |
+| `@superset-ui/legacy-*` | Older NVD3/D3v3-based chart plugins preserved for backward compatibility |
+
+### 21.2 Built-in Chart Types
+
+Superset's built-in plugins cover the most common analytics visualizations:
+
+| Category | Chart Types |
+|---|---|
+| **Time-series** | Line, Bar, Area, Scatter, Smooth Line, Step Line |
+| **Categorical** | Pie, Donut, Sunburst, Treemap, Bar Chart |
+| **Statistical** | Box Plot, Histogram, Bubble Chart |
+| **Geospatial** | World Map, Country Map, deck.gl (Scatter, Arc, Hex, Grid, Path, Polygon, Heatmap, GeoJSON) |
+| **Tables** | Table, Pivot Table |
+| **Part-to-whole** | Treemap, Sunburst, Partition |
+| **Flow** | Sankey, Chord Diagram |
+| **KPI** | Big Number, Big Number with Trendline |
+| **Text** | Handlebars, Markdown |
+| **Other** | Word Cloud, Calendar Heatmap, Funnel, Gauge, Radar, Mixed Timeseries, Graph (Force-directed) |
+
+When the `DYNAMIC_PLUGINS` feature flag is enabled, operators can also register
+external chart plugins at runtime via the Superset UI (Admin → Plugins), without
+rebuilding the frontend.
+
+### 21.3 Creating a Custom Visualization Plugin
+
+#### Prerequisites
+
+- Node.js 18+, npm or yarn
+- Familiarity with React and TypeScript
+
+#### Scaffold with the Yeoman generator
+
+```bash
+# Install the generator globally
+npm install -g @superset-ui/generator-superset
+
+# Create and enter the plugin directory
+mkdir superset-plugin-chart-custom
+cd superset-plugin-chart-custom
+
+# Run the generator
+yo @superset-ui/superset
+```
+
+The generator produces a standard structure:
+
+```text
+superset-plugin-chart-custom/
+├── src/
+│   ├── plugin/
+│   │   ├── buildQuery.ts          # Builds the query object sent to Superset
+│   │   ├── controlPanel.ts        # Control panel definition
+│   │   ├── transformProps.ts      # Maps API response → chart props
+│   │   └── index.ts               # Plugin metadata and registration
+│   ├── CustomChart.tsx            # React chart component
+│   └── index.ts                   # Package entry point
+├── test/
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+#### Plugin entry point (`src/plugin/index.ts`)
+
+```typescript
+import { t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
+import buildQuery from './buildQuery';
+import controlPanel from './controlPanel';
+import transformProps from './transformProps';
+import thumbnail from '../images/thumbnail.png';
+
+export default class CustomChartPlugin extends ChartPlugin {
+  constructor() {
+    super({
+      buildQuery,
+      controlPanel,
+      loadChart: () => import('../CustomChart'),
+      metadata: new ChartMetadata({
+        name: t('Custom Chart'),
+        description: t('A custom visualization plugin'),
+        thumbnail,
+        tags: [t('Custom'), t('Example')],
+      }),
+    });
+  }
+}
+```
+
+#### Control panel (`src/plugin/controlPanel.ts`)
+
+```typescript
+import { sections, sharedControls } from '@superset-ui/chart-controls';
+
+export default {
+  controlPanelSections: [
+    sections.genericTime,
+    {
+      label: 'Query',
+      expanded: true,
+      controlSetRows: [
+        [sharedControls.metrics],
+        [sharedControls.groupby],
+        ['row_limit'],
+      ],
+    },
+  ],
+};
+```
+
+#### Chart component (`src/CustomChart.tsx`)
+
+```tsx
+import React from 'react';
+import { styled } from '@superset-ui/core';
+
+interface CustomChartProps {
+  data: Record<string, any>[];
+  width: number;
+  height: number;
+}
+
+const Wrapper = styled.div`
+  padding: 16px;
+  border-radius: 4px;
+  overflow: auto;
+`;
+
+export default function CustomChart({ data, width, height }: CustomChartProps) {
+  return (
+    <Wrapper style={{ width, height }}>
+      <h3>Custom Chart</h3>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+    </Wrapper>
+  );
+}
+```
+
+### 21.4 Plugin Registration and Deployment
+
+#### Option A: Static registration (build-time)
+
+Register the plugin in `superset-frontend/src/visualizations/presets/MainPreset.ts`:
+
+```typescript
+import CustomChartPlugin from 'superset-plugin-chart-custom';
+
+export default class MainPreset extends Preset {
+  constructor() {
+    super({
+      name: 'MainPreset',
+      plugins: [
+        // ... existing plugins
+        new CustomChartPlugin().configure({ key: 'custom_chart' }),
+      ],
+    });
+  }
+}
+```
+
+Then rebuild the frontend:
+
+```bash
+cd superset-frontend
+npm run build
+```
+
+#### Option B: Dynamic registration (runtime)
+
+Enable the feature flag in `superset_config.py`:
+
+```python
+FEATURE_FLAGS = {
+    "DYNAMIC_PLUGINS": True,
+}
+```
+
+Then upload the plugin via the Superset UI at **Settings → Plugins** or via the
+REST API:
+
+```bash
+# bundle_url must point to a self-hosted JS bundle you built from source.
+# See https://github.com/apache-superset/dynamic-import-demo-plugin
+curl -X POST http://localhost:8088/api/v1/dynamic_plugins/ \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Custom Chart",
+    "key": "custom_chart",
+    "bundle_url": "https://static.yourcompany.com/superset-plugins/custom-chart/main.js"
+  }'
+```
+
+References:
+
+- [Creating Visualization Plugins — Superset docs](https://superset.apache.org/developer-docs/contributing/howtos)
+- [superset-ui GitHub](https://github.com/apache/superset/tree/master/superset-frontend/packages)
+- [@superset-ui/generator-superset](https://www.npmjs.com/package/@superset-ui/generator-superset)
+
+---
+
+## 22. Extensions Framework
+
+> **⚠️ Maturity Warning — lifecycle: IN DEVELOPMENT**
+>
+> The `ENABLE_EXTENSIONS` feature flag exists in Superset's `master` branch but
+> is classified as **"in development"** (not "testing" or "stable"). As of
+> Superset **6.0.0 GA and 6.1.0rc2**, the runtime `.supx` loading infrastructure
+> is **not yet fully functional** in released builds:
+>
+> - The `superset extensions` CLI command is not registered
+> - The `/api/v1/extensions/` endpoint may not be present
+> - No UI for managing/loading extensions
+>
+> See [GitHub Discussion #38607](https://github.com/apache/superset/discussions/38607)
+> and [SIP-177](https://github.com/apache/superset/issues/34162) for current status.
+>
+> The documentation, YAML schema, and reconciler below are included so the
+> control plane is **ready when the feature stabilises**. The `ExtensionReconciler`
+> will gracefully skip with a log message until the endpoint becomes available.
+>
+> **For extending Superset today**, use [Dynamic Visualization Plugins (§21)](#21-visualization-plugins)
+> which are lifecycle: **testing** and functional in 6.0+.
+
+Superset's **extension system** (introduced alongside the "lean core" initiative)
+enables organizations to add custom features — UI panels, menu items, REST API
+endpoints, MCP tools, custom editors — **without forking or modifying the core
+codebase**. Inspired by the
+[VS Code extension model](https://code.visualstudio.com/api), it replaces the
+previous pattern of invasive monkey-patching or maintaining long-lived forks.
+
+### 22.1 What Are Superset Extensions?
+
+Extensions are self-contained **`.supx` packages** that bundle both frontend
+(React/TypeScript) and backend (Python/Flask) components. They are loaded
+dynamically at runtime using **Webpack Module Federation** (frontend) and
+Python's auto-discovery of `entrypoint.py` (backend).
+
+Key properties:
+
+| Property | Detail |
+|---|---|
+| **Packaging** | Single `.supx` archive (zip) containing `manifest.json`, frontend dist, backend source |
+| **Isolation** | Extensions use namespaced routes (`/extensions/{publisher}/{name}/`) and scoped permissions |
+| **Lifecycle** | Lazy-loaded and activated on demand — no startup penalty for unused extensions |
+| **Shared deps** | React, Ant Design, and `@apache-superset/core` are singletons shared with the host |
+| **Versioning** | Independent semver lifecycle; core packages follow semantic versioning for safe upgrades |
+
+### 22.2 Extension Architecture
+
+The architecture is built around three main components:
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│                     Extension Project                            │
+│                                                                  │
+│  Frontend (React/TS)              Backend (Python/Flask)         │
+│  ┌───────────────────┐           ┌───────────────────────┐      │
+│  │  index.tsx         │           │  entrypoint.py         │      │
+│  │  - registerView    │           │  - @api REST endpoints │      │
+│  │  - registerCommand │           │  - @tool MCP tools     │      │
+│  │  - registerMenu    │           │  - @prompt MCP prompts │      │
+│  │  - registerEditor  │           │                        │      │
+│  └─────────┬─────────┘           └──────────┬────────────┘      │
+│            │                                │                    │
+│            ▼                                ▼                    │
+│  ┌───────────────────────────────────────────────────────┐      │
+│  │          @apache-superset/core  (shared API)          │      │
+│  │          apache-superset-core   (Python)              │      │
+│  └───────────────────────────────────────────────────────┘      │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+              Webpack Module Federation
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                   Superset Host Application                      │
+│                                                                  │
+│  /api/v1/extensions ─── manages registration, metadata, storage  │
+│  window.superset    ─── exposes @apache-superset/core at runtime │
+│  extensions table   ─── stores extension name, version, assets   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Architectural principles:**
+
+1. **Lean Core** — Built-in features use the same APIs available to extensions
+2. **Explicit Contribution Points** — All extension points are clearly defined and documented
+3. **Versioned and Stable APIs** — Public interfaces follow semver
+4. **Lazy Loading** — Extensions load only when activated
+5. **Composability** — Extension points and patterns are reusable across modules
+6. **Community-Driven** — New extension points emerge from real-world needs
+
+### 22.3 Frontend Contribution Types
+
+Frontend contributions are registered in the extension's `index.tsx` entry point
+using APIs from `@apache-superset/core`.
+
+#### Views
+
+Add custom panels or pages to Superset's UI. Contribution areas are uniquely
+identified (e.g., `sqllab.panels`).
+
+```tsx
+import React from 'react';
+import { views } from '@apache-superset/core';
+import MyPanel from './MyPanel';
+
+views.registerView(
+  { id: 'my-extension.main', name: 'My Panel Name' },
+  'sqllab.panels',
+  () => <MyPanel />,
+);
+```
+
+#### Commands
+
+Define custom actions invocable via menus, keyboard shortcuts, or other UI
+elements.
+
+```tsx
+import { commands } from '@apache-superset/core';
+
+commands.registerCommand(
+  {
+    id: 'my-extension.copy-query',
+    title: 'Copy Query',
+    icon: 'CopyOutlined',
+    description: 'Copy the current query to clipboard',
+  },
+  () => {
+    navigator.clipboard.writeText(getCurrentQuery());
+  },
+);
+```
+
+#### Menus
+
+Contribute menu items to specific UI areas. Location can be `primary`,
+`secondary`, or `context`.
+
+```tsx
+import { menus } from '@apache-superset/core';
+
+menus.registerMenuItem(
+  { view: 'sqllab.editor', command: 'my-extension.copy-query' },
+  'sqllab.editor',
+  'primary',
+);
+```
+
+#### Editors
+
+Replace Superset's default text editors (SQL Lab, CSS, Dashboard Properties)
+with custom implementations (Monaco, CodeMirror, etc.).
+
+```tsx
+import { editors } from '@apache-superset/core';
+import MonacoSQLEditor from './MonacoSQLEditor';
+
+editors.registerEditor(
+  {
+    id: 'my-extension.monaco-sql',
+    name: 'Monaco SQL Editor',
+    languages: ['sql'],
+  },
+  MonacoSQLEditor,
+);
+```
+
+### 22.4 Backend Contribution Types
+
+Backend contributions are registered at startup via classes and functions
+imported from the auto-discovered `entrypoint.py`.
+
+#### REST API Endpoints
+
+Custom endpoints live under the `/extensions/{publisher}/{name}/` namespace,
+preventing conflicts with built-in routes.
+
+```python
+from flask import Response
+from flask_appbuilder.api import expose, permission_name, protect, safe
+from superset_core.rest_api.api import RestApi
+from superset_core.rest_api.decorators import api
+
+@api(
+    id="my_extension_api",
+    name="My Extension API",
+    description="Custom API endpoints for my extension",
+)
+class MyExtensionAPI(RestApi):
+    openapi_spec_tag = "My Extension"
+    class_permission_name = "my_extension_api"
+
+    @expose("/hello", methods=("GET",))
+    @protect()
+    @safe
+    @permission_name("read")
+    def hello(self) -> Response:
+        return self.response(200, result={"message": "Hello from extension!"})
+```
+
+The `@api` decorator auto-detects context:
+- **Extension context:** `/extensions/{publisher}/{name}/` with ID prefixed as
+  `extensions.{publisher}.{name}.{id}`
+- **Host context:** `/api/v1/` with original ID
+
+Register in `entrypoint.py`:
+
+```python
+from .api import MyExtensionAPI  # noqa: F401
+```
+
+#### MCP Tools
+
+Extensions can register Python functions as MCP tools discoverable by AI agents:
+
+```python
+from superset_core.mcp.decorators import tool
+
+@tool(
+    name="my-extension.get_summary",
+    description="Get a summary of recent query activity",
+    tags=["analytics", "queries"],
+)
+def get_summary() -> dict:
+    return {"status": "success", "result": {"queries_today": 42}}
+```
+
+#### MCP Prompts
+
+Extensions can provide interactive guidance for AI agents:
+
+```python
+from superset_core.mcp.decorators import prompt
+from fastmcp import Context
+
+@prompt(
+    "my-extension.analysis_guide",
+    title="Analysis Guide",
+    description="Step-by-step guidance for data analysis workflows",
+)
+async def analysis_guide(ctx: Context) -> str:
+    return """
+    # Data Analysis Guide
+    1. **Explore your data** — Review available datasets and schema
+    2. **Build your query** — Use SQL Lab to craft and test queries
+    3. **Visualize results** — Choose the right chart type for your data
+    """
+```
+
+### 22.5 Building an Extension (Quick Start)
+
+#### 1. Install the CLI
+
+```bash
+pip install apache-superset-extensions-cli
+```
+
+#### 2. Scaffold
+
+```bash
+superset-extensions init
+```
+
+The CLI prompts for publisher namespace, extension name, and whether to include
+frontend/backend components, then generates:
+
+```text
+hello-world/
+├── extension.json              # Metadata (publisher, name, version, permissions)
+├── backend/
+│   ├── src/
+│   │   └── my_org/
+│   │       └── hello_world/
+│   │           └── entrypoint.py
+│   └── pyproject.toml
+└── frontend/
+    ├── src/
+    │   └── index.tsx            # Frontend entry point
+    ├── package.json
+    ├── tsconfig.json
+    └── webpack.config.js
+```
+
+#### 3. Develop
+
+- **Backend:** Add Flask API classes and MCP tools in the `backend/` tree
+- **Frontend:** Register views, commands, menus in `frontend/src/index.tsx`
+- **Shared API:** Import from `@apache-superset/core` (frontend) or
+  `superset_core` (backend)
+
+#### 4. Build and test locally
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+### 22.6 Packaging and Deployment
+
+#### Package as `.supx`
+
+```bash
+superset-extensions bundle
+```
+
+This produces `{publisher}.{name}-{version}.supx` containing:
+- `manifest.json` — build metadata and asset references
+- `frontend/dist/` — built JS assets (`remoteEntry.js`, chunks)
+- `backend/` — Python source files
+
+#### Deploy to Superset
+
+1. Enable extensions in `superset_config.py`:
+
+```python
+FEATURE_FLAGS = {
+    "ENABLE_EXTENSIONS": True,
+}
+
+EXTENSIONS_PATH = "/app/extensions"
+```
+
+2. Copy the `.supx` bundle:
+
+```bash
+cp my-org.hello-world-0.1.0.supx /app/extensions/
+```
+
+3. Restart Superset. The host will extract, validate, and register the
+extension automatically.
+
+#### Manage via REST API
+
+```bash
+# List installed extensions
+curl http://localhost:8088/api/v1/extensions/ \
+  -H "Authorization: Bearer $TOKEN"
+
+# Extension endpoints are accessible at:
+# /extensions/{publisher}/{name}/{endpoint}
+```
+
+### 22.7 Extension Security
+
+- Extensions declare required **permissions** in `extension.json`
+  (e.g., `["can_read"]`)
+- Backend endpoints use Flask-AppBuilder's `@protect()` decorator for RBAC
+- Frontend API calls must include a CSRF token via
+  `authentication.getCSRFToken()` from `@apache-superset/core`
+- Each extension is namespace-isolated to prevent route and permission collisions
+- The host validates extension metadata and integrity on load
+
+References:
+
+- [Extensions Overview — Superset docs](https://superset.apache.org/developer-docs/extensions/overview/)
+- [Extension Architecture](https://superset.apache.org/developer-docs/extensions/architecture)
+- [Contribution Types](https://superset.apache.org/developer-docs/extensions/contribution-types)
+- [Quick Start](https://superset.apache.org/developer-docs/extensions/quick-start)
+- [Extension Deployment](https://superset.apache.org/developer-docs/extensions/deployment)
+- [MCP Integration for Extensions](https://superset.apache.org/developer-docs/extensions/mcp)
+- [Community Extensions Registry](https://superset.apache.org/developer-docs/extensions/registry)
 
 ---
 

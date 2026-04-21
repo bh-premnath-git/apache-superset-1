@@ -1,0 +1,15 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.by_state
+  name: Households by State
+spec:
+  datasetRef: dataset.household.hh_master
+  vizType: echarts_timeseries_bar
+  params:
+    metrics:
+      - weighted_count
+    groupby:
+      - State_label
+    order_desc: true
+    row_limit: 36

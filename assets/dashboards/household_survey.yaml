@@ -1,0 +1,14 @@
+apiVersion: analytics/v1
+kind: Dashboard
+metadata:
+  key: dashboard.household.survey
+  name: Household Survey Overview
+spec:
+  slug: household-survey
+  chartRefs:
+    - chart.household.by_state
+    - chart.household.religion_distribution
+    - chart.household.social_group
+    - chart.household.energy_cooking
+    - chart.household.ration_card
+    - chart.household.food_expenditure

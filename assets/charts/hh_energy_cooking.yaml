@@ -1,0 +1,12 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.energy_cooking
+  name: Energy Source for Cooking
+spec:
+  datasetRef: dataset.household.hh_master
+  vizType: pie
+  params:
+    metric: weighted_count
+    groupby:
+      - Energy_Source_Cooking_label

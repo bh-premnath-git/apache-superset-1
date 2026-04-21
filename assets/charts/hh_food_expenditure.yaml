@@ -1,0 +1,17 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.food_expenditure
+  name: Food Expenditure by Category
+spec:
+  datasetRef: dataset.household.hh_master
+  vizType: echarts_timeseries_bar
+  params:
+    metrics:
+      - total_cereal_val
+      - total_dairy_val
+      - total_vegetables_val
+      - total_pulses_val
+      - total_egg_fish_meat_val
+    groupby:
+      - Sector_label

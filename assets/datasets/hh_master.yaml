@@ -1,0 +1,50 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.hh_master
+  name: hh_master
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: hh_master
+  metrics:
+    - metric_name: count
+      expression: COUNT(*)
+      verbose_name: Household Count
+      metric_type: count
+    - metric_name: weighted_count
+      expression: SUM(wt)
+      verbose_name: Weighted Households
+      metric_type: sum
+    - metric_name: avg_hh_size
+      expression: AVG(hh_size)
+      verbose_name: Avg Household Size
+      metric_type: avg
+    - metric_name: avg_head_age
+      expression: AVG(head_age)
+      verbose_name: Avg Head Age
+      metric_type: avg
+    - metric_name: total_cereal_val
+      expression: SUM(cereal_val_total)
+      verbose_name: Total Cereal Expenditure
+      metric_type: sum
+    - metric_name: total_dairy_val
+      expression: SUM(dairy_val_total)
+      verbose_name: Total Dairy Expenditure
+      metric_type: sum
+    - metric_name: total_vegetables_val
+      expression: SUM(vegetables_val_total)
+      verbose_name: Total Vegetables Expenditure
+      metric_type: sum
+    - metric_name: total_pulses_val
+      expression: SUM(pulses_val_total)
+      verbose_name: Total Pulses Expenditure
+      metric_type: sum
+    - metric_name: total_egg_fish_meat_val
+      expression: SUM(egg_fish_meat_val_total)
+      verbose_name: Total Egg/Fish/Meat Expenditure
+      metric_type: sum
+    - metric_name: avg_mean_years_edu
+      expression: AVG(mean_years_edu)
+      verbose_name: Avg Years of Education
+      metric_type: avg

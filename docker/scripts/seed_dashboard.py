@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -197,6 +198,64 @@ class ReconcileContext:
         return self.ids.get(kind, {}).get(key)
 
 
+class SkipAsset(Exception):
+    """Raised by a reconciler when an asset should be skipped, not failed.
+
+    Use this for expected conditions like missing optional configuration
+    (e.g. plugin bundle URL not set, extension file not present).
+    """
+
+
+@dataclass
+class ReconcileResult:
+    """Outcome of reconciling a single asset."""
+
+    kind: str
+    key: str
+    action: str  # "created", "updated", "exists", "skipped", "failed"
+    runtime_id: int | None = None
+    reason: str = ""
+
+
+@dataclass
+class ReconcileReport:
+    """Aggregated outcome of a full reconcile pass."""
+
+    results: list[ReconcileResult] = field(default_factory=list)
+
+    def add(self, result: ReconcileResult) -> None:
+        self.results.append(result)
+
+    @property
+    def created(self) -> int:
+        return sum(1 for r in self.results if r.action == "created")
+
+    @property
+    def updated(self) -> int:
+        return sum(1 for r in self.results if r.action == "updated")
+
+    @property
+    def exists(self) -> int:
+        return sum(1 for r in self.results if r.action == "exists")
+
+    @property
+    def skipped(self) -> int:
+        return sum(1 for r in self.results if r.action == "skipped")
+
+    @property
+    def failed(self) -> int:
+        return sum(1 for r in self.results if r.action == "failed")
+
+    def summary(self) -> str:
+        total = len(self.results)
+        return (
+            f"{total} asset(s): "
+            f"{self.created} created, {self.updated} updated, "
+            f"{self.exists} unchanged, {self.skipped} skipped, "
+            f"{self.failed} failed"
+        )
+
+
 class Reconciler(ABC):
     """Base class — each subclass owns a single ``kind``.
 
@@ -206,6 +265,14 @@ class Reconciler(ABC):
 
     kind: ClassVar[str] = ""
     depends_on: ClassVar[tuple[str, ...]] = ()
+
+    def preflight(self, asset: Asset) -> None:
+        """Check prerequisites before applying.
+
+        Raise ``SkipAsset`` with a human-readable reason if the asset
+        cannot or should not be reconciled right now.  The default
+        implementation does nothing (always proceeds).
+        """
 
     @abstractmethod
     def apply(
@@ -449,6 +516,149 @@ class DashboardReconciler(Reconciler):
         )
 
 
+class PluginReconciler(Reconciler):
+    """Reconciles ``kind: Plugin`` assets via Superset's dynamic plugins API.
+
+    Requires the ``DYNAMIC_PLUGINS`` feature flag (lifecycle: **testing**)
+    to be enabled in ``superset_config.py``.  Available since Superset 3.x.
+    Plugins are matched by their ``key`` field (dynamic_plugins ``key`` column).
+
+    The reconciler **skips** (rather than fails) when the bundle URL is not
+    yet configured — this lets template YAML live in the repo without
+    breaking the reconciler for everyone else.
+    """
+
+    kind = "Plugin"
+
+    def preflight(self, asset: Asset) -> None:
+        spec = asset.spec
+        bundle_url = _resolve_bundle_url(spec)
+        if not bundle_url:
+            env_key = spec.get("bundleUrlFromEnv", "")
+            hint = f"set ${env_key} in .env" if env_key else "set spec.bundleUrl"
+            raise SkipAsset(f"bundle URL not configured ({hint})")
+        if not spec.get("vizType"):
+            raise SkipAsset("spec.vizType is required")
+
+    def apply(
+        self, client: SupersetClient, asset: Asset, ctx: ReconcileContext
+    ) -> int:
+        spec = asset.spec
+        viz_type = spec["vizType"]
+        bundle_url = _resolve_bundle_url(spec)
+
+        # Probe whether the dynamic plugins API is enabled.
+        try:
+            existing = client.find_by_field(
+                "/api/v1/dynamic_plugins/", "key", viz_type
+            )
+        except urllib.error.HTTPError as ex:
+            if ex.code in (404, 405):
+                raise SkipAsset(
+                    "/api/v1/dynamic_plugins/ not available — enable "
+                    "FEATURE_FLAGS['DYNAMIC_PLUGINS'] = True in superset_config.py"
+                ) from ex
+            raise
+        if existing:
+            plugin_id = int(existing["id"])
+            client.put(
+                f"/api/v1/dynamic_plugins/{plugin_id}",
+                {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
+            )
+            log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
+            return plugin_id
+
+        created = client.post(
+            "/api/v1/dynamic_plugins/",
+            {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
+        )
+        plugin_id = int(created["id"])
+        log(f"  Plugin '{asset.name}' created (id={plugin_id})")
+        return plugin_id
+
+
+class ExtensionReconciler(Reconciler):
+    """Reconciles ``kind: Extension`` assets via Superset's extensions API.
+
+    .. warning:: **Lifecycle: IN DEVELOPMENT** (as of Superset 6.0/6.1)
+
+       The ``ENABLE_EXTENSIONS`` feature flag and the ``/api/v1/extensions/``
+       endpoint are present on ``master`` but classified as *in development*.
+       The runtime .supx loading infrastructure is **not yet functional** in
+       released versions (see `GitHub Discussion #38607
+       <https://github.com/apache/superset/discussions/38607>`_).
+
+       This reconciler is included so that the YAML schema and reconciler
+       pattern are ready when the feature stabilises.  Until then, assets
+       of this kind will be **skipped** with a clear log message.
+
+    The reconciler skips when:
+    - The ``/api/v1/extensions/`` endpoint is not reachable (404)
+    - ``spec.publisher`` or ``spec.extensionName`` is missing
+    - No ``.supx`` bundle path or URL is resolvable
+    """
+
+    kind = "Extension"
+
+    def preflight(self, asset: Asset) -> None:
+        spec = asset.spec
+        if not spec.get("publisher") or not spec.get("extensionName"):
+            raise SkipAsset("spec.publisher and spec.extensionName are required")
+
+        supx_url = _resolve_env_or_literal(spec, "supxUrl", "supxUrlFromEnv")
+        supx_path = _resolve_env_or_literal(spec, "supxPath", "supxPathFromEnv")
+
+        if not supx_url and not supx_path:
+            raise SkipAsset(
+                "no .supx bundle configured (set spec.supxUrl, spec.supxUrlFromEnv, "
+                "spec.supxPath, or spec.supxPathFromEnv)"
+            )
+
+    def apply(
+        self, client: SupersetClient, asset: Asset, ctx: ReconcileContext
+    ) -> int:
+        spec = asset.spec
+        publisher = spec["publisher"]
+        ext_name = spec["extensionName"]
+        version = spec.get("version", "0.1.0")
+        full_name = f"{publisher}.{ext_name}"
+
+        # Probe whether the extensions API exists in this Superset version.
+        try:
+            existing = client.find_by_field(
+                "/api/v1/extensions/", "name", full_name
+            )
+        except urllib.error.HTTPError as ex:
+            if ex.code in (404, 405):
+                raise SkipAsset(
+                    "/api/v1/extensions/ not available in this Superset version "
+                    "(ENABLE_EXTENSIONS is lifecycle:development — see "
+                    "https://github.com/apache/superset/discussions/38607)"
+                ) from ex
+            raise
+        if existing:
+            ext_id = int(existing["id"])
+            log(f"  Extension '{full_name}' already exists (id={ext_id})")
+            return ext_id
+
+        payload: dict[str, Any] = {
+            "name": full_name,
+            "publisher": publisher,
+            "version": version,
+        }
+        supx_url = _resolve_env_or_literal(spec, "supxUrl", "supxUrlFromEnv")
+        supx_path = _resolve_env_or_literal(spec, "supxPath", "supxPathFromEnv")
+        if supx_url:
+            payload["bundle_url"] = supx_url
+        elif supx_path:
+            payload["bundle_path"] = supx_path
+
+        created = client.post("/api/v1/extensions/", payload)
+        ext_id = int(created["id"])
+        log(f"  Extension '{full_name}' created (id={ext_id})")
+        return ext_id
+
+
 # ---------------------------------------------------------------------------
 # Reconciler registry — adding a new kind = adding a class here
 # ---------------------------------------------------------------------------
@@ -457,6 +667,8 @@ RECONCILERS: tuple[Reconciler, ...] = (
     DatasetReconciler(),
     ChartReconciler(),
     DashboardReconciler(),
+    PluginReconciler(),
+    ExtensionReconciler(),
 )
 
 
@@ -492,6 +704,27 @@ def _resolve_sqlalchemy_uri(spec: dict[str, Any]) -> str:
     if env_key:
         return os.getenv(env_key, "")
     return spec.get("sqlalchemyUri", "")
+
+
+def _resolve_bundle_url(spec: dict[str, Any]) -> str:
+    env_key = spec.get("bundleUrlFromEnv")
+    if env_key:
+        return os.getenv(env_key, "")
+    return spec.get("bundleUrl", "")
+
+
+def _resolve_env_or_literal(
+    spec: dict[str, Any], literal_key: str, env_key: str
+) -> str:
+    """Resolve a spec field that may be a literal value or an env-var reference.
+
+    Checks ``spec[env_key]`` first (environment injection), then falls back
+    to ``spec[literal_key]`` (hardcoded value).
+    """
+    from_env = spec.get(env_key)
+    if from_env:
+        return os.getenv(from_env, "")
+    return spec.get(literal_key, "")
 
 
 def _auto_grid_layout(chart_ids: list[int]) -> dict[str, Any]:
@@ -540,13 +773,14 @@ def _compute_assets_checksum(root: Path) -> str:
 
 
 def log(message: str) -> None:
-    print(message, flush=True)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"[{ts}] {message}", flush=True)
 
 
 # ---------------------------------------------------------------------------
 # Reconcile pass
 # ---------------------------------------------------------------------------
-def reconcile_once(assets_root: Path) -> None:
+def reconcile_once(assets_root: Path) -> ReconcileReport:
     client = SupersetClient(SUPERSET_URL, USERNAME, PASSWORD)
     client.login()
 
@@ -555,16 +789,58 @@ def reconcile_once(assets_root: Path) -> None:
     for asset in assets:
         by_kind.setdefault(asset.kind, []).append(asset)
 
+    # Warn about asset kinds that have no registered reconciler.
+    registered_kinds = {r.kind for r in RECONCILERS}
+    for kind in by_kind:
+        if kind not in registered_kinds:
+            for asset in by_kind[kind]:
+                log(f"  ⚠ No reconciler for kind '{kind}' — skipping {asset.key} ({asset.source_path})")
+
     log(f"Reconciling {len(assets)} asset(s) from {assets_root} ...")
     ctx = ReconcileContext()
+    report = ReconcileReport()
+    failed_kinds: set[str] = set()
+
     for reconciler in _ordered_reconcilers():
         for asset in by_kind.get(reconciler.kind, []):
-            runtime_id = reconciler.apply(client, asset, ctx)
-            ctx.put(reconciler.kind, asset.key, runtime_id)
+            # Skip assets whose dependencies failed.
+            dep_failed = failed_kinds & set(reconciler.depends_on)
+            if dep_failed:
+                reason = f"dependency kind(s) {dep_failed} had failures"
+                log(f"  ✗ {asset.kind} '{asset.key}' skipped — {reason}")
+                report.add(ReconcileResult(
+                    kind=asset.kind, key=asset.key,
+                    action="skipped", reason=reason,
+                ))
+                continue
 
-    log("Reconcile complete:")
-    for kind, mapping in ctx.ids.items():
-        log(f"  {kind}: {mapping}")
+            try:
+                reconciler.preflight(asset)
+                runtime_id = reconciler.apply(client, asset, ctx)
+                ctx.put(reconciler.kind, asset.key, runtime_id)
+                report.add(ReconcileResult(
+                    kind=asset.kind, key=asset.key,
+                    action="exists", runtime_id=runtime_id,
+                ))
+            except SkipAsset as skip:
+                log(f"  ⊘ {asset.kind} '{asset.key}' skipped — {skip}")
+                report.add(ReconcileResult(
+                    kind=asset.kind, key=asset.key,
+                    action="skipped", reason=str(skip),
+                ))
+            except Exception as ex:
+                failed_kinds.add(reconciler.kind)
+                log(f"  ✗ {asset.kind} '{asset.key}' FAILED — {ex}")
+                report.add(ReconcileResult(
+                    kind=asset.kind, key=asset.key,
+                    action="failed", reason=str(ex),
+                ))
+
+    log(f"Reconcile complete — {report.summary()}")
+    for r in report.results:
+        if r.action == "failed":
+            log(f"  FAILED: {r.kind}/{r.key} — {r.reason}")
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -575,7 +851,9 @@ def main() -> None:
     bootstrap = SupersetClient(SUPERSET_URL, USERNAME, PASSWORD)
     bootstrap.wait_healthy()
 
-    reconcile_once(assets_root)
+    report = reconcile_once(assets_root)
+    if report.failed:
+        log(f"Initial reconcile had {report.failed} failure(s) — will retry on next change")
     last_checksum = _compute_assets_checksum(assets_root)
     log(f"Watching {assets_root} for changes (poll every {POLL_INTERVAL}s) ...")
 
