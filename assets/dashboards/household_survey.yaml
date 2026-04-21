@@ -9,13 +9,12 @@ spec:
   # Layout rules:
   # - `fullWidthFirst: 2` → the first two chartRefs (Rural Segments table and
   #   the India state map) each get their own full-width row.
-  # - `chartsPerRow: 3` → the three district-level pie charts share the next
-  #   row directly under the state map (one column per state), and the three
-  #   summary charts share the row after that.
+  # - `chartsPerRow: 2` → remaining charts render in two columns per row after
+  #   the two full-width lead charts.
   # - `chartHeights` → per-chart height override. The state map needs more
   #   vertical space than the default so India is clearly readable.
   fullWidthFirst: 2
-  chartsPerRow: 3
+  chartsPerRow: 2
   crossFiltersEnabled: true
   chartHeights:
     chart.household.state_map: 130
