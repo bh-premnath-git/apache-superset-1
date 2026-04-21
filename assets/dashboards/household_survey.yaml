@@ -7,11 +7,18 @@ spec:
   slug: household-survey
   chartHeight: 100
   # Layout rules:
-  # - `fullWidthFirst: 2` → the first two chartRefs each get their own
-  #   full-width row (Rural Segments table, then India state map).
-  # - `chartsPerRow: 2` → the remaining charts pair up two-per-row.
+  # - `fullWidthFirst: 2` → the first two chartRefs (Rural Segments table and
+  #   the India state map) each get their own full-width row.
+  # - `chartsPerRow: 3` → the three district-level pie charts share the next
+  #   row directly under the state map (one column per state), and the three
+  #   summary charts share the row after that.
+  # - `chartHeights` → per-chart height override. The state map needs more
+  #   vertical space than the default so India is clearly readable.
   fullWidthFirst: 2
-  chartsPerRow: 2
+  chartsPerRow: 3
+  crossFiltersEnabled: true
+  chartHeights:
+    chart.household.state_map: 130
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.state_map
@@ -21,4 +28,5 @@ spec:
     - chart.household.minor_structure
     - chart.household.segment_distribution_pie
     - chart.household.state_segment_distribution_bar
-  # Cross-filtering enabled: clicking states on the map filters the table
+  # Cross-filtering enabled via crossFiltersEnabled: clicking a state on the
+  # map filters the rural segments table and other compatible charts.

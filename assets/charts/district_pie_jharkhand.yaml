@@ -83,7 +83,6 @@ spec:
         sqlExpression: MAX(c6)
     handlebarsTemplate: |-
       <div class="dp-root">
-        <div class="dp-title">Jharkhand: Proportion of Segments by District</div>
         <div class="dp-grid">
           {{#each data}}
           <div class="dp-cell">
@@ -111,7 +110,6 @@ spec:
       </div>
     styleTemplate: |-
       .dp-root { font-family: Inter, Arial, sans-serif; padding: 8px; color: #222; }
-      .dp-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
       .dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
       .dp-cell { display: flex; flex-direction: column; align-items: center; font-size: 10px; }
       .dp-pie  { width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
