@@ -5,4 +5,5 @@ metadata:
   name: Household Survey Overview
 spec:
   slug: household-survey
-  chartRefs: []
+  chartRefs:
+    - chart.household.rural_segment_comparison
