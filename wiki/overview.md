@@ -63,6 +63,7 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
   - `HTML_SANITIZATION: True` with schema extensions allowing `<style>` tags and `style`/`class` attributes
 - **API CSRF:** For programmatic API access, `WTF_CSRF_CHECK_DEFAULT = False` is configured (JWT Bearer auth is sufficient)
 - **Dashboard chart height:** Dashboard YAML supports `chartHeight` field to control vertical space for charts
+- **Dashboard chart layout:** Dashboard YAML supports `chartsPerRow` field (default: all charts in one row); set to `1` to stack charts vertically
 
 ## Current important assets
 

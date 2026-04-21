@@ -509,7 +509,10 @@ class DashboardReconciler(Reconciler):
 
         if chart_ids:
             chart_height = spec.get("chartHeight", 50)
-            self._sync_layout(client, dashboard_id, chart_ids, chart_height)
+            charts_per_row = spec.get("chartsPerRow")
+            self._sync_layout(
+                client, dashboard_id, chart_ids, chart_height, charts_per_row
+            )
         return dashboard_id
 
     def _sync_layout(
@@ -518,15 +521,23 @@ class DashboardReconciler(Reconciler):
         dashboard_id: int,
         chart_ids: list[int],
         chart_height: int = 50,
+        charts_per_row: int | None = None,
     ) -> None:
         if not chart_ids:
             return
         detail = client.get(f"/api/v1/dashboard/{dashboard_id}")
-        existing_position = detail.get("result", {}).get("position_json") or ""
-        missing = [cid for cid in chart_ids if f"CHART-{cid}" not in existing_position]
-        if not missing:
+        existing_raw = detail.get("result", {}).get("position_json") or ""
+        try:
+            existing_position = json.loads(existing_raw) if existing_raw else {}
+        except json.JSONDecodeError:
+            existing_position = {}
+        position = _auto_grid_layout(
+            chart_ids,
+            chart_height=chart_height,
+            charts_per_row=charts_per_row,
+        )
+        if existing_position == position:
             return
-        position = _auto_grid_layout(chart_ids, chart_height=chart_height)
         client.put(
             f"/api/v1/dashboard/{dashboard_id}",
             {
@@ -750,41 +761,56 @@ def _resolve_env_or_literal(
 
 
 def _auto_grid_layout(
-    chart_ids: list[int], *, chart_height: int = 50,
+    chart_ids: list[int],
+    *,
+    chart_height: int = 50,
+    charts_per_row: int | None = None,
 ) -> dict[str, Any]:
-    """Single-row equal-width layout as a reasonable default.
+    """Auto layout that groups charts into rows.
 
-    Dashboards that need a specific layout should embed it in the YAML spec
-    (future extension); the engine will prefer that over the auto layout.
+    Superset's dashboard grid is 12 columns wide. By default all charts share
+    a single row with equal widths (12 // N). Setting ``charts_per_row``
+    changes how charts are distributed; ``charts_per_row=1`` stacks each
+    chart on its own row at full width.
     """
-    row_children = [f"CHART-{cid}" for cid in chart_ids]
+    if charts_per_row is None or charts_per_row < 1:
+        charts_per_row = len(chart_ids)
+    charts_per_row = min(charts_per_row, len(chart_ids))
+    width = max(1, 12 // charts_per_row)
+
     position: dict[str, Any] = {
         "DASHBOARD_VERSION_KEY": "v2",
         "ROOT_ID": {"type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"]},
-        "GRID_ID": {
-            "type": "GRID",
-            "id": "GRID_ID",
-            "children": ["ROW-1"],
-            "parents": ["ROOT_ID"],
-        },
-        "ROW-1": {
+    }
+    row_ids: list[str] = []
+    for row_idx in range(0, len(chart_ids), charts_per_row):
+        row_id = f"ROW-{len(row_ids) + 1}"
+        row_ids.append(row_id)
+        row_chart_ids = chart_ids[row_idx : row_idx + charts_per_row]
+        row_children = [f"CHART-{cid}" for cid in row_chart_ids]
+        position[row_id] = {
             "type": "ROW",
-            "id": "ROW-1",
+            "id": row_id,
             "children": row_children,
             "parents": ["ROOT_ID", "GRID_ID"],
             "meta": {"background": "BACKGROUND_TRANSPARENT"},
-        },
-    }
-    width = max(1, 12 // len(chart_ids))
-    for cid in chart_ids:
-        chart_key = f"CHART-{cid}"
-        position[chart_key] = {
-            "type": "CHART",
-            "id": chart_key,
-            "children": [],
-            "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
-            "meta": {"width": width, "height": chart_height, "chartId": cid},
         }
+        for cid in row_chart_ids:
+            chart_key = f"CHART-{cid}"
+            position[chart_key] = {
+                "type": "CHART",
+                "id": chart_key,
+                "children": [],
+                "parents": ["ROOT_ID", "GRID_ID", row_id],
+                "meta": {"width": width, "height": chart_height, "chartId": cid},
+            }
+
+    position["GRID_ID"] = {
+        "type": "GRID",
+        "id": "GRID_ID",
+        "children": row_ids,
+        "parents": ["ROOT_ID"],
+    }
     return position
 
 

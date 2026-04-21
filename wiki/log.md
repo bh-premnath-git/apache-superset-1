@@ -36,3 +36,20 @@
 - Added state map to `dashboard.household.survey` alongside rural segments table.
 - Dashboard supports cross-filtering: clicking a state on the map filters the table.
 - Uses built-in Country Map (no Mapbox key required), INDIA geoJSON with all 28 states + 8 UTs.
+
+## [2026-04-21] fix | Country Map "Must specify a country" and per-row layout
+- Country Map chart failed with `Data error — Must specify a country`.
+  Root cause: `household_state_map.yaml` set `country: INDIA` and `iso_code: IND`,
+  but the Superset Country Map plugin reads the control `select_country` with a
+  lowercase slug (e.g. `india`). Verified against
+  `apache/superset` `legacy-plugin-chart-country-map/src/controlPanel.ts` and
+  `countries.ts`. Fix: replaced with `select_country: india`.
+- Household Survey dashboard rendered the map and the rural segments table
+  side-by-side in a single 2-column row because `_auto_grid_layout` always
+  emitted a single `ROW-1` with `width = 12 // N`.
+- Added per-dashboard `chartsPerRow` spec field (scoped — default preserves
+  current single-row behavior). `assets/dashboards/household_survey.yaml` now
+  sets `chartsPerRow: 1` so each chart stacks on its own full-width row.
+- `DashboardReconciler._sync_layout` now compares the desired layout against
+  the existing `position_json` and rewrites it on difference, so layout spec
+  changes take effect on re-reconcile without needing to drop the dashboard.
