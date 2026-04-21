@@ -1,0 +1,24 @@
+apiVersion: analytics/v1
+kind: Plugin
+metadata:
+  key: plugin.chart.state_district_pies
+  name: State + District Pies
+spec:
+  # vizType is the identifier charts reference. MUST match the `key`
+  # passed to `.configure({ key: ... })` on the ChartPlugin class. See
+  # superset-plugins/plugin-chart-state-district-pies/README.md.
+  vizType: state_district_pies
+
+  # Bundle URL is resolved from the environment so the repo never carries
+  # a hardcoded CDN hostname. Build locally and publish:
+  #   cd superset-plugins/plugin-chart-state-district-pies
+  #   npm install && npm run build
+  #   # host dist/main.js on your static origin, then:
+  #   export STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL=https://static.example.com/superset-plugins/state-district-pies/main.js
+  bundleUrlFromEnv: STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL
+
+  description: |
+    India state choropleth overlaid with a per-district proportional pie.
+    Designed for the LCA segment mix but works with any
+    (state, district, category → metric) dataset.
+  featureFlag: DYNAMIC_PLUGINS

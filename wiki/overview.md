@@ -50,6 +50,9 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 - `seed/pg/*.sql`
 - `seed/pg/HH.master.csv`
 
+### In-repo custom plugins (source)
+- `superset-plugins/plugin-chart-state-district-pies/` — React/TypeScript source for the `state_district_pies` dynamic plugin
+
 ## Current key runtime truths
 
 - `superset-runtime-seed` is a **long-lived reconciler**, not just a one-shot seed step.
@@ -80,6 +83,7 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 
 ### Notable chart
 - `chart.household.rural_segment_comparison` uses `vizType: handlebars`
+- `chart.household.state_district_pies` uses `vizType: state_district_pies` — a custom dynamic plugin built from `superset-plugins/plugin-chart-state-district-pies/` (see [Custom Viz Plugin](architecture/custom-viz-plugin.md))
 
 ## Related pages
 - [Reconciler Engine](architecture/reconciler-engine.md)

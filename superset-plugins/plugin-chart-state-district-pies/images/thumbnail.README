@@ -1,0 +1,4 @@
+The runtime plugin metadata references `../images/thumbnail.png`; generate a
+128×128 preview of the state+district rendering and drop it here before
+publishing the bundle. The file is intentionally omitted from the repo so
+binary assets don't inflate reviews.
