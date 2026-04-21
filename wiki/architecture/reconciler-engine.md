@@ -66,6 +66,19 @@ The Superset REST client now reads HTTP error bodies and includes them in raised
 - available charts can still be laid out
 - dashboards are not forced to fail just because one chart is unavailable
 
+### Chart height configuration
+
+Dashboard YAML supports an optional `chartHeight` field (default: 50):
+
+```yaml
+spec:
+  chartHeight: 100
+  chartRefs:
+    - chart.household.rural_segment_comparison
+```
+
+This controls the vertical grid units allocated to charts. The Handlebars table in the Household Survey uses `100` (~800px) instead of the default `50` (~400px) to properly display all data rows.
+
 ## Operational significance
 
 This file is effectively the current control-plane implementation for the project. Any debugging of missing assets, skipped charts, or odd reconcile behavior should start here.

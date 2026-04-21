@@ -20,3 +20,12 @@
 - Added `HTML_SANITIZATION_SCHEMA_EXTENSIONS` to whitelist `<style>` tags and `style`/`class` attributes.
 - These changes fix both the CSP error and the CSS-rendering-as-plain-text issue for the Rural Segments Comparison chart.
 - See apache/superset#25205 and apache/superset#30381.
+
+## [2026-04-21] fix | API CSRF and chart height
+- Added `WTF_CSRF_CHECK_DEFAULT = False` to allow programmatic API access via JWT Bearer tokens.
+- Added `chartHeight` field support to Dashboard YAML spec (defaults to 50, uses 100 for Household Survey).
+- Added `Referer` header to SupersetClient requests for CSRF compliance.
+- Full stack reset (`docker compose down -v && up`) completed successfully.
+- All 11 assets reconciled with 0 failures:
+  - Database, 2 Datasets, 4 Charts, 2 Dashboards
+  - 2 assets skipped (Plugin/Extension, expected)

@@ -77,6 +77,21 @@ HTML_SANITIZATION_SCHEMA_EXTENSIONS = {
 
 See [apache/superset#25205](https://github.com/apache/superset/issues/25205) and [apache/superset#30381](https://github.com/apache/superset/issues/30381).
 
+## API / CSRF issues
+
+### Symptom: CSRF session token missing on API calls
+**Error:** `400 Bad Request: The CSRF session token is missing.`
+
+This happens when using the REST API with JWT Bearer tokens but Flask-WTF CSRF protection is enabled.
+
+**Fix in superset_config.py:**
+```python
+WTF_CSRF_ENABLED = True
+WTF_CSRF_CHECK_DEFAULT = False  # Exempt API from CSRF
+```
+
+This allows programmatic API access while keeping CSRF for browser forms.
+
 ## Related pages
 - [Reconciler Engine](../architecture/reconciler-engine.md)
 - [Database Seeding](../runtime/database-seeding.md)

@@ -19,9 +19,22 @@ This dashboard previously referenced a broader set of household charts. Those ch
 
 This page should be updated if more household charts are added again.
 
+## Layout configuration
+
+The dashboard uses `chartHeight: 100` to give the Handlebars table sufficient vertical space (default is 50). This is important for data-dense tables like the Rural Segments Comparison.
+
+Example from `household_survey.yaml`:
+```yaml
+spec:
+  slug: household-survey
+  chartHeight: 100
+  chartRefs:
+    - chart.household.rural_segment_comparison
+```
+
 ## Operational notes
 
-The dashboard layout is managed by the reconciler. When chart refs are available, the dashboard receives an auto-generated grid layout.
+The dashboard layout is managed by the reconciler. When chart refs are available, the dashboard receives an auto-generated grid layout with the specified `chartHeight`.
 
 If a chart ref is missing at reconcile time, the reconciler logs the missing chart but can still preserve the dashboard resource.
 
