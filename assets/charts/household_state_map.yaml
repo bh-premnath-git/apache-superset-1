@@ -17,6 +17,8 @@ spec:
       aggregate: COUNT
       label: Total Households
     row_limit: 100
+    linear_color_scheme: superset_seq_1
+    number_format: SMART_NUMBER
     adhoc_filters:
       - clause: WHERE
         expressionType: SQL
