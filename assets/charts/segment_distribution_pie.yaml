@@ -1,0 +1,28 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.segment_distribution_pie
+  name: "Distribution of Segments in 3 States [Weighted]"
+spec:
+  datasetRef: dataset.household.segment_distribution
+  vizType: pie
+  params:
+    viz_type: pie
+    row_limit: 10
+    groupby:
+      - segment
+    metric:
+      label: weighted_share
+      expressionType: SQL
+      hasCustomLabel: true
+      optionName: am_weighted_share
+      # The view already stores per-segment weighted share in `pct`; use MAX
+      # since there is exactly one row per segment.
+      sqlExpression: MAX(pct)
+    show_legend: true
+    legendType: scroll
+    legendOrientation: right
+    number_format: ".0f%"
+    donut: false
+    label_type: key_percent
+    color_scheme: supersetColors

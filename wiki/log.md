@@ -37,6 +37,40 @@
 - Dashboard supports cross-filtering: clicking a state on the map filters the table.
 - Uses built-in Country Map (no Mapbox key required), INDIA geoJSON with all 28 states + 8 UTs.
 
+## [2026-04-21] feature | LCA segment charts on Household Survey dashboard
+- Added four SQL views in `seed/pg/003_lca_segment_views.sql`, scoped to
+  Bihar / Jharkhand / Madhya Pradesh:
+  - `household.vw_hh_segments` — per-HH R1-R4 / U1-U3 classification + U15
+    minor bucket.
+  - `household.vw_district_segment_pie` — weighted per-district segment
+    percentages plus cumulative endpoints for CSS conic-gradient pies.
+  - `household.vw_segment_minor_bucket` — weighted %-of-HH by U15 bucket
+    within each segment (100% per segment).
+  - `household.vw_segment_distribution` — weighted segment shares across
+    the 3 states (for the pie).
+  - `household.vw_state_segment_distribution` — weighted segment shares
+    within each state (for the 3-bar stacked bar).
+- Added four datasets wrapping the new views and six new chart assets:
+  - `chart.household.district_pie_{bihar,jharkhand,madhya_pradesh}` —
+    Handlebars grid rendering a CSS conic-gradient pie per district.
+  - `chart.household.minor_structure` — echarts stacked bar reproducing the
+    "Household Structure — Proportion of Minor (< 15 yrs) (Weighted)" chart.
+  - `chart.household.segment_distribution_pie` — overall segment pie.
+  - `chart.household.state_segment_distribution_bar` — per-state segment
+    stacked bar.
+- Extended dashboard auto-layout with `fullWidthFirst` on top of
+  `chartsPerRow`: the first N chart refs get their own full-width row and
+  the rest pair up by `chartsPerRow`. Household Survey dashboard now uses
+  `fullWidthFirst: 2, chartsPerRow: 2` so the Rural Segments table and the
+  India state map keep full width while the 6 new LCA charts line up in
+  three two-column rows.
+- **Operational note:** the new `003_lca_segment_views.sql` only auto-runs
+  when the analytics-db volume is initialized for the first time
+  (`docker-entrypoint-initdb.d` semantics — see `wiki/runtime/database-seeding.md`).
+  Apply it manually with `psql` or recreate the volume
+  (`docker compose down -v && docker compose up`) to install the views on
+  an existing deployment.
+
 ## [2026-04-21] fix | Country Map "Must specify a country" and per-row layout
 - Country Map chart failed with `Data error — Must specify a country`.
   Root cause: `household_state_map.yaml` set `country: INDIA` and `iso_code: IND`,

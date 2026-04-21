@@ -1,0 +1,120 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.district_pie_jharkhand
+  name: "Jharkhand: Proportion of Segments by District"
+spec:
+  datasetRef: dataset.household.district_segment_pie
+  vizType: handlebars
+  params:
+    query_mode: aggregate
+    row_limit: 100
+    adhoc_filters:
+      - clause: WHERE
+        expressionType: SQL
+        sqlExpression: state_label = 'Jharkhand'
+    groupby:
+      - district_code
+    metrics:
+      - label: r1_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_r1_pct
+        sqlExpression: MAX(r1_pct)
+      - label: r2_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_r2_pct
+        sqlExpression: MAX(r2_pct)
+      - label: r3_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_r3_pct
+        sqlExpression: MAX(r3_pct)
+      - label: r4_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_r4_pct
+        sqlExpression: MAX(r4_pct)
+      - label: u1_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_u1_pct
+        sqlExpression: MAX(u1_pct)
+      - label: u2_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_u2_pct
+        sqlExpression: MAX(u2_pct)
+      - label: u3_pct
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_u3_pct
+        sqlExpression: MAX(u3_pct)
+      - label: c1
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c1
+        sqlExpression: MAX(c1)
+      - label: c2
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c2
+        sqlExpression: MAX(c2)
+      - label: c3
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c3
+        sqlExpression: MAX(c3)
+      - label: c4
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c4
+        sqlExpression: MAX(c4)
+      - label: c5
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c5
+        sqlExpression: MAX(c5)
+      - label: c6
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: dp_c6
+        sqlExpression: MAX(c6)
+    handlebarsTemplate: |-
+      <div class="dp-root">
+        <div class="dp-title">Jharkhand: Proportion of Segments by District</div>
+        <div class="dp-grid">
+          {{#each data}}
+          <div class="dp-cell">
+            <div class="dp-pie" style="background: conic-gradient(
+              #fde9d4 0% {{this.c1}}%,
+              #f6b678 {{this.c1}}% {{this.c2}}%,
+              #e8772e {{this.c2}}% {{this.c3}}%,
+              #8a3d0c {{this.c3}}% {{this.c4}}%,
+              #dbe4f5 {{this.c4}}% {{this.c5}}%,
+              #7f9bdc {{this.c5}}% {{this.c6}}%,
+              #2f4a8a {{this.c6}}% 100%);"></div>
+            <div class="dp-label">District {{this.district_code}}</div>
+          </div>
+          {{/each}}
+        </div>
+        <div class="dp-legend">
+          <span class="dp-swatch" style="background:#fde9d4"></span>R1
+          <span class="dp-swatch" style="background:#f6b678"></span>R2
+          <span class="dp-swatch" style="background:#e8772e"></span>R3
+          <span class="dp-swatch" style="background:#8a3d0c"></span>R4
+          <span class="dp-swatch" style="background:#dbe4f5"></span>U1
+          <span class="dp-swatch" style="background:#7f9bdc"></span>U2
+          <span class="dp-swatch" style="background:#2f4a8a"></span>U3
+        </div>
+      </div>
+    styleTemplate: |-
+      .dp-root { font-family: Inter, Arial, sans-serif; padding: 8px; color: #222; }
+      .dp-title { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+      .dp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+      .dp-cell { display: flex; flex-direction: column; align-items: center; font-size: 10px; }
+      .dp-pie  { width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.08); }
+      .dp-label { margin-top: 4px; color: #555; text-align: center; }
+      .dp-legend { margin-top: 10px; font-size: 11px; color: #444; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .dp-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1); }
