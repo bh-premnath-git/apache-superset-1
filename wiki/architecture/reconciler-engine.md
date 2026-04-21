@@ -1,0 +1,81 @@
+# Reconciler Engine
+
+## Purpose
+
+`docker/scripts/seed_dashboard.py` is the core operational engine of this repository.
+
+It discovers declarative asset manifests under `/app/assets`, orders them by dependency, and applies them to Superset through the REST API.
+
+## Key responsibilities
+
+- login to Superset with admin credentials
+- load all YAML assets recursively
+- group assets by `kind`
+- topologically order reconciler classes by `depends_on`
+- create or update runtime objects through the Superset API
+- poll for changes continuously
+- skip unsupported or not-yet-configured assets cleanly
+- report failures with timestamps
+
+## Important implementation details
+
+### Asset loading
+- Function: `load_assets(root)`
+- Behavior: recursively loads every `*.yaml` under the assets root
+- Important rule: asset kind comes from YAML `kind:`, not directory path
+
+### Implemented reconciler kinds
+Current registry:
+- `Database`
+- `Dataset`
+- `Chart`
+- `Dashboard`
+- `Plugin`
+- `Extension`
+
+### Dependency order
+- `Dataset` depends on `Database`
+- `Chart` depends on `Dataset`
+- `Dashboard` depends on `Chart`
+- `Plugin` and `Extension` currently have no declared upstream kind dependencies
+
+## Important resilience behavior
+
+A key improvement was made to dependency failure handling.
+
+### Old failure mode
+Previously, one failed dataset could mark the entire `Dataset` kind as failed. That caused all charts to be skipped, including charts that depended on a different dataset that had reconciled successfully.
+
+### Current behavior
+The reconciler now tracks failures per **asset key**, not just per kind.
+
+Effect:
+- one failed dataset only blocks charts that reference that specific dataset
+- unrelated assets can still reconcile successfully
+
+This is important for mixed repos where household assets and sample sales assets coexist.
+
+## Error visibility improvement
+
+The Superset REST client now reads HTTP error bodies and includes them in raised exceptions. This makes 422-type failures significantly easier to diagnose.
+
+## Dashboard behavior
+
+`DashboardReconciler` now tolerates missing chart refs better:
+- missing chart refs are logged
+- available charts can still be laid out
+- dashboards are not forced to fail just because one chart is unavailable
+
+## Operational significance
+
+This file is effectively the current control-plane implementation for the project. Any debugging of missing assets, skipped charts, or odd reconcile behavior should start here.
+
+## Related files
+- `docker/scripts/seed_dashboard.py`
+- `docker-compose.yml`
+- `assets/**/*.yaml`
+
+## Related pages
+- [Project Overview](../overview.md)
+- [Chart Visibility in UI](../troubleshooting/chart-visibility-in-ui.md)
+- [Plugins vs Extensions](../research/plugins-vs-extensions.md)

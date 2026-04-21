@@ -61,7 +61,10 @@ class SupersetClient:
         payload: dict[str, Any] | None = None,
         authed: bool = True,
     ) -> dict[str, Any]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
+        headers: dict[str, str] = {
+            "Content-Type": "application/json",
+            "Referer": self.base_url,
+        }
         if authed and self._token:
             headers["Authorization"] = f"Bearer {self._token}"
         if authed and self._csrf:
@@ -505,11 +508,16 @@ class DashboardReconciler(Reconciler):
             log(f"    ⚠ Dashboard '{asset.name}' — charts not yet available: {skipped_refs}")
 
         if chart_ids:
-            self._sync_layout(client, dashboard_id, chart_ids)
+            chart_height = spec.get("chartHeight", 50)
+            self._sync_layout(client, dashboard_id, chart_ids, chart_height)
         return dashboard_id
 
     def _sync_layout(
-        self, client: SupersetClient, dashboard_id: int, chart_ids: list[int]
+        self,
+        client: SupersetClient,
+        dashboard_id: int,
+        chart_ids: list[int],
+        chart_height: int = 50,
     ) -> None:
         if not chart_ids:
             return
@@ -518,7 +526,7 @@ class DashboardReconciler(Reconciler):
         missing = [cid for cid in chart_ids if f"CHART-{cid}" not in existing_position]
         if not missing:
             return
-        position = _auto_grid_layout(chart_ids)
+        position = _auto_grid_layout(chart_ids, chart_height=chart_height)
         client.put(
             f"/api/v1/dashboard/{dashboard_id}",
             {
@@ -741,7 +749,9 @@ def _resolve_env_or_literal(
     return spec.get(literal_key, "")
 
 
-def _auto_grid_layout(chart_ids: list[int]) -> dict[str, Any]:
+def _auto_grid_layout(
+    chart_ids: list[int], *, chart_height: int = 50,
+) -> dict[str, Any]:
     """Single-row equal-width layout as a reasonable default.
 
     Dashboards that need a specific layout should embed it in the YAML spec
@@ -773,7 +783,7 @@ def _auto_grid_layout(chart_ids: list[int]) -> dict[str, Any]:
             "id": chart_key,
             "children": [],
             "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
-            "meta": {"width": width, "height": 50, "chartId": cid},
+            "meta": {"width": width, "height": chart_height, "chartId": cid},
         }
     return position
 

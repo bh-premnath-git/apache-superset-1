@@ -50,6 +50,22 @@ CELERY_CONFIG = CeleryConfig
 FEATURE_FLAGS = {
     "ALERT_REPORTS": True,
     "EMBEDDED_SUPERSET": True,
+    # Handlebars charts need <style> tags and inline styles to render.
+    # ESCAPE_MARKDOWN_HTML must be False so HTML is not entity-escaped.
+    # HTML_SANITIZATION must be True with schema extensions that whitelist
+    # the <style> tag and style/class attributes.
+    # See: https://github.com/apache/superset/issues/30381
+    "ESCAPE_MARKDOWN_HTML": False,
+    "HTML_SANITIZATION": True,
+}
+
+# Allow <style> tags and style/class attributes through the HTML sanitizer
+# so that Handlebars styleTemplate CSS is applied instead of rendered as text.
+HTML_SANITIZATION_SCHEMA_EXTENSIONS = {
+    "attributes": {
+        "*": ["style", "className", "class"],
+    },
+    "tagNames": ["style"],
 }
 
 MAPBOX_API_KEY = env("MAPBOX_API_KEY", "")
@@ -129,6 +145,42 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
 WTF_CSRF_ENABLED = True
+# Exempt Superset REST API from CSRF — JWT Bearer auth is sufficient
+# See: https://github.com/apache/superset/issues/14130
+WTF_CSRF_CHECK_DEFAULT = False
+
+# ── Content Security Policy (Talisman) ────────────────────────────────────────
+# Superset 3.0+ enables Flask-Talisman with a strict CSP by default.
+# Handlebars charts compile templates at runtime using new Function(), which
+# requires 'unsafe-eval' in script-src.  The styleTemplate feature also needs
+# 'unsafe-inline' in style-src.
+# See: https://github.com/apache/superset/issues/25205
+TALISMAN_ENABLED = True
+TALISMAN_CONFIG = {
+    "content_security_policy": {
+        "default-src": ["'self'"],
+        "img-src": ["'self'", "data:", "blob:"],
+        "worker-src": ["'self'", "blob:"],
+        "connect-src": [
+            "'self'",
+            "https://api.mapbox.com",
+            "https://events.mapbox.com",
+        ],
+        "object-src": "'none'",
+        "style-src": [
+            "'self'",
+            "'unsafe-inline'",
+        ],
+        "script-src": [
+            "'self'",
+            "'unsafe-eval'",
+            "'unsafe-inline'",
+        ],
+        "font-src": ["'self'", "data:"],
+    },
+    "content_security_policy_nonce_in": ["script-src"],
+    "force_https": False,
+}
 
 
 # ── MCP (Model Context Protocol) Server ──────────────────────────────────────
