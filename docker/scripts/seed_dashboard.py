@@ -498,12 +498,16 @@ class DashboardReconciler(Reconciler):
 
         chart_ids: list[int] = []
         skipped_refs: list[str] = []
+        per_chart_heights: dict[int, int] = {}
+        chart_height_overrides = spec.get("chartHeights") or {}
         for ref in spec.get("chartRefs", []):
             cid = ctx.resolve("Chart", ref)
             if cid is None:
                 skipped_refs.append(ref)
             else:
                 chart_ids.append(cid)
+                if ref in chart_height_overrides:
+                    per_chart_heights[cid] = int(chart_height_overrides[ref])
         if skipped_refs:
             log(f"    ⚠ Dashboard '{asset.name}' — charts not yet available: {skipped_refs}")
 
@@ -511,6 +515,7 @@ class DashboardReconciler(Reconciler):
             chart_height = spec.get("chartHeight", 50)
             charts_per_row = spec.get("chartsPerRow")
             full_width_first = spec.get("fullWidthFirst", 0)
+            cross_filters_enabled = bool(spec.get("crossFiltersEnabled", False))
             self._sync_layout(
                 client,
                 dashboard_id,
@@ -518,6 +523,8 @@ class DashboardReconciler(Reconciler):
                 chart_height,
                 charts_per_row,
                 full_width_first,
+                per_chart_heights,
+                cross_filters_enabled,
             )
         return dashboard_id
 
@@ -529,30 +536,46 @@ class DashboardReconciler(Reconciler):
         chart_height: int = 50,
         charts_per_row: int | None = None,
         full_width_first: int = 0,
+        per_chart_heights: dict[int, int] | None = None,
+        cross_filters_enabled: bool = False,
     ) -> None:
         if not chart_ids:
             return
         detail = client.get(f"/api/v1/dashboard/{dashboard_id}")
-        existing_raw = detail.get("result", {}).get("position_json") or ""
+        result = detail.get("result", {})
+        existing_raw = result.get("position_json") or ""
         try:
             existing_position = json.loads(existing_raw) if existing_raw else {}
         except json.JSONDecodeError:
             existing_position = {}
+        existing_meta_raw = result.get("json_metadata") or ""
+        try:
+            existing_meta = json.loads(existing_meta_raw) if existing_meta_raw else {}
+        except json.JSONDecodeError:
+            existing_meta = {}
         position = _auto_grid_layout(
             chart_ids,
             chart_height=chart_height,
             charts_per_row=charts_per_row,
             full_width_first=full_width_first,
+            per_chart_heights=per_chart_heights,
         )
-        if existing_position == position:
+        new_meta = {
+            **existing_meta,
+            "positions": position,
+            "default_filters": existing_meta.get("default_filters", "{}"),
+            "cross_filters_enabled": cross_filters_enabled,
+        }
+        if (
+            existing_position == position
+            and existing_meta.get("cross_filters_enabled") == cross_filters_enabled
+        ):
             return
         client.put(
             f"/api/v1/dashboard/{dashboard_id}",
             {
                 "position_json": json.dumps(position),
-                "json_metadata": json.dumps(
-                    {"positions": position, "default_filters": "{}"}
-                ),
+                "json_metadata": json.dumps(new_meta),
             },
         )
 
@@ -774,6 +797,7 @@ def _auto_grid_layout(
     chart_height: int = 50,
     charts_per_row: int | None = None,
     full_width_first: int = 0,
+    per_chart_heights: dict[int, int] | None = None,
 ) -> dict[str, Any]:
     """Auto layout that groups charts into rows.
 
@@ -790,7 +814,11 @@ def _auto_grid_layout(
         Number of leading charts that each get their own full-width row. The
         remainder fall back to ``charts_per_row``. Set to ``2`` to make the
         first two charts full width and the rest share rows.
+    per_chart_heights
+        Optional per-chart height overrides keyed by chart id. Charts not in
+        the map fall back to ``chart_height``.
     """
+    per_chart_heights = per_chart_heights or {}
     rows: list[list[int]] = []
     # Leading full-width rows (one chart each).
     head_count = max(0, min(full_width_first, len(chart_ids)))
@@ -825,12 +853,13 @@ def _auto_grid_layout(
         }
         for cid in row:
             chart_key = f"CHART-{cid}"
+            height = per_chart_heights.get(cid, chart_height)
             position[chart_key] = {
                 "type": "CHART",
                 "id": chart_key,
                 "children": [],
                 "parents": ["ROOT_ID", "GRID_ID", row_id],
-                "meta": {"width": width, "height": chart_height, "chartId": cid},
+                "meta": {"width": width, "height": height, "chartId": cid},
             }
 
     position["GRID_ID"] = {

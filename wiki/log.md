@@ -87,3 +87,30 @@
 - `DashboardReconciler._sync_layout` now compares the desired layout against
   the existing `position_json` and rewrites it on difference, so layout spec
   changes take effect on re-reconcile without needing to drop the dashboard.
+
+## [2026-04-21] fix | Household Survey polish — duplicate titles, state-map visibility, cross-filters
+- Each district pie chart rendered its title **twice**: once as the Superset
+  chart header (from `metadata.name`) and again as an inline
+  `<div class="dp-title">` inside the Handlebars template. Removed the inline
+  `<div class="dp-title">` and the matching `.dp-title` CSS rule from all
+  three district pie charts (`district_pie_{bihar,jharkhand,madhya_pradesh}.yaml`)
+  so only the chart header remains.
+- The India Country Map ("Households by State") was clipped because every
+  chart on the dashboard shared a single `chartHeight`. Added per-chart
+  height override support via a new `chartHeights` map on the Dashboard spec
+  (keyed by chart ref). Household Survey now sets
+  `chartHeights: { chart.household.state_map: 130 }` while keeping the
+  default `chartHeight: 100` for the rest.
+- Reordered the layout so the India state map sits as its own full-width
+  row above the three district pie charts (pies in a single 3-column row
+  directly under the map). Used `fullWidthFirst: 2, chartsPerRow: 3` so the
+  Rural Segments table and state map stay full width and the remaining six
+  charts form two 3-column rows (3 district pies, then 3 summary charts).
+- Added **native cross-filtering** support: new `crossFiltersEnabled: true`
+  spec field is propagated into the dashboard `json_metadata`
+  (`cross_filters_enabled: true`). Clicking a state on the Country Map now
+  filters the Rural Segments table and other compatible charts via Superset's
+  built-in cross-filter plumbing rather than a dashboard filter-box.
+- Reconciler change: `_sync_layout` now also re-applies `json_metadata` when
+  `cross_filters_enabled` differs from the existing metadata, preserving any
+  other keys that are already present.
