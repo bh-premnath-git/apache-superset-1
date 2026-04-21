@@ -306,3 +306,53 @@ UPDATE household.hh_master SET state_map_name = CASE "State_label"
     WHEN 'Uttrakhand'                                THEN 'Uttarakhand'
     ELSE "State_label"
 END;
+
+-- ── ISO 3166-2:IN code for Country Map region matching ──
+-- The legacy-plugin-chart-country-map renders per-region fills by matching
+-- the entity column against each GeoJSON feature's `ISO` property (see
+-- superset/superset-frontend/plugins/legacy-plugin-chart-country-map/src/
+-- CountryMap.ts: `colorMap[d.properties.ISO]`). For india.geojson the `ISO`
+-- values are ISO 3166-2:IN codes like IN-BR, IN-MP, IN-JH — NOT the state
+-- names in NAME_1. Without this column, every feature fell back to `'none'`
+-- fill and the chart rendered only the state outlines.
+ALTER TABLE household.hh_master ADD COLUMN IF NOT EXISTS state_iso_code varchar(10);
+
+UPDATE household.hh_master SET state_iso_code = CASE "State_label"
+    WHEN 'A and N Islands (U.T.)'                    THEN 'IN-AN'
+    WHEN 'Andhra Pradesh'                            THEN 'IN-AP'
+    WHEN 'Arunachal Pradesh'                         THEN 'IN-AR'
+    WHEN 'Assam'                                     THEN 'IN-AS'
+    WHEN 'Bihar'                                     THEN 'IN-BR'
+    WHEN 'Chandigarh(U.T.)'                          THEN 'IN-CH'
+    WHEN 'Chattisgarh'                               THEN 'IN-CT'
+    WHEN 'Dadra & Nagar Haveli and Daman & Diu'      THEN 'IN-DH'
+    WHEN 'Delhi'                                     THEN 'IN-DL'
+    WHEN 'Goa'                                       THEN 'IN-GA'
+    WHEN 'Gujarat'                                   THEN 'IN-GJ'
+    WHEN 'Haryana'                                   THEN 'IN-HR'
+    WHEN 'Himachal Pradesh'                          THEN 'IN-HP'
+    WHEN 'Jammu & Kashmir'                           THEN 'IN-JK'
+    WHEN 'Jharkhand'                                 THEN 'IN-JH'
+    WHEN 'Karnataka'                                 THEN 'IN-KA'
+    WHEN 'Kerala'                                    THEN 'IN-KL'
+    WHEN 'Ladakh (U.T.)'                             THEN 'IN-LA'
+    WHEN 'Lakshadweep (U.T.)'                        THEN 'IN-LD'
+    WHEN 'Madhya Pradesh'                            THEN 'IN-MP'
+    WHEN 'Maharashtra'                               THEN 'IN-MH'
+    WHEN 'Manipur'                                   THEN 'IN-MN'
+    WHEN 'Meghalaya'                                 THEN 'IN-ML'
+    WHEN 'Mizoram'                                   THEN 'IN-MZ'
+    WHEN 'Nagaland'                                  THEN 'IN-NL'
+    WHEN 'Odisha'                                    THEN 'IN-OR'
+    WHEN 'Puducherry (U.T.)'                         THEN 'IN-PY'
+    WHEN 'Punjab'                                    THEN 'IN-PB'
+    WHEN 'Rajasthan'                                 THEN 'IN-RJ'
+    WHEN 'Sikkim'                                    THEN 'IN-SK'
+    WHEN 'Tamilnadu'                                 THEN 'IN-TN'
+    WHEN 'Telangana'                                 THEN 'IN-TG'
+    WHEN 'Tripura'                                   THEN 'IN-TR'
+    WHEN 'Uttar Prdesh'                              THEN 'IN-UP'
+    WHEN 'Uttrakhand'                                THEN 'IN-UT'
+    WHEN 'West Bengal'                               THEN 'IN-WB'
+    ELSE NULL
+END;
