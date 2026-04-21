@@ -531,6 +531,7 @@ class DashboardReconciler(Reconciler):
             charts_per_row = spec.get("chartsPerRow")
             full_width_first = spec.get("fullWidthFirst", 0)
             cross_filters_enabled = bool(spec.get("crossFiltersEnabled", False))
+            native_filters = self._build_native_filters(spec, ctx)
             self._sync_layout(
                 client,
                 dashboard_id,
@@ -540,8 +541,87 @@ class DashboardReconciler(Reconciler):
                 full_width_first,
                 per_chart_heights,
                 cross_filters_enabled,
+                native_filters,
             )
         return dashboard_id
+
+    def _build_native_filters(
+        self, spec: dict[str, Any], ctx: ReconcileContext
+    ) -> list[dict[str, Any]] | None:
+        """Translate declarative ``nativeFilters`` into ``native_filter_configuration``.
+
+        See the Superset reference implementation at
+        ``superset-frontend/src/filters/components`` and
+        ``superset-frontend/src/constants.ts::FilterPlugins`` — the ``filterType``
+        string values are ``filter_select`` / ``filter_range`` / ``filter_time`` /
+        ``filter_timecolumn`` / ``filter_timegrain``. Each entry on the dashboard
+        carries a ``targets`` array of ``{datasetId, column:{name}}`` pairs
+        together with ``controlValues`` that vary by ``filterType``.
+
+        Returning ``None`` means the YAML did not declare filters — the caller
+        preserves whatever Superset already has so users who added filters in
+        the UI don't lose them on reconcile.
+        """
+        raw = spec.get("nativeFilters")
+        if raw is None:
+            return None
+        if not isinstance(raw, list):
+            raise RuntimeError("nativeFilters must be a list")
+        configuration: list[dict[str, Any]] = []
+        for entry in raw:
+            key = entry.get("key")
+            name = entry.get("name")
+            if not key or not name:
+                raise RuntimeError(
+                    "each nativeFilters entry requires 'key' and 'name'"
+                )
+            filter_type = entry.get("filterType", "filter_select")
+            targets_out: list[dict[str, Any]] = []
+            for target in entry.get("targets") or []:
+                ds_ref = target.get("datasetRef")
+                column = target.get("column")
+                if not ds_ref or not column:
+                    raise RuntimeError(
+                        f"nativeFilters/{key}: each target needs datasetRef + column"
+                    )
+                ds_id = ctx.resolve("Dataset", ds_ref)
+                if ds_id is None:
+                    raise SkipAsset(
+                        f"nativeFilters/{key}: dataset '{ds_ref}' not ready"
+                    )
+                targets_out.append(
+                    {"datasetId": ds_id, "column": {"name": column}}
+                )
+            # Deterministic id so repeated reconciles don't spawn duplicates.
+            fid = "NATIVE_FILTER-" + hashlib.sha1(key.encode()).hexdigest()[:10]
+            control_values = {
+                "enableEmptyFilter": False,
+                "defaultToFirstItem": False,
+                "multiSelect": True,
+                "searchAllOptions": False,
+                "inverseSelection": False,
+            }
+            control_values.update(entry.get("controlValues") or {})
+            configuration.append(
+                {
+                    "id": fid,
+                    "type": "NATIVE_FILTER",
+                    "name": name,
+                    "filterType": filter_type,
+                    "description": entry.get("description", ""),
+                    "targets": targets_out,
+                    "controlValues": control_values,
+                    "defaultDataMask": {
+                        "extraFormData": {},
+                        "filterState": {},
+                        "ownState": {},
+                    },
+                    "cascadeParentIds": entry.get("cascadeParentIds") or [],
+                    "scope": entry.get("scope")
+                    or {"rootPath": ["ROOT_ID"], "excluded": []},
+                }
+            )
+        return configuration
 
     def _sync_layout(
         self,
@@ -553,6 +633,7 @@ class DashboardReconciler(Reconciler):
         full_width_first: int = 0,
         per_chart_heights: dict[int, int] | None = None,
         cross_filters_enabled: bool = False,
+        native_filters: list[dict[str, Any]] | None = None,
     ) -> None:
         if not chart_ids:
             return
@@ -575,15 +656,26 @@ class DashboardReconciler(Reconciler):
             full_width_first=full_width_first,
             per_chart_heights=per_chart_heights,
         )
+        # Only overwrite native_filter_configuration when the YAML declared it;
+        # otherwise preserve whatever Superset already has.
+        if native_filters is None:
+            resolved_native_filters = existing_meta.get(
+                "native_filter_configuration", []
+            )
+        else:
+            resolved_native_filters = native_filters
         new_meta = {
             **existing_meta,
             "positions": position,
             "default_filters": existing_meta.get("default_filters", "{}"),
             "cross_filters_enabled": cross_filters_enabled,
+            "native_filter_configuration": resolved_native_filters,
         }
         if (
             existing_position == position
             and existing_meta.get("cross_filters_enabled") == cross_filters_enabled
+            and existing_meta.get("native_filter_configuration")
+            == resolved_native_filters
         ):
             return
         client.put(
