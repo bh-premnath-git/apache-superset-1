@@ -904,6 +904,132 @@ Adding a new kind is a matter of subclassing `Reconciler`, setting `kind` and
 `depends_on`, and appending the instance to `RECONCILERS` — no hardcoded
 kind/path tables.
 
+### 8.5 Available Chart Types
+
+Superset provides a wide range of built-in visualization types. Use these `vizType`
+values in Chart YAML assets:
+
+**Basic Charts**
+| Type | Description |
+|---|---|
+| `pie` | Pie chart for proportional data |
+| `bar` | Vertical bar chart |
+| `line` | Line chart for trends |
+| `area` | Stacked area chart |
+| `scatter` | Scatter plot (x/y correlation) |
+| `bubble` | Bubble chart (x/y/size) |
+| `histogram` | Distribution histogram |
+| `heatmap` | Heatmap matrix |
+| `table` | Data table with aggregations |
+
+**Big Number / KPI**
+| Type | Description |
+|---|---|
+| `big_number` | Single metric display |
+| `big_number_total` | Big number with trendline |
+
+**Advanced / Specialized**
+| Type | Description |
+|---|---|
+| `box_plot` | Statistical box plot |
+| `bullet` | Bullet chart for targets |
+| `calendar_heatmap` | Calendar-based heatmap |
+| `chord` | Chord diagram (relationships) |
+| `country_map` | Choropleth country map |
+| `deck_arc` / `deck_grid` / `deck_heatmap` / `deck_hex` / `deck_path` / `deck_polygon` / `deck_scatter` | deck.gl geospatial layers |
+| `funnel` | Funnel chart (conversion) |
+| `gauge` | Gauge/meter chart |
+| `graph` | Network graph visualization |
+| `gantt` | Gantt chart (timelines) |
+| `horizon` | Horizon chart (dense time series) |
+| `mapbox` | MapBox map visualization |
+| `mixed_timeseries` | Mixed line/bar chart |
+| `nightingale_rose` | Nightingale rose chart |
+| `parallel_coordinates` | Parallel coordinates plot |
+| `partition` | Sunburst partition |
+| `pivot_table` | Pivot table with heatmap |
+| `radar` | Radar/spider chart |
+| `rose` | Rose area chart |
+| `sankey` | Sankey diagram (flows) |
+| `smooth_line` | Smooth line chart |
+| `stepped_line` | Step line chart |
+| `sunburst` | Sunburst hierarchy |
+| `treemap` | Treemap (nested rectangles) |
+| `tree` | Tree hierarchy |
+| `waterfall` | Waterfall chart (cascading) |
+| `word_cloud` | Word cloud |
+| `world_map` | World choropleth map |
+
+**Time-Series Specific**
+| Type | Description |
+|---|---|
+| `time_series_line` | Time-series line |
+| `time_series_bar` | Time-series bar |
+| `time_series_area` | Time-series area |
+| `time_series_table` | Time-series data table |
+| `time_series_pivot` | Period pivot table |
+| `time_series_percent_change` | Percent change over time |
+
+**Handlebars (Custom HTML Templates)**
+
+The `handlebars` viz type enables fully custom visualizations using Handlebars
+syntax with HTML/CSS/JS. Useful for:
+- Custom KPI cards with rich styling
+- Branded executive reports
+- Data-driven infographics
+- Embedded widget exports
+
+Example Chart YAML with Handlebars:
+```yaml
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.exec.kpi_card
+  name: Executive KPI Card
+spec:
+  datasetRef: dataset.household.hh_master
+  vizType: handlebars
+  params:
+    header: "Household Survey Summary"
+    # Handlebars template with HTML/CSS
+    template: |
+      <div style="font-family: Arial; padding: 20px;">
+        <h2>{{header}}</h2>
+        <div style="display: flex; gap: 20px;">
+          <div class="kpi" style="background: #f0f0f0; padding: 15px; border-radius: 8px;">
+            <div style="font-size: 32px; font-weight: bold; color: #2d5aac;">
+              {{data.0.count}}
+            </div>
+            <div style="color: #666;">Total Households</div>
+          </div>
+          <div class="kpi" style="background: #f0f0f0; padding: 15px; border-radius: 8px;">
+            <div style="font-size: 32px; font-weight: bold; color: #2d5aac;">
+              {{data.0.avg_hh_size}}
+            </div>
+            <div style="color: #666;">Avg Household Size</div>
+          </div>
+        </div>
+      </div>
+    # CSS styles
+    css: |
+      .kpi { box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+      .kpi:hover { transform: translateY(-2px); transition: 0.2s; }
+```
+
+Handlebars syntax reference:
+- `{{field}}` — output escaped value
+- `{{{field}}}` — output raw HTML
+- `{{#each data}}...{{/each}}` — iterate rows
+- `{{#if condition}}...{{/if}}` — conditional
+- `{{formatNumber value "0.00"}}` — format numbers
+- `{{formatDate date "YYYY-MM-DD"}}` — format dates
+
+**Extensions**
+- **Dynamic Plugins**: Custom viz types via `DYNAMIC_PLUGINS` feature flag
+- **Custom Plugins**: Upload self-built plugin bundles via API
+
+See [§21 Visualization Plugins](#21-visualization-plugins) for plugin development.
+
 ---
 
 ## 9. Runtime Modes
