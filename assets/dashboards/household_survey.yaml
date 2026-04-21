@@ -6,6 +6,10 @@ metadata:
 spec:
   slug: household-survey
   chartHeight: 100
+  # Stack each chart in its own full-width row (state map on top,
+  # rural segments comparison below). Without this, the auto layout
+  # places both charts side-by-side in a single row.
+  chartsPerRow: 1
   chartRefs:
     - chart.household.state_map
     - chart.household.rural_segment_comparison

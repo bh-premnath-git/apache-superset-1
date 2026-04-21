@@ -21,9 +21,10 @@ spec:
       - clause: WHERE
         expressionType: SQL
         sqlExpression: '"State_label" IS NOT NULL'
-    country: INDIA
-    iso_code: IND
-  
+    # Country Map control key is `select_country` and values are lowercase
+    # slugs (see apache/superset legacy-plugin-chart-country-map countries.ts).
+    select_country: india
+
   # Enable cross-filtering for dashboard interactivity
   # Clicking a state will filter other charts on the dashboard
   

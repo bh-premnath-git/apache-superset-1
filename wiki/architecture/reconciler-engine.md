@@ -79,6 +79,29 @@ spec:
 
 This controls the vertical grid units allocated to charts. The Handlebars table in the Household Survey uses `100` (~800px) instead of the default `50` (~400px) to properly display all data rows.
 
+### Charts per row configuration
+
+Dashboard YAML also supports an optional `chartsPerRow` field. The Superset
+dashboard grid is 12 columns wide; by default the reconciler places all
+chart refs in a single row and splits `12 // N` columns per chart.
+
+Setting `chartsPerRow: 1` stacks each chart in its own full-width row, which
+is how the Household Survey dashboard renders the India map and the rural
+segments table vertically instead of side-by-side.
+
+```yaml
+spec:
+  chartsPerRow: 1
+  chartRefs:
+    - chart.household.state_map
+    - chart.household.rural_segment_comparison
+```
+
+The reconciler now also compares the desired and existing `position_json`
+and rewrites the layout when they differ, so changing `chartsPerRow` or
+`chartHeight` on a dashboard that already exists takes effect on the next
+reconcile pass.
+
 ## Operational significance
 
 This file is effectively the current control-plane implementation for the project. Any debugging of missing assets, skipped charts, or odd reconcile behavior should start here.

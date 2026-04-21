@@ -16,10 +16,18 @@ Interactive India map showing household counts by state. Uses Superset's built-i
 ## Configuration
 
 ### Map settings
-- **Country**: INDIA (built-in geoJSON, no external service needed)
+- **Country control**: `select_country: india` (built-in geoJSON, no external service needed)
 - **Entity field**: `State_label` (text state names like "Andhra Pradesh")
 - **Metric**: COUNT of `HHID` (total households per state)
 - **Filter**: Excludes null state labels
+
+> The Country Map plugin's control key is **`select_country`** and the value
+> must be a lowercase slug (e.g. `india`, `usa`, `france`) — not `INDIA` or an
+> ISO code. An earlier `country: INDIA` / `iso_code: IND` spec produced the
+> runtime error *"Must specify a country"* because Superset silently ignored
+> the unknown keys. Authoritative source:
+> `apache/superset` `superset-frontend/plugins/legacy-plugin-chart-country-map/src/controlPanel.ts`
+> and `countries.ts`.
 
 ### Why Country Map?
 The Country Map visualization is ideal because:

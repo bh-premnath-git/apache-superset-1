@@ -22,13 +22,21 @@ This page should be updated if more household charts are added again.
 
 ## Layout configuration
 
-The dashboard uses `chartHeight: 100` to give the Handlebars table sufficient vertical space (default is 50). This is important for data-dense tables like the Rural Segments Comparison.
+The dashboard uses:
+
+- `chartHeight: 100` — gives the Handlebars table enough vertical space
+  (default is 50). Important for data-dense tables like the Rural Segments
+  Comparison.
+- `chartsPerRow: 1` — stacks each chart on its own full-width row. Without
+  this the default auto-layout places both charts side-by-side in a single
+  row at half width.
 
 Example from `household_survey.yaml`:
 ```yaml
 spec:
   slug: household-survey
   chartHeight: 100
+  chartsPerRow: 1
   chartRefs:
     - chart.household.state_map
     - chart.household.rural_segment_comparison
