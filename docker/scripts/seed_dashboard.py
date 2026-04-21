@@ -13,6 +13,7 @@ import hashlib
 import http.cookiejar
 import json
 import os
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -34,6 +35,8 @@ ASSETS_DIR = os.getenv("ASSETS_DIR", "/app/assets")
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "30"))
 API_TIMEOUT = int(os.getenv("SUPERSET_API_TIMEOUT", "30"))
 HEALTH_TIMEOUT = int(os.getenv("SUPERSET_HEALTH_TIMEOUT", "300"))
+API_RETRIES = int(os.getenv("SUPERSET_API_RETRIES", "3"))
+API_RETRY_BACKOFF_SECONDS = float(os.getenv("SUPERSET_API_RETRY_BACKOFF_SECONDS", "5"))
 
 
 # ---------------------------------------------------------------------------
@@ -73,20 +76,32 @@ class SupersetClient:
         req = urllib.request.Request(
             f"{self.base_url}{path}", data=body, headers=headers, method=method
         )
-        try:
-            with self._opener.open(req, timeout=API_TIMEOUT) as resp:
-                raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as ex:
-            # Read the error body so downstream gets actionable detail.
-            err_body = ""
+        attempts = max(1, API_RETRIES)
+        for attempt in range(1, attempts + 1):
             try:
-                err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
-            except Exception:
-                pass
-            raise urllib.error.HTTPError(
-                ex.url, ex.code, f"{ex.reason} — {err_body}", ex.headers, None
-            ) from None
+                with self._opener.open(req, timeout=API_TIMEOUT) as resp:
+                    raw = resp.read().decode("utf-8")
+                return json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as ex:
+                # Read the error body so downstream gets actionable detail.
+                err_body = ""
+                try:
+                    err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
+                except Exception:
+                    pass
+                raise urllib.error.HTTPError(
+                    ex.url, ex.code, f"{ex.reason} — {err_body}", ex.headers, None
+                ) from None
+            except (TimeoutError, socket.timeout, urllib.error.URLError) as ex:
+                timed_out = isinstance(ex, (TimeoutError, socket.timeout)) or "timed out" in str(ex).lower()
+                if not timed_out or attempt >= attempts:
+                    raise RuntimeError("timed out") from ex
+                log(
+                    f"  … retrying {method} {path} after timeout "
+                    f"({attempt}/{attempts})"
+                )
+                time.sleep(API_RETRY_BACKOFF_SECONDS * attempt)
+        raise RuntimeError("timed out")
 
     # -- lifecycle ----------------------------------------------------------
     def wait_healthy(self, timeout_seconds: int = HEALTH_TIMEOUT) -> None:

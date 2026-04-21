@@ -54,6 +54,7 @@ x-superset-env: &superset-env
   SUPERSET_CONFIG_PATH:     /app/pythonpath/superset_config.py
   PYTHONPATH:               /app/pythonpath
   SUPERSET_URL:             ${SUPERSET_URL:-http://superset:8088}
+  SUPERSET_API_TIMEOUT:     ${SUPERSET_API_TIMEOUT:-120}
 
 x-keycloak-env: &keycloak-env
   KEYCLOAK_ADMIN:                 ${KEYCLOAK_ADMIN:-admin}
@@ -298,10 +299,20 @@ services:
       - analytics-db-data:/var/lib/postgresql/data
       - ./seed/pg:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME}"]
+      test:
+        - CMD-SHELL
+        - >-
+          psql -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME} -tAc
+          "SELECT CASE
+          WHEN to_regclass('household.hh_master') IS NOT NULL
+           AND to_regclass('household.vw_hh_segments') IS NOT NULL
+           AND EXISTS (SELECT 1 FROM household.hh_master LIMIT 1)
+          THEN 1 ELSE 0 END"
+          | grep -q 1
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 30
+      start_period: 30s
     networks:
       - superset-net
 
