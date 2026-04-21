@@ -70,9 +70,20 @@ class SupersetClient:
         req = urllib.request.Request(
             f"{self.base_url}{path}", data=body, headers=headers, method=method
         )
-        with self._opener.open(req, timeout=API_TIMEOUT) as resp:
-            raw = resp.read().decode("utf-8")
-        return json.loads(raw) if raw else {}
+        try:
+            with self._opener.open(req, timeout=API_TIMEOUT) as resp:
+                raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as ex:
+            # Read the error body so downstream gets actionable detail.
+            err_body = ""
+            try:
+                err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
+            except Exception:
+                pass
+            raise urllib.error.HTTPError(
+                ex.url, ex.code, f"{ex.reason} — {err_body}", ex.headers, None
+            ) from None
 
     # -- lifecycle ----------------------------------------------------------
     def wait_healthy(self, timeout_seconds: int = HEALTH_TIMEOUT) -> None:
@@ -325,8 +336,8 @@ class DatasetReconciler(Reconciler):
         db_ref = spec["databaseRef"]
         database_id = ctx.resolve("Database", db_ref)
         if database_id is None:
-            raise RuntimeError(
-                f"Dataset '{asset.name}' references unknown databaseRef '{db_ref}'"
+            raise SkipAsset(
+                f"databaseRef '{db_ref}' not available yet"
             )
 
         existing = client.find_by_field(
@@ -424,8 +435,8 @@ class ChartReconciler(Reconciler):
         ds_ref = spec["datasetRef"]
         dataset_id = ctx.resolve("Dataset", ds_ref)
         if dataset_id is None:
-            raise RuntimeError(
-                f"Chart '{asset.name}' references unknown datasetRef '{ds_ref}'"
+            raise SkipAsset(
+                f"datasetRef '{ds_ref}' not available yet"
             )
 
         viz_type = spec["vizType"]
@@ -483,15 +494,18 @@ class DashboardReconciler(Reconciler):
             log(f"  Dashboard '{asset.name}' created (id={dashboard_id})")
 
         chart_ids: list[int] = []
+        skipped_refs: list[str] = []
         for ref in spec.get("chartRefs", []):
             cid = ctx.resolve("Chart", ref)
             if cid is None:
-                raise RuntimeError(
-                    f"Dashboard '{asset.name}' references unknown chartRef '{ref}'"
-                )
-            chart_ids.append(cid)
+                skipped_refs.append(ref)
+            else:
+                chart_ids.append(cid)
+        if skipped_refs:
+            log(f"    ⚠ Dashboard '{asset.name}' — charts not yet available: {skipped_refs}")
 
-        self._sync_layout(client, dashboard_id, chart_ids)
+        if chart_ids:
+            self._sync_layout(client, dashboard_id, chart_ids)
         return dashboard_id
 
     def _sync_layout(
@@ -799,15 +813,26 @@ def reconcile_once(assets_root: Path) -> ReconcileReport:
     log(f"Reconciling {len(assets)} asset(s) from {assets_root} ...")
     ctx = ReconcileContext()
     report = ReconcileReport()
-    failed_kinds: set[str] = set()
+    failed_assets: set[str] = set()  # keys of assets that failed
 
     for reconciler in _ordered_reconcilers():
         for asset in by_kind.get(reconciler.kind, []):
-            # Skip assets whose dependencies failed.
-            dep_failed = failed_kinds & set(reconciler.depends_on)
-            if dep_failed:
-                reason = f"dependency kind(s) {dep_failed} had failures"
-                log(f"  ✗ {asset.kind} '{asset.key}' skipped — {reason}")
+            # Check if THIS asset's specific dependency refs are resolvable.
+            # We peek at spec refs (databaseRef, datasetRef, chartRefs) and
+            # skip only if the specific upstream asset key failed.
+            spec = asset.spec
+            missing_refs = []
+            for ref_field in ("databaseRef", "datasetRef"):
+                ref_key = spec.get(ref_field)
+                if ref_key and ref_key in failed_assets:
+                    missing_refs.append(f"{ref_field}={ref_key}")
+            for ref_key in spec.get("chartRefs", []):
+                if ref_key in failed_assets:
+                    missing_refs.append(f"chartRef={ref_key}")
+            if missing_refs:
+                reason = f"upstream dependency failed: {', '.join(missing_refs)}"
+                log(f"  ⤳ {asset.kind} '{asset.key}' skipped — {reason}")
+                failed_assets.add(asset.key)
                 report.add(ReconcileResult(
                     kind=asset.kind, key=asset.key,
                     action="skipped", reason=reason,
@@ -829,7 +854,7 @@ def reconcile_once(assets_root: Path) -> ReconcileReport:
                     action="skipped", reason=str(skip),
                 ))
             except Exception as ex:
-                failed_kinds.add(reconciler.kind)
+                failed_assets.add(asset.key)
                 log(f"  ✗ {asset.kind} '{asset.key}' FAILED — {ex}")
                 report.add(ReconcileResult(
                     kind=asset.kind, key=asset.key,
