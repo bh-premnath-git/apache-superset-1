@@ -1,0 +1,12 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.state_district_segment
+  name: lca_state_district_segment
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_state_district_segment
+  # Long-form: one row per (state_iso_code, state_label, district_code, segment)
+  # with a weighted hh_weight metric. Feeds the custom state_district_pies
+  # viz plugin, which groups on all three join columns in buildQuery.

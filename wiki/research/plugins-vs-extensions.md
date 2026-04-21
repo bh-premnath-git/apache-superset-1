@@ -14,8 +14,12 @@ In this repository, **dynamic plugins are the practical extension mechanism toda
 
 ### Repo representation
 - asset kind: `Plugin`
-- example: `assets/plugins/custom_waterfall.yaml`
+- examples:
+  - `assets/plugins/custom_waterfall.yaml` — third-party demo bundle
+  - `assets/plugins/state_district_pies.yaml` — in-repo bundle built from `superset-plugins/plugin-chart-state-district-pies/`
 - reconciler: `PluginReconciler`
+- in-repo source: `superset-plugins/plugin-chart-state-district-pies/` (state + district pies, see
+  [architecture page](../architecture/custom-viz-plugin.md))
 
 ### Operational requirement
 A plugin bundle URL must be provided, typically through environment injection.

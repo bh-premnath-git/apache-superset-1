@@ -5,6 +5,7 @@
 
 ## Architecture
 - [Reconciler Engine](architecture/reconciler-engine.md) — How `docker/scripts/seed_dashboard.py` discovers, orders, and applies assets.
+- [Custom Viz Plugin](architecture/custom-viz-plugin.md) — Source layout, data pipeline, and deployment flow for the `state_district_pies` dynamic plugin.
 
 ## Runtime
 - [Database Seeding](runtime/database-seeding.md) — How `seed/pg` files reach Postgres and why new SQL files do not auto-apply to existing volumes.
@@ -15,6 +16,7 @@
 - [dataset.sales.orders](assets/dataset.sales.orders.md) — Sample sales dataset over `mart_sales.orders`.
 - [chart.household.state_map](assets/chart.household.state_map.md) — Interactive India map (Country Map viz) showing households by state.
 - [chart.household.rural_segment_comparison](assets/chart.household.rural_segment_comparison.md) — Handlebars-based rural segment comparison table.
+- [chart.household.state_district_pies](assets/chart.household.state_district_pies.md) — India state map with a proportional segment pie per district (custom dynamic plugin).
 - `chart.household.district_pie_{bihar,jharkhand,madhya_pradesh}` — Handlebars CSS conic-gradient pie grid per district, one chart per state.
 - `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment.
 - `chart.household.segment_distribution_pie` — weighted overall segment mix across the three states.

@@ -197,3 +197,24 @@ SELECT
     ROUND((ps.seg_weight * 100.0 / NULLIF(s.state_weight, 0))::numeric, 1) AS pct
 FROM per_state_seg ps
 JOIN per_state s USING (state_label);
+
+-- ── Long-form (state, district, segment) weighted count.
+-- Feeds the custom `state_district_pies` viz plugin, which groups on
+-- all three columns in buildQuery and expects one row per tuple. We
+-- also carry the ISO 3166-2 state code so the state choropleth layer
+-- can join on the same `ISO` property used by Superset's bundled
+-- India geojson.
+CREATE OR REPLACE VIEW household.vw_state_district_segment AS
+SELECT
+    h.state_iso_code,
+    s.state_label,
+    s.district_code,
+    s.segment,
+    SUM(s.wt) AS hh_weight
+FROM household.vw_hh_segments s
+JOIN (
+    SELECT DISTINCT "State_label" AS state_label, state_iso_code
+    FROM household.hh_master
+    WHERE state_iso_code IS NOT NULL
+) h USING (state_label)
+GROUP BY h.state_iso_code, s.state_label, s.district_code, s.segment;

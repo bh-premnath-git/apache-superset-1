@@ -165,6 +165,7 @@ docker compose down -v
     - 21.2 [Built-in Chart Types](#212-built-in-chart-types)
     - 21.3 [Creating a Custom Visualization Plugin](#213-creating-a-custom-visualization-plugin)
     - 21.4 [Plugin Registration and Deployment](#214-plugin-registration-and-deployment)
+    - 21.5 [In-Repo Plugin: `state_district_pies`](#215-in-repo-plugin-state_district_pies)
 22. [Extensions Framework](#22-extensions-framework)
     - 22.1 [What Are Superset Extensions?](#221-what-are-superset-extensions)
     - 22.2 [Extension Architecture](#222-extension-architecture)
@@ -1335,9 +1336,12 @@ apache-superset-1/
 │   ├── dashboards/
 │   │   └── executive_overview.yaml     # kind: Dashboard (chartRefs)
 │   ├── plugins/
-│   │   └── custom_waterfall.yaml       # kind: Plugin (dynamic viz plugin)
+│   │   ├── custom_waterfall.yaml       # kind: Plugin (third-party demo bundle)
+│   │   └── state_district_pies.yaml    # kind: Plugin (in-repo custom viz; see superset-plugins/)
 │   └── extensions/
 │       └── query_optimizer.yaml        # kind: Extension (.supx package)
+├── superset-plugins/                   # In-repo dynamic plugin source trees (React/TS)
+│   └── plugin-chart-state-district-pies/  # India map + per-district pies (§21.5)
 ├── config/
 │   └── base.yaml                       # Control plane config (state backend, drift policy)
 ├── env/
@@ -1814,6 +1818,75 @@ References:
 - [Creating Visualization Plugins — Superset docs](https://superset.apache.org/developer-docs/contributing/howtos)
 - [superset-ui GitHub](https://github.com/apache/superset/tree/master/superset-frontend/packages)
 - [@superset-ui/generator-superset](https://www.npmjs.com/package/@superset-ui/generator-superset)
+
+### 21.5 In-Repo Plugin: `state_district_pies`
+
+This repository ships the **source tree** for one custom visualization
+plugin under `superset-plugins/plugin-chart-state-district-pies/`. The
+plugin renders an India state choropleth with a proportional pie chart
+overlaid at every district's centroid — the reference layout for the
+Household Survey dashboard.
+
+#### Package layout
+
+```text
+superset-plugins/
+└── plugin-chart-state-district-pies/
+    ├── package.json              # build/serve/test scripts
+    ├── tsconfig.json
+    ├── webpack.config.js         # UMD bundle, peerDeps externalised
+    ├── README.md                 # plugin-level design overview
+    ├── src/
+    │   ├── index.ts              # package entry
+    │   ├── plugin/
+    │   │   ├── index.ts          # ChartPlugin (metadata + behaviors)
+    │   │   ├── buildQuery.ts     # pure: formData → query context
+    │   │   ├── controlPanel.ts   # pure: editor control config
+    │   │   └── transformProps.ts # pure: queryResponse → ChartProps
+    │   ├── components/
+    │   │   ├── StateDistrictPies.tsx  # thin orchestrator
+    │   │   ├── StateLayer.tsx         # base choropleth (React.memo)
+    │   │   ├── DistrictPie.tsx        # single district's pie
+    │   │   ├── Legend.tsx
+    │   │   └── Tooltip.tsx
+    │   ├── hooks/useGeoJson.ts   # async geojson fetch + cache
+    │   ├── geo/projection.ts     # d3-geo Mercator fit
+    │   ├── geo/centroids.ts      # per-feature centroid + area
+    │   ├── constants.ts
+    │   └── types.ts
+    └── test/transformProps.test.ts
+```
+
+#### Design principles
+
+| Principle | Implementation |
+|---|---|
+| Pure functions separate from React | Everything under `src/plugin/` has no DOM dependency |
+| Composition over a monolith | Main component is <60 lines; all visuals live in dedicated children |
+| Shared projection | One `fitProjection()` call per render; state layer + pie overlay read from the same `d3.geoPath` so centroids line up exactly |
+| No geometry in the bundle | District geojson is fetched at runtime from operator-provided URLs, with a module-scoped cache |
+| Schema-agnostic | Column names are control-panel inputs — works for any `(state, district, category → metric)` dataset |
+| Cross-filter native | `transformProps` wires `setDataMask` so clicking a pie filters the dashboard |
+| Behaviors declared on metadata | `Behavior.INTERACTIVE_CHART` + `Behavior.DRILL_TO_DETAIL` |
+
+#### Build and register
+
+```bash
+# 1. Build the UMD bundle
+cd superset-plugins/plugin-chart-state-district-pies
+npm install && npm run build
+# emits dist/main.js
+
+# 2. Host dist/main.js on any static origin (CDN, S3, container volume)
+
+# 3. Point the plugin YAML at the hosted URL via env var
+export STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL=https://static.example.com/superset-plugins/state-district-pies/main.js
+
+# 4. The PluginReconciler picks it up on the next reconcile pass
+```
+
+See [`wiki/architecture/custom-viz-plugin.md`](wiki/architecture/custom-viz-plugin.md)
+for the full data pipeline, geometry contract, and failure modes.
 
 ---
 
