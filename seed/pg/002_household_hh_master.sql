@@ -286,3 +286,23 @@ FROM '/docker-entrypoint-initdb.d/HH.master.csv'
 DELIMITER ','
 CSV HEADER
 NULL 'NA';
+
+-- ── Map State_label → GeoJSON NAME_1 for Country Map visualization ──
+-- The Superset Country Map plugin (india.geojson) uses specific state names
+-- that differ from the NSS survey labels. This column provides exact matches.
+ALTER TABLE household.hh_master ADD COLUMN IF NOT EXISTS state_map_name varchar(100);
+
+UPDATE household.hh_master SET state_map_name = CASE "State_label"
+    WHEN 'A and N Islands (U.T.)'                    THEN 'Andaman and Nicobar'
+    WHEN 'Chandigarh(U.T.)'                          THEN 'Chandigarh'
+    WHEN 'Chattisgarh'                               THEN 'Chhattisgarh'
+    WHEN 'Dadra & Nagar Haveli and Daman & Diu'      THEN 'Dadra and Nagar Haveli and Daman and Diu'
+    WHEN 'Jammu & Kashmir'                           THEN 'Jammu and Kashmir'
+    WHEN 'Ladakh (U.T.)'                             THEN 'Ladakh'
+    WHEN 'Lakshadweep (U.T.)'                        THEN 'Lakshadweep'
+    WHEN 'Puducherry (U.T.)'                         THEN 'Puducherry'
+    WHEN 'Tamilnadu'                                 THEN 'Tamil Nadu'
+    WHEN 'Uttar Prdesh'                              THEN 'Uttar Pradesh'
+    WHEN 'Uttrakhand'                                THEN 'Uttarakhand'
+    ELSE "State_label"
+END;

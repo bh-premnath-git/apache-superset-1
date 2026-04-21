@@ -1,26 +1,26 @@
 -- ============================================================================
 -- LCA segment views for the Household Survey dashboard
 -- ----------------------------------------------------------------------------
--- All views are scoped to the three target states (Bihar, Jharkhand,
--- Madhya Pradesh) because the dashboard panels in the reference design are
--- explicitly labelled "Distribution of Segment across the 3 states".
---
 -- Segment codes follow the Living Conditions Approach (LCA) convention:
 --   R1/R2/R3/R4 — rural segments, best (R1) to most constrained (R4)
 --   U1/U2/U3   — urban segments, best (U1) to most constrained (U3)
 -- Classification mirrors the legacy scoring logic (commit 9f4044e) and is
 -- derived from digital, asset, and welfare signals already present on
 -- household.hh_master. Households missing all signals fall into R4/U3.
+--
+-- Note: Views include ALL Indian states (not just Bihar/Jharkhand/MP) to
+-- support cross-filtering from the India state map dashboard.
 -- ============================================================================
 
--- ── Base: one row per household with derived segment, restricted to the
--- three target states. Using `wt` as the survey weight for all downstream
--- weighted aggregates (`weighted_count` on the dataset uses SUM(wt) too).
+-- ── Base: one row per household with derived segment.
+-- Using `wt` as the survey weight for all downstream weighted aggregates
+-- (`weighted_count` on the dataset uses SUM(wt) too).
 CREATE OR REPLACE VIEW household.vw_hh_segments AS
 WITH scored AS (
     SELECT
         "HHID"                                         AS hhid,
         "State_label"                                  AS state_label,
+        state_map_name                                 AS state_map_name,
         "District"                                     AS district_code,
         COALESCE("Sector_label", '')                   AS sector_label,
         COALESCE(wt, 1.0)                              AS wt,
@@ -37,7 +37,7 @@ WITH scored AS (
         CASE WHEN "Possess_Mobile" = '1' THEN 1 ELSE 0 END
                                                        AS mobile_ownership
     FROM household.hh_master
-    WHERE "State_label" IN ('Bihar', 'Jharkhand', 'Madhya Pradesh')
+    -- All Indian states included for full cross-filtering support
 ),
 classified AS (
     SELECT
@@ -62,6 +62,7 @@ classified AS (
 SELECT
     hhid,
     state_label,
+    state_map_name,
     district_code,
     sector_label,
     wt,
@@ -83,6 +84,7 @@ CREATE OR REPLACE VIEW household.vw_district_segment_pie AS
 WITH dist_counts AS (
     SELECT
         state_label,
+        state_map_name,
         district_code,
         SUM(wt)                                               AS hh_weight,
         SUM(CASE WHEN segment = 'R1' THEN wt ELSE 0 END)      AS r1_w,
@@ -93,11 +95,12 @@ WITH dist_counts AS (
         SUM(CASE WHEN segment = 'U2' THEN wt ELSE 0 END)      AS u2_w,
         SUM(CASE WHEN segment = 'U3' THEN wt ELSE 0 END)      AS u3_w
     FROM household.vw_hh_segments
-    GROUP BY state_label, district_code
+    GROUP BY state_label, state_map_name, district_code
 ),
 pct AS (
     SELECT
         state_label,
+        state_map_name,
         district_code,
         hh_weight,
         ROUND((r1_w * 100.0 / NULLIF(hh_weight, 0))::numeric, 2) AS r1_pct,
@@ -111,6 +114,7 @@ pct AS (
 )
 SELECT
     state_label,
+    state_map_name,
     district_code,
     hh_weight,
     COALESCE(r1_pct, 0) AS r1_pct,
