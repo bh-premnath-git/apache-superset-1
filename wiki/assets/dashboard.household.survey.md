@@ -11,7 +11,8 @@ Household-facing dashboard for the household survey part of the repository.
 - slug: `household-survey`
 
 ## Current chart refs
-- `chart.household.rural_segment_comparison`
+- `chart.household.state_map` — Interactive India map with state-level household counts
+- `chart.household.rural_segment_comparison` — Handlebars table comparing rural household segments
 
 ## Historical note
 
@@ -29,8 +30,20 @@ spec:
   slug: household-survey
   chartHeight: 100
   chartRefs:
+    - chart.household.state_map
     - chart.household.rural_segment_comparison
 ```
+
+## Cross-filtering
+
+The dashboard supports **cross-filtering** — clicking a state on the map filters the rural segments table to show only data for that state.
+
+To use:
+1. Click any state on the **Households by State** map
+2. The **Rural Segments Comparison** table automatically updates to show only that state's data
+3. Click the same state again or use the filter bar to clear the selection
+
+This uses Superset's built-in cross-filtering feature (no additional configuration required in the YAML).
 
 ## Operational notes
 
@@ -40,8 +53,10 @@ If a chart ref is missing at reconcile time, the reconciler logs the missing cha
 
 ## Related files
 - `assets/dashboards/household_survey.yaml`
+- `assets/charts/household_state_map.yaml`
 - `assets/charts/rural_segment_comparison.yaml`
 
 ## Related pages
+- [chart.household.state_map](chart.household.state_map.md)
 - [chart.household.rural_segment_comparison](chart.household.rural_segment_comparison.md)
 - [dataset.household.hh_master](dataset.household.hh_master.md)

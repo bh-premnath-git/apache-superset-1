@@ -13,8 +13,9 @@
 - [db.analytics](assets/db.analytics.md) — Declarative analytics database connection used by datasets.
 - [dataset.household.hh_master](assets/dataset.household.hh_master.md) — Household survey dataset over `household.hh_master`.
 - [dataset.sales.orders](assets/dataset.sales.orders.md) — Sample sales dataset over `mart_sales.orders`.
+- [chart.household.state_map](assets/chart.household.state_map.md) — Interactive India map (Country Map viz) showing households by state.
 - [chart.household.rural_segment_comparison](assets/chart.household.rural_segment_comparison.md) — Handlebars-based rural segment comparison table.
-- [dashboard.household.survey](assets/dashboard.household.survey.md) — Household dashboard currently containing the rural comparison chart.
+- [dashboard.household.survey](assets/dashboard.household.survey.md) — Household dashboard with India state map and rural comparison table, supports cross-filtering.
 - [dashboard.exec.overview](assets/dashboard.exec.overview.md) — Sample executive dashboard for sales analytics.
 
 ## Troubleshooting

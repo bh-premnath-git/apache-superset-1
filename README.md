@@ -51,6 +51,25 @@ The dataset's metrics (`count`, `sum__revenue`) are declared in
 Superset's `PUT /api/v1/dataset/{id}` API — the chart specs reference those
 metric names, not any hardcoded ID.
 
+### Household Survey Dashboard (Indian NSS Data)
+
+This repository also includes **Indian National Sample Survey (NSS)** household
+data — the official household survey system from India's Ministry of Statistics.
+
+**Dataset:** `household.hh_master` (261,953 rows)
+- Geographic coverage: All Indian states and union territories
+- Key metrics: Household size, education, welfare scheme participation, consumption
+- Indian classifications: Social groups (SC/ST/OBC), religion, land ownership, PDS ration cards
+- Welfare schemes: PMGKY, Ayushman Bharat, Ujjwala LPG, free electricity, school benefits
+
+**Dashboard:** `household-survey`
+- **Rural Segments Comparison** — Handlebars-based table comparing rural household segments
+- **State Map** — Interactive India map showing state-level metrics (uses built-in Country Map)
+- **Cross-filtering enabled** — Click any state on the map to filter the entire dashboard
+
+The State Map uses Superset's built-in **Country Map** visualization (India) with
+no external mapping service required.
+
 ### OIDC Client Secret Setup
 
 The Keycloak bootstrap creates a confidential client (`bighammer-admin`) and prints

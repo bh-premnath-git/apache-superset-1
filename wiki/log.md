@@ -29,3 +29,10 @@
 - All 11 assets reconciled with 0 failures:
   - Database, 2 Datasets, 4 Charts, 2 Dashboards
   - 2 assets skipped (Plugin/Extension, expected)
+
+## [2026-04-21] feature | Indian state map and cross-filtering
+- Documented NSS (National Sample Survey) data context in wiki and README.
+- Added `chart.household.state_map` — Country Map visualization of India with household counts by state.
+- Added state map to `dashboard.household.survey` alongside rural segments table.
+- Dashboard supports cross-filtering: clicking a state on the map filters the table.
+- Uses built-in Country Map (no Mapbox key required), INDIA geoJSON with all 28 states + 8 UTs.

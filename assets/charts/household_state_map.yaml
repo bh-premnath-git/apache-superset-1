@@ -1,0 +1,32 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.state_map
+  name: Households by State
+spec:
+  datasetRef: dataset.household.hh_master
+  vizType: country_map
+  params:
+    viz_type: country_map
+    entity: State_label
+    metric:
+      expressionType: SIMPLE
+      column:
+        column_name: HHID
+        type: string
+      aggregate: COUNT
+      label: Total Households
+    row_limit: 100
+    adhoc_filters:
+      - clause: WHERE
+        expressionType: SQL
+        sqlExpression: '"State_label" IS NOT NULL'
+    country: INDIA
+    iso_code: IND
+  
+  # Enable cross-filtering for dashboard interactivity
+  # Clicking a state will filter other charts on the dashboard
+  
+  description: |
+    Interactive map of India showing household counts by state.
+    Click any state to filter the Rural Segments Comparison table.
