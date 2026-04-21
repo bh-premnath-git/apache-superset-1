@@ -42,8 +42,10 @@ COPY docker/scripts/bootstrap.sh /app/bootstrap.sh
 COPY docker/scripts/init.sh /app/init.sh
 COPY docker/scripts/bootstrap_keycloak.py /app/docker/scripts/bootstrap_keycloak.py
 COPY docker/scripts/seed_dashboard.py /app/docker/scripts/seed_dashboard.py
+COPY docker/scripts/reconciler_entrypoint.sh /app/docker/scripts/reconciler_entrypoint.sh
 RUN chmod +x /app/bootstrap.sh
 RUN chmod +x /app/init.sh
+RUN chmod +x /app/docker/scripts/reconciler_entrypoint.sh
 
 # Copy custom branding assets.
 COPY docker/assets/logo.svg /app/superset/static/assets/images/logo.svg

@@ -10,11 +10,14 @@ spec:
   vizType: state_district_pies
 
   # Bundle URL is resolved from the environment so the repo never carries
-  # a hardcoded CDN hostname. Build locally and publish:
-  #   cd superset-plugins/plugin-chart-state-district-pies
-  #   npm install && npm run build
-  #   # host dist/main.js on your static origin, then:
-  #   export STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL=https://static.example.com/superset-plugins/state-district-pies/main.js
+  # a hardcoded CDN hostname. The default Compose flow builds the bundle in
+  # the `plugin-builder` service (node:lts-alpine3.22) and the
+  # `reconciler_entrypoint.sh` wrapper exports
+  # STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL from /plugin-dist/bundle-url.txt
+  # (served by Superset at /static/assets/plugins/state-district-pies/...).
+  #
+  # To override for an external CDN, set the env var before starting the
+  # stack and the wrapper will keep that value.
   bundleUrlFromEnv: STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL
 
   description: |
