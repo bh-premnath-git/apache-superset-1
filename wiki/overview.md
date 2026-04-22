@@ -79,11 +79,11 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 - `dataset.household.state_district_segment_geo` — LCA segment data with district centroids
 
 ### Dashboards
-- `dashboard.household.survey` — Household dashboard with rural segments table and state-filterable district map
+- `dashboard.household.survey` — Household dashboard with rural segments table and a state-filterable district segments bar
 
 ### Notable charts
 - `chart.household.rural_segment_comparison` — Handlebars table comparing rural segments
-- `chart.household.district_pie_unified` — Cartodiagram map with per-district segment pies, controlled by State filter
+- `chart.household.district_pie_unified` — Echarts 100% stacked bar: per-district segment mix for the state pinned by the State filter (replaced the Cartodiagram map — its pie sub-chart did not render under Superset 6.0; see wiki log 2026-04-22)
 
 ## Related pages
 - [Reconciler Engine](architecture/reconciler-engine.md)

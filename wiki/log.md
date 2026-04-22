@@ -217,5 +217,31 @@
   and the map visualization.
 - Deleted old chart files: `household_state_map.yaml`, `district_pie_bihar.yaml`,
   `district_pie_jharkhand.yaml`, `district_pie_madhya_pradesh.yaml`.
+
+## [2026-04-22] fix | district segments chart rendered blank + drill-by everywhere
+- **Symptom**: `District Segments by State` rendered an empty panel. The
+  underlying chart was `cartodiagram` with a `pie` sub-chart, which in
+  Superset 6.0 fails to mount at each centroid (upstream bug
+  https://github.com/apache/superset/issues/34247 — the pie plugin
+  throws when instantiated without the full explore-page Redux store
+  that the Cartodiagram wrapper stubs only partially).
+- **Fix**: Replaced the Cartodiagram viz with an echarts 100% stacked
+  bar (`echarts_timeseries_bar`) that renders reliably and shows the
+  same `(district, segment, hh_weight)` slice. 45° x-axis label
+  rotation keeps ~38 Bihar district names legible; `supersetColors`
+  keeps segment colours in sync with every other chart on the
+  dashboard.
+- **Drill by everywhere**: set `FEATURE_FLAGS["DRILL_BY"] = True` and
+  `FEATURE_FLAGS["DRILL_TO_DETAIL"] = True` explicitly in
+  `superset_config.py`. Both are upstream-default `True` since Superset
+  4.x (PR #26637) but making them explicit locks the dashboard's
+  context-menu contract against future default changes. The flags
+  expose Drill by / Drill to detail on every echarts, Table, Pivot
+  Table and World Map chart — the entire dashboard today except the
+  Handlebars Rural Segments table (documented upstream exception).
+- **Cleanup**: removed `assets/charts/_district_pie_subchart.yaml` (no
+  longer referenced), adjusted `dashboard.household.survey` chart
+  heights so the new bar gets enough vertical room (80 instead of the
+  compact 55), refreshed the chart + dashboard wiki pages.
 - Updated wiki documentation: new page for unified chart, updated dashboard page,
   updated reconciler-engine example, updated index.

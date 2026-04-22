@@ -1,15 +1,26 @@
-# Unified Cartodiagram chart: per-district pie sub-chart plotted at district
-# centroids. Responds to the dashboard State filter to show one state at a time.
-# Defaults (in the dashboard) to Bihar so ~38 districts render instead of all
-# 112 at once. Geometry from household.vw_state_district_segment_geo.
+# District-level segment mix for the state picked in the dashboard's State
+# filter. Rendered as a 100% stacked bar (one bar per district, coloured by
+# segment) rather than the Cartodiagram + pie sub-chart combination that
+# shipped previously.
 #
-# Readability tuning (see wiki/assets/chart.household.district_pie_unified.md):
-# - Sub-chart has show_legend:false + show_labels:false to stop per-pie legend
-#   chrome (the All/Inv/1-2/1-3 pagination seen when every pie renders its own
-#   scroll legend) overlapping across the map.
-# - Pie size is LINEAR so pies grow when the user zooms in to a single district.
-# - Base tile layer is CARTO Voyager — shows India state + district admin
-#   boundaries beneath the pies without requiring a custom plugin or WFS layer.
+# Why the change?
+# ---------------
+# Cartodiagram (Superset 6.0) cannot currently render Pie charts as its
+# sub-chart: the sub-chart pipeline wraps children in a mock Redux store but
+# the Echarts Pie plugin still throws "Cannot read properties of null
+# (reading 'store')" when probed for certain selectors. Upstream bug
+# https://github.com/apache/superset/issues/34247 — with the pie sub-chart
+# in play the Cartodiagram renders a blank panel.
+#
+# An echarts stacked bar is chosen because:
+#   1. It actually renders against vw_state_district_segment_geo as-is.
+#   2. Echarts charts natively support "Drill by", "Drill to detail" and
+#      cross-filters in Superset 5.x+ — the deck.gl / Cartodiagram maps do
+#      not. (See FEATURE_FLAGS DRILL_BY / DRILL_TO_DETAIL in
+#      superset_config.py — both force-enabled to satisfy the dashboard's
+#      "drill by on every chart" requirement.)
+#   3. The dashboard State filter already narrows the view to one state,
+#      so ~24–50 bars is legible at dashboard width with 45° label rotation.
 apiVersion: analytics/v1
 kind: Chart
 metadata:
@@ -17,44 +28,31 @@ metadata:
   name: 'District Segments by State'
 spec:
   datasetRef: dataset.household.state_district_segment_geo
-  vizType: cartodiagram
-  selectedChartRef: chart.household.district_pie_subchart
+  vizType: echarts_timeseries_bar
   params:
-    viz_type: cartodiagram
-    geom_column: geometry
-    # No hardcoded state filter — controlled by dashboard State filter (defaults
-    # to the first state so a single state's districts render at a time).
-    row_limit: 10000
-    map_view:
-      mode: FIT_DATA
-      zoom: 6
-      latitude: 24.0
-      longitude: 82.0
-      fixedZoom: 6
-      fixedLatitude: 24.0
-      fixedLongitude: 82.0
-    layer_configs:
-      # CARTO Voyager tiles: OSM-derived but with prominent state and district
-      # admin boundaries (the "state outline / district outline" the user asked
-      # for). Attribution requires both OSM and CARTO credit lines.
-      - type: XYZ
-        url: https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png
-        title: CARTO Voyager
-        attribution: © OpenStreetMap contributors © CARTO
-    chart_background_color:
-      r: 255
-      g: 255
-      b: 255
-      a: 0.0
-    chart_background_border_radius: 4
-    # LINEAR size: pies are small at the 3-state overview and grow when the
-    # user zooms into one state. At zoom 6 (single-state view) pies are 55 px
-    # wide; each additional zoom level adds ~18 px so zoom 9 → ~109 px.
-    chart_size:
-      type: LINEAR
-      configs:
-        zoom: 6
-        width: 55
-        height: 55
-        slope: 18
-        exponent: 1
+    viz_type: echarts_timeseries_bar
+    row_limit: 5000
+    x_axis: district_name
+    x_axis_sort_asc: true
+    groupby:
+      - segment
+    metrics:
+      - label: hh_weight
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: am_district_hh_weight
+        sqlExpression: SUM(hh_weight)
+    # Stack bars so every district column sums to the district's total
+    # weighted household count, and the slice heights read as segment mix.
+    stack: Stack
+    show_legend: true
+    legendType: scroll
+    legendOrientation: top
+    show_value: false
+    y_axis_title: Weighted Households
+    x_axis_title: District
+    y_axis_format: ".2s"
+    x_axis_label_rotation: 45
+    rich_tooltip: true
+    color_scheme: supersetColors
+    order_desc: false
