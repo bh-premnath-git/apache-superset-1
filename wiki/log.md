@@ -153,6 +153,54 @@
 - Plugin source under `superset-plugins/plugin-chart-state-district-pies/` is
   preserved for reference but not built or registered.
 
+## [2026-04-22] fix | District Segments by State readability + exploration story
+- **Symptom**: The unified Cartodiagram chart rendered an unreadable mat of
+  overlapping pie chrome — `All`, `Inv`, `1/2`, `1/3` legend pagination
+  buttons appearing on every one of ~112 mini-pies at zoom 5, plus
+  `key_percent` labels around every slice. No state/district outlines were
+  visible under the clutter.
+- **Root cause (sub-chart)**: `show_legend: true` + `legendType: scroll`
+  on `_district_pie_subchart.yaml` caused each mini-pie to render its own
+  scroll-legend with pagination controls. ECharts legend buttons are not
+  configurable via Superset form data, so the only remedy is to hide the
+  legend entirely on sub-charts.
+- **Root cause (main chart)**: `chart_size.type: FIXED 140×140` across all
+  50 zoom levels + OpenStreetMap base tiles. 140 px pies overlap 2–3
+  neighbors at zoom 5 when all 112 districts render, and stock OSM tiles
+  don't emphasize admin boundaries.
+- **Root cause (dashboard)**: State filter had `defaultToFirstItem: false`,
+  so the Cartodiagram loaded with all three states' districts piled on top
+  of each other.
+- **Fix**:
+  - `_district_pie_subchart.yaml`: `show_legend: false`, `show_labels: false`,
+    `label_type: key`. Segment colors stay consistent via `supersetColors`,
+    and the separate **Segment Distribution** pie acts as the shared
+    legend.
+  - `district_pie_unified.yaml`: switched to `chart_size.type: LINEAR` at
+    55×55 px / zoom 6, slope 18 — pies grow smoothly when the reader
+    zooms in. Base tile layer swapped to CARTO Voyager (same OSM data,
+    clearer admin boundaries for the "state outline / district outline"
+    backdrop).
+  - `household_survey.yaml`: State filter now `defaultToFirstItem: true`
+    so the dashboard loads with Bihar pinned (38 pies, readable).
+- **Exploration story documentation**: wrote a new "Data exploration
+  story" section in `wiki/assets/dashboard.household.survey.md` covering
+  all four narrowing mechanisms (native filters, cross-filters,
+  drill-to-detail, drill-by — the latter two are Superset 5.x built-ins
+  and need no per-chart config).
+- **Filter coverage gap documented**: Sector + Social Group filters
+  target only `hh_master` today; the four pre-aggregated LCA views
+  (`segment_distribution`, `segment_minor_bucket`,
+  `state_segment_distribution`, `mpce_by_segment`) are aggregated by
+  segment only. Closing this gap requires rebuilding those views — out
+  of scope for this pass.
+- **Future path (not activated)**: `india-districts.geojson` plus the
+  preserved `superset-plugins/plugin-chart-state-district-pies/` source
+  could give us explicit state choropleth + district pie layers. Blocked
+  on (a) re-enabling the `plugin-builder` Compose service and (b)
+  generating a state-level GeoJSON by dissolving district polygons on
+  `NAME_1`. Documented the switch-over steps in the chart wiki.
+
 ## [2026-04-22] refactor | unified district pie chart with State filter
 - Removed `chart.household.state_map` (Households by State Country Map) from the
   Household Survey dashboard.

@@ -1,8 +1,15 @@
 # Unified Cartodiagram chart: per-district pie sub-chart plotted at district
 # centroids. Responds to the dashboard State filter to show one state at a time.
-# Defaults to showing all three states (Bihar, Jharkhand, MP) when no filter
-# is applied, but the filter UI encourages selection. Geometry from
-# household.vw_state_district_segment_geo.
+# Defaults (in the dashboard) to Bihar so ~38 districts render instead of all
+# 112 at once. Geometry from household.vw_state_district_segment_geo.
+#
+# Readability tuning (see wiki/assets/chart.household.district_pie_unified.md):
+# - Sub-chart has show_legend:false + show_labels:false to stop per-pie legend
+#   chrome (the All/Inv/1-2/1-3 pagination seen when every pie renders its own
+#   scroll legend) overlapping across the map.
+# - Pie size is LINEAR so pies grow when the user zooms in to a single district.
+# - Base tile layer is CARTO Voyager — shows India state + district admin
+#   boundaries beneath the pies without requiring a custom plugin or WFS layer.
 apiVersion: analytics/v1
 kind: Chart
 metadata:
@@ -15,184 +22,39 @@ spec:
   params:
     viz_type: cartodiagram
     geom_column: geometry
-    # No hardcoded state filter — controlled by dashboard State filter
+    # No hardcoded state filter — controlled by dashboard State filter (defaults
+    # to the first state so a single state's districts render at a time).
     row_limit: 10000
     map_view:
       mode: FIT_DATA
-      zoom: 5
+      zoom: 6
       latitude: 24.0
       longitude: 82.0
-      fixedZoom: 5
+      fixedZoom: 6
       fixedLatitude: 24.0
       fixedLongitude: 82.0
     layer_configs:
-    - type: XYZ
-      url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-      title: OpenStreetMap
-      attribution: © OpenStreetMap contributors
+      # CARTO Voyager tiles: OSM-derived but with prominent state and district
+      # admin boundaries (the "state outline / district outline" the user asked
+      # for). Attribution requires both OSM and CARTO credit lines.
+      - type: XYZ
+        url: https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png
+        title: CARTO Voyager
+        attribution: © OpenStreetMap contributors © CARTO
     chart_background_color:
       r: 255
       g: 255
       b: 255
-      a: 0.2
-    chart_background_border_radius: 10
+      a: 0.0
+    chart_background_border_radius: 4
+    # LINEAR size: pies are small at the 3-state overview and grow when the
+    # user zooms into one state. At zoom 6 (single-state view) pies are 55 px
+    # wide; each additional zoom level adds ~18 px so zoom 9 → ~109 px.
     chart_size:
-      type: FIXED
+      type: LINEAR
       configs:
-        zoom: 5
-        width: 140
-        height: 140
-        slope: 30
-        exponent: 2
-      values:
-        '0':
-          width: 140
-          height: 140
-        '1':
-          width: 140
-          height: 140
-        '2':
-          width: 140
-          height: 140
-        '3':
-          width: 140
-          height: 140
-        '4':
-          width: 140
-          height: 140
-        '5':
-          width: 140
-          height: 140
-        '6':
-          width: 140
-          height: 140
-        '7':
-          width: 140
-          height: 140
-        '8':
-          width: 140
-          height: 140
-        '9':
-          width: 140
-          height: 140
-        '10':
-          width: 140
-          height: 140
-        '11':
-          width: 140
-          height: 140
-        '12':
-          width: 140
-          height: 140
-        '13':
-          width: 140
-          height: 140
-        '14':
-          width: 140
-          height: 140
-        '15':
-          width: 140
-          height: 140
-        '16':
-          width: 140
-          height: 140
-        '17':
-          width: 140
-          height: 140
-        '18':
-          width: 140
-          height: 140
-        '19':
-          width: 140
-          height: 140
-        '20':
-          width: 140
-          height: 140
-        '21':
-          width: 140
-          height: 140
-        '22':
-          width: 140
-          height: 140
-        '23':
-          width: 140
-          height: 140
-        '24':
-          width: 140
-          height: 140
-        '25':
-          width: 140
-          height: 140
-        '26':
-          width: 140
-          height: 140
-        '27':
-          width: 140
-          height: 140
-        '28':
-          width: 140
-          height: 140
-        '29':
-          width: 140
-          height: 140
-        '30':
-          width: 140
-          height: 140
-        '31':
-          width: 140
-          height: 140
-        '32':
-          width: 140
-          height: 140
-        '33':
-          width: 140
-          height: 140
-        '34':
-          width: 140
-          height: 140
-        '35':
-          width: 140
-          height: 140
-        '36':
-          width: 140
-          height: 140
-        '37':
-          width: 140
-          height: 140
-        '38':
-          width: 140
-          height: 140
-        '39':
-          width: 140
-          height: 140
-        '40':
-          width: 140
-          height: 140
-        '41':
-          width: 140
-          height: 140
-        '42':
-          width: 140
-          height: 140
-        '43':
-          width: 140
-          height: 140
-        '44':
-          width: 140
-          height: 140
-        '45':
-          width: 140
-          height: 140
-        '46':
-          width: 140
-          height: 140
-        '47':
-          width: 140
-          height: 140
-        '48':
-          width: 140
-          height: 140
-        '49':
-          width: 140
-          height: 140
-
+        zoom: 6
+        width: 55
+        height: 55
+        slope: 18
+        exponent: 1
