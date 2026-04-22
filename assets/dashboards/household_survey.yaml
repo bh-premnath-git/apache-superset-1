@@ -16,7 +16,7 @@ spec:
   chartsPerRow: 2
   crossFiltersEnabled: true
   chartHeights:
-    chart.household.rural_segment_comparison: 120
+    chart.household.rural_segment_comparison: 110
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
