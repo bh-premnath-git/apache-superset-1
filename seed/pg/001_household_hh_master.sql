@@ -281,11 +281,38 @@ CREATE TABLE IF NOT EXISTS household.hh_master (
 
 TRUNCATE TABLE household.hh_master;
 
-COPY household.hh_master
-FROM '/docker-entrypoint-initdb.d/HH.master.csv'
-DELIMITER ','
-CSV HEADER
-NULL 'NA';
+-- ── CSV load (LFS-safe) ──
+-- HH.master.csv is tracked via Git LFS (~316 MB). On hosts that cloned the
+-- repo without `git lfs pull`, the file on disk is a ~130-byte pointer
+-- instead of the real data; a plain COPY would fail and abort the whole
+-- postgres init, leaving the container in Error state. Check the file size
+-- first and skip COPY with a clear RAISE WARNING when the pointer is all
+-- we have — the schema and views still build so downstream services can
+-- come up, and the operator gets an actionable message in the logs.
+DO $$
+DECLARE
+    v_size bigint;
+BEGIN
+    SELECT size INTO v_size
+    FROM pg_stat_file('/docker-entrypoint-initdb.d/HH.master.csv', missing_ok => true);
+
+    IF v_size IS NULL THEN
+        RAISE WARNING 'HH.master.csv not found at /docker-entrypoint-initdb.d/HH.master.csv — skipping COPY.';
+    ELSIF v_size < 1048576 THEN
+        RAISE WARNING 'HH.master.csv is only % bytes — looks like a Git LFS pointer. '
+                      'Run `git lfs install && git lfs pull` in the repo, then '
+                      '`docker compose down -v && docker compose up -d` to reload. '
+                      'Skipping COPY so the stack can still start.', v_size;
+    ELSE
+        EXECUTE $copy$
+            COPY household.hh_master
+            FROM '/docker-entrypoint-initdb.d/HH.master.csv'
+            DELIMITER ','
+            CSV HEADER
+            NULL 'NA'
+        $copy$;
+    END IF;
+END $$;
 
 -- ── Map State_label → GeoJSON NAME_1 for Country Map visualization ──
 -- The Superset Country Map plugin (india.geojson) uses specific state names
