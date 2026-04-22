@@ -1,0 +1,13 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.state_district_segment_geo
+  name: lca_state_district_segment_geo
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_state_district_segment_geo
+  # Long-form (state, district, segment, hh_weight) with a `geometry` column
+  # containing a GeoJSON Point ({"type":"Point","coordinates":[lon,lat]}).
+  # Feeds the built-in Cartodiagram plugin — the native pie sub-chart groups
+  # by segment, and Cartodiagram injects `geometry` as the map anchor.

@@ -1,0 +1,31 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  # Leading underscore in the filename ensures this asset sorts ahead of the
+  # three Cartodiagram charts that reference it via selectedChartRef, so the
+  # sub-chart is created first in a single reconcile pass.
+  key: chart.household.district_pie_subchart
+  name: "District Segment Pie (Cartodiagram sub-chart)"
+spec:
+  datasetRef: dataset.household.state_district_segment_geo
+  vizType: pie
+  params:
+    viz_type: pie
+    # Cartodiagram auto-prepends geom_column to groupby, so we only list the
+    # slice dimension here. Metric is weighted household count per segment.
+    groupby:
+      - segment
+    metric:
+      label: hh_weight
+      expressionType: SQL
+      hasCustomLabel: true
+      optionName: am_district_pie_weight
+      sqlExpression: SUM(hh_weight)
+    row_limit: 1000
+    number_format: ".0f"
+    donut: false
+    label_type: key_percent
+    show_legend: true
+    legendType: scroll
+    legendOrientation: right
+    color_scheme: supersetColors
