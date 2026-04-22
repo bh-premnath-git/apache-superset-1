@@ -18,17 +18,6 @@ spec:
         hasCustomLabel: true
         optionName: am_mean_mpce
         sqlExpression: MAX(mean_mpce)
-    # Error bar configuration using annotations
-    annotation_layers:
-      - name: Error Bars
-        annotationType: FORMULA
-        show: true
-        hideLine: true
-        symbol: none
-        width: 0
-        opacity: 0.8
-        style: solid
-        color: "#E53935"
     # Show data labels
     show_value: true
     value_formatter: ".0f"
