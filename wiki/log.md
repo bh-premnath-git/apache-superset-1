@@ -11,7 +11,7 @@
 ## [2026-04-21] runtime | household import and chart creation
 - `household.hh_master` was loaded successfully into Postgres with 261953 rows.
 - `hh_master` dataset was created in Superset.
-- Household and sales charts reconciled successfully.
+- Household charts reconciled successfully.
 - Plugin and extension assets were skipped as expected due to missing bundle configuration / immature upstream support.
 
 ## [2026-04-21] fix | Handlebars chart configuration
@@ -138,3 +138,36 @@
 - Reconciler change: `_sync_layout` now also re-applies `json_metadata` when
   `cross_filters_enabled` differs from the existing metadata, preserving any
   other keys that are already present.
+
+## [2026-04-22] refactor | disable plugin-builder, migrate to Cartodiagram
+- Disabled the `plugin-builder` service in `docker-compose.yml` (commented out).
+  Evaluating Superset 5.0+'s built-in Cartodiagram viz as a zero-code replacement
+  for the custom `state_district_pies` dynamic plugin.
+- Deleted `assets/charts/household_state_district_pies.yaml` — this chart referenced
+  `viz_type: state_district_pies` which is only available via the now-disabled
+  custom plugin. The reconciler skips it cleanly; other assets are unaffected.
+- Migrated district pie charts to Cartodiagram: `chart.household.district_pie_{bihar,jharkhand,madhya_pradesh}`
+  now use `viz_type: cartodiagram` with per-district pie sub-charts plotted at
+  district centroids (via `selectedChartRef: chart.household.district_pie_subchart`).
+  This replaces the previous Handlebars CSS conic-gradient approach.
+- Plugin source under `superset-plugins/plugin-chart-state-district-pies/` is
+  preserved for reference but not built or registered.
+
+## [2026-04-22] refactor | unified district pie chart with State filter
+- Removed `chart.household.state_map` (Households by State Country Map) from the
+  Household Survey dashboard.
+- Replaced three separate state Cartodiagrams (`district_pie_bihar`,
+  `district_pie_jharkhand`, `district_pie_madhya_pradesh`) with a single
+  `chart.household.district_pie_unified` controlled by the dashboard State filter.
+- Created `assets/charts/district_pie_unified.yaml` — Cartodiagram showing all
+  districts from Bihar/Jharkhand/MP, filterable by state. Defaults to showing
+  all three states when unfiltered.
+- Updated `dashboard.household.survey` layout: `fullWidthFirst: 2` for rural
+  segments table and unified map, `chartsPerRow: 2` for remaining charts.
+- Updated State native filter to target both `dataset.household.hh_master` and
+  `dataset.household.state_district_segment_geo` so it controls both the table
+  and the map visualization.
+- Deleted old chart files: `household_state_map.yaml`, `district_pie_bihar.yaml`,
+  `district_pie_jharkhand.yaml`, `district_pie_madhya_pradesh.yaml`.
+- Updated wiki documentation: new page for unified chart, updated dashboard page,
+  updated reconciler-engine example, updated index.

@@ -75,16 +75,15 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 - `db.analytics` → `Analytics Warehouse`
 
 ### Datasets
-- `dataset.household.hh_master`
-- `dataset.sales.orders`
+- `dataset.household.hh_master` — Household survey data
+- `dataset.household.state_district_segment_geo` — LCA segment data with district centroids
 
 ### Dashboards
-- `dashboard.household.survey`
-- `dashboard.exec.overview`
+- `dashboard.household.survey` — Household dashboard with rural segments table and state-filterable district map
 
-### Notable chart
-- `chart.household.rural_segment_comparison` uses `vizType: handlebars`
-- `chart.household.state_district_pies` uses `vizType: state_district_pies` — a custom dynamic plugin built from `superset-plugins/plugin-chart-state-district-pies/` (see [Custom Viz Plugin](architecture/custom-viz-plugin.md))
+### Notable charts
+- `chart.household.rural_segment_comparison` — Handlebars table comparing rural segments
+- `chart.household.district_pie_unified` — Cartodiagram map with per-district segment pies, controlled by State filter
 
 ## Related pages
 - [Reconciler Engine](architecture/reconciler-engine.md)

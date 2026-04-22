@@ -1,0 +1,198 @@
+# Unified Cartodiagram chart: per-district pie sub-chart plotted at district
+# centroids. Responds to the dashboard State filter to show one state at a time.
+# Defaults to showing all three states (Bihar, Jharkhand, MP) when no filter
+# is applied, but the filter UI encourages selection. Geometry from
+# household.vw_state_district_segment_geo.
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.district_pie_unified
+  name: 'District Segments by State'
+spec:
+  datasetRef: dataset.household.state_district_segment_geo
+  vizType: cartodiagram
+  selectedChartRef: chart.household.district_pie_subchart
+  params:
+    viz_type: cartodiagram
+    geom_column: geometry
+    # No hardcoded state filter — controlled by dashboard State filter
+    row_limit: 10000
+    map_view:
+      mode: FIT_DATA
+      zoom: 5
+      latitude: 24.0
+      longitude: 82.0
+      fixedZoom: 5
+      fixedLatitude: 24.0
+      fixedLongitude: 82.0
+    layer_configs:
+    - type: XYZ
+      url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+      title: OpenStreetMap
+      attribution: © OpenStreetMap contributors
+    chart_background_color:
+      r: 255
+      g: 255
+      b: 255
+      a: 0.2
+    chart_background_border_radius: 10
+    chart_size:
+      type: FIXED
+      configs:
+        zoom: 5
+        width: 140
+        height: 140
+        slope: 30
+        exponent: 2
+      values:
+        '0':
+          width: 140
+          height: 140
+        '1':
+          width: 140
+          height: 140
+        '2':
+          width: 140
+          height: 140
+        '3':
+          width: 140
+          height: 140
+        '4':
+          width: 140
+          height: 140
+        '5':
+          width: 140
+          height: 140
+        '6':
+          width: 140
+          height: 140
+        '7':
+          width: 140
+          height: 140
+        '8':
+          width: 140
+          height: 140
+        '9':
+          width: 140
+          height: 140
+        '10':
+          width: 140
+          height: 140
+        '11':
+          width: 140
+          height: 140
+        '12':
+          width: 140
+          height: 140
+        '13':
+          width: 140
+          height: 140
+        '14':
+          width: 140
+          height: 140
+        '15':
+          width: 140
+          height: 140
+        '16':
+          width: 140
+          height: 140
+        '17':
+          width: 140
+          height: 140
+        '18':
+          width: 140
+          height: 140
+        '19':
+          width: 140
+          height: 140
+        '20':
+          width: 140
+          height: 140
+        '21':
+          width: 140
+          height: 140
+        '22':
+          width: 140
+          height: 140
+        '23':
+          width: 140
+          height: 140
+        '24':
+          width: 140
+          height: 140
+        '25':
+          width: 140
+          height: 140
+        '26':
+          width: 140
+          height: 140
+        '27':
+          width: 140
+          height: 140
+        '28':
+          width: 140
+          height: 140
+        '29':
+          width: 140
+          height: 140
+        '30':
+          width: 140
+          height: 140
+        '31':
+          width: 140
+          height: 140
+        '32':
+          width: 140
+          height: 140
+        '33':
+          width: 140
+          height: 140
+        '34':
+          width: 140
+          height: 140
+        '35':
+          width: 140
+          height: 140
+        '36':
+          width: 140
+          height: 140
+        '37':
+          width: 140
+          height: 140
+        '38':
+          width: 140
+          height: 140
+        '39':
+          width: 140
+          height: 140
+        '40':
+          width: 140
+          height: 140
+        '41':
+          width: 140
+          height: 140
+        '42':
+          width: 140
+          height: 140
+        '43':
+          width: 140
+          height: 140
+        '44':
+          width: 140
+          height: 140
+        '45':
+          width: 140
+          height: 140
+        '46':
+          width: 140
+          height: 140
+        '47':
+          width: 140
+          height: 140
+        '48':
+          width: 140
+          height: 140
+        '49':
+          width: 140
+          height: 140
+

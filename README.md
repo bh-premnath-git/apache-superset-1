@@ -1821,6 +1821,12 @@ References:
 
 ### 21.5 In-Repo Plugin: `state_district_pies`
 
+> **⚠️ Plugin currently disabled pending Cartodiagram spike — see log 2026-04-22**
+>
+> The `plugin-builder` service is commented out in `docker-compose.yml` and the
+> `state_district_pies` dynamic plugin is not being built or registered.
+> The district pie charts now use the built-in Cartodiagram viz instead.
+
 This repository ships the **source tree** for one custom visualization
 plugin under `superset-plugins/plugin-chart-state-district-pies/`. The
 plugin renders an India state choropleth with a proportional pie chart

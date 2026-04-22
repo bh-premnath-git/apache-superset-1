@@ -1,11 +1,23 @@
 # chart.household.state_map
 
-## Purpose
+> **⚠️ Chart removed — see log 2026-04-22**
+>
+> This chart asset has been deleted. The "Households by State" Country Map
+> visualization is no longer part of the Household Survey dashboard.
+>
+> **Replacement**: The dashboard now uses `chart.household.district_pie_unified`
+> (Cartodiagram with per-district segment pies) which provides both state-level
+> context and district-level detail. The State filter controls which state's
+> districts are displayed.
+>
+> See [chart.household.district_pie_unified](chart.household.district_pie_unified.md).
 
-Interactive India map showing household counts by state. Uses Superset's built-in **Country Map** visualization with India boundaries.
+## Purpose (historical)
 
-## Source of truth
-- File: `assets/charts/household_state_map.yaml`
+Interactive India map showing household counts by state. Used Superset's built-in **Country Map** visualization with India boundaries.
+
+## Source of truth (historical)
+- ~~File: `assets/charts/household_state_map.yaml`~~ **Deleted**
 - Kind: `Chart`
 - Runtime name: `Households by State`
 - `vizType`: `country_map`

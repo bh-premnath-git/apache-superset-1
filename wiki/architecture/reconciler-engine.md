@@ -53,7 +53,7 @@ Effect:
 - one failed dataset only blocks charts that reference that specific dataset
 - unrelated assets can still reconcile successfully
 
-This is important for mixed repos where household assets and sample sales assets coexist.
+This isolates failures so one broken chart does not block the entire dashboard.
 
 ## Error visibility improvement
 
@@ -91,23 +91,18 @@ splits `12 // N` columns per chart.
 - `fullWidthFirst` — how many leading charts get their own full-width row.
   The rest fall back to `chartsPerRow`.
 
-The Household Survey dashboard uses the combination below to reproduce the
-reference layout (the two hero charts on their own rows, then three rows of
-two):
+The Household Survey dashboard uses the combination below:
 
 ```yaml
 spec:
   fullWidthFirst: 2
   chartsPerRow: 2
   chartRefs:
-    - chart.household.rural_segment_comparison    # full row
-    - chart.household.state_map                   # full row
-    - chart.household.district_pie_bihar          # row 3 col 1
-    - chart.household.district_pie_jharkhand      # row 3 col 2
-    - chart.household.district_pie_madhya_pradesh # row 4 col 1
-    - chart.household.minor_structure             # row 4 col 2
-    - chart.household.segment_distribution_pie    # row 5 col 1
-    - chart.household.state_segment_distribution_bar  # row 5 col 2
+    - chart.household.rural_segment_comparison      # full row
+    - chart.household.district_pie_unified        # full row (state-filterable map)
+    - chart.household.minor_structure               # row 3 col 1
+    - chart.household.segment_distribution_pie      # row 3 col 2
+    - chart.household.state_segment_distribution_bar # row 4 col 1
 ```
 
 The reconciler compares the desired and existing `position_json` and

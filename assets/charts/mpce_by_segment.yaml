@@ -1,0 +1,55 @@
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.mpce_by_segment
+  name: "Average Monthly Per Capita Consumption Expenditure by Segment (Weighted)"
+spec:
+  datasetRef: dataset.household.mpce_by_segment
+  vizType: echarts_timeseries_line
+  params:
+    viz_type: echarts_timeseries_line
+    row_limit: 10
+    x_axis: segment
+    x_axis_sort_asc: true
+    # Line series with scatter points
+    metrics:
+      - label: mean_mpce
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: am_mean_mpce
+        sqlExpression: MAX(mean_mpce)
+    # Error bar configuration using annotations
+    annotation_layers:
+      - name: Error Bars
+        annotationType: FORMULA
+        show: true
+        hideLine: true
+        symbol: none
+        width: 0
+        opacity: 0.8
+        style: solid
+        color: "#E53935"
+    # Show data labels
+    show_value: true
+    value_formatter: ".0f"
+    # Line styling
+    lineStyle:
+      width: 2
+      color: "#1976D2"
+    # Symbol styling
+    symbol: circle
+    symbolSize: 8
+    # Axis titles
+    x_axis_title: Segment
+    y_axis_title: Mean MPCE (Rs.)
+    y_axis_format: ",.0f"
+    # Overall means in subtitle
+    subtitle: ""
+    # Color scheme
+    color_scheme: supersetColors
+    # Smooth line
+    smooth: false
+    # Tooltip
+    rich_tooltip: true
+    # Legend
+    show_legend: false

@@ -35,4 +35,3 @@ That follows the repo convention that secrets and environment-specific connectio
 
 ## Related pages
 - [dataset.household.hh_master](dataset.household.hh_master.md)
-- [dataset.sales.orders](dataset.sales.orders.md)

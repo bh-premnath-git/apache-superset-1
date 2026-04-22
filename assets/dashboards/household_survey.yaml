@@ -5,52 +5,44 @@ metadata:
   name: Household Survey Overview
 spec:
   slug: household-survey
-  chartHeight: 100
+  chartHeight: 55
   # Layout rules:
-  # - `fullWidthFirst: 2` → the first two chartRefs (Rural Segments table and
-  #   the India state map) each get their own full-width row.
-  # - `chartsPerRow: 2` → remaining charts render in two columns per row after
-  #   the two full-width lead charts.
-  # - `chartHeights` → per-chart height override. The state map needs more
-  #   vertical space than the default so India is clearly readable.
+  # - `fullWidthFirst: 2` → first two charts (Rural Segments table and
+  #   District Segments map) each get their own full-width row.
+  # - `chartsPerRow: 2` → remaining charts render in two columns per row.
+  # - `chartHeights` → per-chart height overrides. Only rural_segment_comparison
+  #   is large (data-dense table). All others use compact height.
   fullWidthFirst: 2
   chartsPerRow: 2
   crossFiltersEnabled: true
   chartHeights:
-    chart.household.state_map: 130
+    chart.household.rural_segment_comparison: 120
   chartRefs:
     - chart.household.rural_segment_comparison
-    - chart.household.state_map
-    - chart.household.district_pie_bihar
-    - chart.household.district_pie_jharkhand
-    - chart.household.district_pie_madhya_pradesh
+    - chart.household.district_pie_unified
     - chart.household.minor_structure
     - chart.household.segment_distribution_pie
     - chart.household.state_segment_distribution_bar
-  # Cross-filtering enabled via crossFiltersEnabled: clicking a state on the
-  # map filters the rural segments table and other compatible charts.
+    - chart.household.mpce_by_segment
+  # Cross-filtering enabled via crossFiltersEnabled.
   #
   # ── Dashboard-level native filters ─────────────────────────────────────────
-  # The UI previously showed "No global filters are currently added" because
-  # `native_filter_configuration` was missing from json_metadata. These
-  # declarations are translated into that array by the reconciler.
-  #
-  # Filter matching in Superset is by column NAME on the target dataset —
-  # a filter's extraFormData is applied only to charts whose datasource has
-  # the named column. That means these filters only meaningfully affect the
-  # two hh_master-backed charts (state_map, rural_segment_comparison); the
-  # pre-aggregated LCA segment views use a different schema and are
-  # unaffected by design.
+  # The State filter now controls the unified district pie chart (defaults to
+  # Bihar when no selection). Filter matching is by column NAME on the target
+  # dataset — the unified chart uses state_district_segment_geo which has
+  # state_label for filtering.
   nativeFilters:
     - key: filter.household.state
       name: State
       filterType: filter_select
-      description: Filter households by Indian state / union territory.
+      description: Filter districts by state. Defaults to Bihar.
       targets:
         - datasetRef: dataset.household.hh_master
           column: State_label
+        - datasetRef: dataset.household.state_district_segment_geo
+          column: state_label
       controlValues:
-        multiSelect: true
+        multiSelect: false
         enableEmptyFilter: false
         defaultToFirstItem: false
         inverseSelection: false

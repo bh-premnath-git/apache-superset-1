@@ -1,5 +1,15 @@
 # chart.household.state_district_pies
 
+> **⚠️ Plugin currently disabled pending Cartodiagram spike — see log 2026-04-22**
+>
+> This chart asset has been deleted. The `state_district_pies` custom dynamic
+> plugin is not being built (plugin-builder disabled).
+>
+> **Update 2026-04-22**: The three separate state Cartodiagrams that temporarily
+> replaced this plugin have been consolidated into a single unified chart
+> (`chart.household.district_pie_unified`) controlled by the dashboard State filter.
+> See [chart.household.district_pie_unified](chart.household.district_pie_unified.md).
+
 ## Purpose
 
 India state choropleth with a small proportional pie overlaid at every
@@ -81,5 +91,5 @@ state and district columns:
 ## Related pages
 
 - [Custom Viz Plugin architecture](../architecture/custom-viz-plugin.md)
-- [chart.household.state_map](chart.household.state_map.md)
+- [chart.household.district_pie_unified](chart.household.district_pie_unified.md) — Current unified Cartodiagram approach
 - [dataset.household.hh_master](dataset.household.hh_master.md)

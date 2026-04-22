@@ -50,6 +50,7 @@ CELERY_CONFIG = CeleryConfig
 FEATURE_FLAGS = {
     "ALERT_REPORTS": True,
     "EMBEDDED_SUPERSET": True,
+    "SQLLAB_BACKEND_PERSISTENCE": True,
     # Handlebars charts need <style> tags and inline styles to render.
     # ESCAPE_MARKDOWN_HTML must be False so HTML is not entity-escaped.
     # HTML_SANITIZATION must be True with schema extensions that whitelist
@@ -81,6 +82,7 @@ THEME_DEFAULT = {
     "token": {
         "brandLogoUrl": "/static/assets/images/logo.svg",
         "brandLogoHref": "/",
+        "colorPrimary": "#000000",
     },
 }
 THEME_DARK = {

@@ -1,5 +1,11 @@
 # Custom Viz Plugin — State + District Pies
 
+> **⚠️ Plugin currently disabled pending Cartodiagram spike — see log 2026-04-22**
+>
+> The `plugin-builder` service is commented out in `docker-compose.yml`.
+> The district pie charts (`chart.household.district_pie_*`) now use the built-in
+> Cartodiagram viz instead of this custom plugin.
+
 ## Why this exists
 
 The reference screenshot for the Household Survey dashboard shows a state-level

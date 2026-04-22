@@ -1,0 +1,14 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.mpce_by_segment
+  name: MPCE by LCA Segment
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_mpce_by_segment
+  metrics:
+    - metric_name: count
+      expression: COUNT(*)
+    - metric_name: weighted_mean_mpce
+      expression: SUM(mean_mpce * weighted_count) / NULLIF(SUM(weighted_count), 0)
