@@ -9,5 +9,8 @@ spec:
   table: vw_state_district_segment_geo
   # Long-form (state, district, segment, hh_weight) with a `geometry` column
   # containing a GeoJSON Point ({"type":"Point","coordinates":[lon,lat]}).
-  # Feeds the built-in Cartodiagram plugin — the native pie sub-chart groups
-  # by segment, and Cartodiagram injects `geometry` as the map anchor.
+  # Current consumer: `chart.household.district_pie_unified`, a 100%-stacked
+  # echarts bar that reads district_name / segment / hh_weight. The
+  # `geometry` column is retained for future map-based charts; the previous
+  # Cartodiagram + pie consumer was removed because the pie sub-chart does
+  # not render under Superset 6.0 (apache/superset#34247).

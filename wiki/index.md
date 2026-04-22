@@ -13,13 +13,13 @@
 ## Assets
 - [db.analytics](assets/db.analytics.md) — Declarative analytics database connection used by datasets.
 - [dataset.household.hh_master](assets/dataset.household.hh_master.md) — Household survey dataset over `household.hh_master`.
-- [dataset.household.state_district_segment_geo](assets/dataset.household.state_district_segment_geo.md) — LCA segment dataset with district centroids for Cartodiagram.
+- [dataset.household.state_district_segment_geo](assets/dataset.household.state_district_segment_geo.md) — LCA segment dataset with district centroids (centroids retained for future map-based charts; current consumer is a stacked bar).
 - [chart.household.rural_segment_comparison](assets/chart.household.rural_segment_comparison.md) — Handlebars-based rural segment comparison table.
-- [chart.household.district_pie_unified](assets/chart.household.district_pie_unified.md) — Cartodiagram map with per-district segment pies, filterable by state.
+- [chart.household.district_pie_unified](assets/chart.household.district_pie_unified.md) — Echarts 100% stacked bar: per-district segment mix for the state pinned by the State filter. Replaced the Cartodiagram + pie sub-chart combo that did not render under Superset 6.0 (see wiki log 2026-04-22).
 - `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment.
 - `chart.household.segment_distribution_pie` — weighted overall segment mix across the three states.
 - `chart.household.state_segment_distribution_bar` — weighted segment mix within each state (3 bars).
-- [dashboard.household.survey](assets/dashboard.household.survey.md) — Household dashboard with rural comparison table and state-filterable district map.
+- [dashboard.household.survey](assets/dashboard.household.survey.md) — Household dashboard with rural comparison table and state-filterable district segments bar.
 
 ### Historical/deprecated
 - [chart.household.state_map](assets/chart.household.state_map.md) — **Removed** (was Country Map viz showing households by state).

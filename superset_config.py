@@ -58,6 +58,17 @@ FEATURE_FLAGS = {
     # See: https://github.com/apache/superset/issues/30381
     "ESCAPE_MARKDOWN_HTML": False,
     "HTML_SANITIZATION": True,
+    # "Drill by" (pivot to another dimension) and "Drill to detail" (show
+    # underlying rows) are GA since Superset 4.x and default-true since
+    # https://github.com/apache/superset/pull/26637, but we set them
+    # explicitly so the dashboard's "drill by on every chart" contract is
+    # visible in config and survives upstream default changes.
+    # Scope (Superset 6.0): the right-click menu exposes these on every
+    # Echarts plugin (pie, bar, line, area, scatter, etc.), Table, Pivot
+    # Table and World Map. Legacy deck.gl maps and Handlebars charts are
+    # upstream exceptions and do not expose the context menu today.
+    "DRILL_BY": True,
+    "DRILL_TO_DETAIL": True,
 }
 
 # Allow <style> tags and style/class attributes through the HTML sanitizer
