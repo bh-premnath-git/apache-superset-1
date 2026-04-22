@@ -67,7 +67,7 @@ state and district columns:
 |--------|-------|-----|
 | Chart shows "GeoJSON fetch failed" | Either URL is 404 or CORS-blocked | Publish geojson at the configured URL; confirm it resolves via curl on the container |
 | Base map renders, no pies | District geojson loaded but no `censuscode` matches data | Confirm `district_feature_key_prop` matches the property name in the geojson; confirm codes in data and geojson use the same encoding (e.g. both census 2011) |
-| "Unknown viz type" placeholder | Dynamic plugin bundle not registered | Set `$STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL`; let the reconciler run |
+| "Unknown viz type" placeholder | Dynamic plugin bundle not registered | Confirm `plugin-builder` exited 0 (`docker compose logs plugin-builder`) and `/plugin-dist/bundle-url.txt` is populated; the `reconciler_entrypoint.sh` wrapper exports `STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL` from that file. For CDN-hosted bundles, set the env var explicitly before `docker compose up`. |
 | Pies clipping at state borders | Centroid fell near a coastline or disputed region | Use a higher-fidelity geojson — the default 5% simplification places a few centroids poorly |
 
 ## Related files
