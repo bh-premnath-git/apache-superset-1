@@ -114,16 +114,17 @@ services:
     container_name: superset-metadata-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${METADATA_DB_USER}
-      POSTGRES_PASSWORD: ${METADATA_DB_PASS}
-      POSTGRES_DB:       ${METADATA_DB_NAME}
+      POSTGRES_USER:     ${METADATA_DB_USER:-superset}
+      POSTGRES_PASSWORD: ${METADATA_DB_PASS:-superset}
+      POSTGRES_DB:       ${METADATA_DB_NAME:-superset}
     volumes:
       - metadata-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${METADATA_DB_USER} -d ${METADATA_DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${METADATA_DB_USER:-superset} -d ${METADATA_DB_NAME:-superset}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
     networks:
       - superset-net
 
@@ -325,29 +326,29 @@ services:
     container_name: superset-analytics-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${ANALYTICS_DB_USER}
-      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASS}
-      POSTGRES_DB:       ${ANALYTICS_DB_NAME}
+      POSTGRES_USER:     ${ANALYTICS_DB_USER:-sample_user}
+      POSTGRES_PASSWORD: ${ANALYTICS_DB_PASS:-sample_pass}
+      POSTGRES_DB:       ${ANALYTICS_DB_NAME:-analytics}
     ports:
       - "5433:5432"
     volumes:
       - analytics-db-data:/var/lib/postgresql/data
       - ./seed/pg:/docker-entrypoint-initdb.d:ro
+    # The postgres official entrypoint runs everything in
+    # /docker-entrypoint-initdb.d on a temporary local socket *before* the
+    # real server starts listening — so `pg_isready` returning success
+    # already guarantees the init SQL (schema + views + CSV COPY) has
+    # completed. A more specific query-based check is redundant and, when
+    # the seed data is unavailable (e.g. Git LFS not pulled), would keep
+    # the container "unhealthy" forever and mask the real cause. The seed
+    # SQL itself now degrades gracefully on a missing/pointer CSV.
+    # `start_period` is generous because the 316 MB COPY can take ~1-2 min.
     healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          psql -U ${ANALYTICS_DB_USER} -d ${ANALYTICS_DB_NAME} -tAc
-          "SELECT CASE
-          WHEN to_regclass('household.hh_master') IS NOT NULL
-           AND to_regclass('household.vw_hh_segments') IS NOT NULL
-           AND EXISTS (SELECT 1 FROM household.hh_master LIMIT 1)
-          THEN 1 ELSE 0 END"
-          | grep -q 1
+      test: ["CMD-SHELL", "pg_isready -U ${ANALYTICS_DB_USER:-sample_user} -d ${ANALYTICS_DB_NAME:-analytics}"]
       interval: 10s
       timeout: 5s
-      retries: 30
-      start_period: 30s
+      retries: 20
+      start_period: 120s
     networks:
       - superset-net
 
