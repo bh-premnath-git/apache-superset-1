@@ -463,6 +463,34 @@ class ChartReconciler(Reconciler):
             "viz_type": viz_type,
             **(spec.get("params") or {}),
         }
+
+        # Cartodiagram references another chart by key; Superset expects
+        # form_data.selected_chart to be a doubly JSON-encoded string of the
+        # sub-chart's slice record. Resolve the reference to a runtime id,
+        # fetch the chart record via the API, and inject.
+        sub_ref = spec.get("selectedChartRef")
+        if sub_ref:
+            sub_id = ctx.resolve("Chart", sub_ref)
+            if sub_id is None:
+                raise SkipAsset(
+                    f"selectedChartRef '{sub_ref}' not applied yet"
+                )
+            sub_row = client.get(f"/api/v1/chart/{sub_id}").get("result") or {}
+            if not sub_row:
+                raise SkipAsset(
+                    f"selectedChartRef '{sub_ref}' (id={sub_id}) not found"
+                )
+            # sub_row["params"] is already a JSON string in Superset's
+            # storage. Re-serialize the outer wrapper as a JSON string so
+            # Cartodiagram's buildQuery sees a stringified-slice-record
+            # whose inner `params` is itself a stringified form_data.
+            params["selected_chart"] = json.dumps({
+                "id": sub_id,
+                "slice_name": sub_row.get("slice_name", ""),
+                "viz_type": sub_row.get("viz_type", ""),
+                "params": sub_row.get("params", "{}"),
+            })
+
         base_payload = {
             "slice_name": asset.name,
             "viz_type": viz_type,
