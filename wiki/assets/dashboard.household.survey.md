@@ -14,8 +14,9 @@ Household-facing dashboard for the household survey part of the repository.
 - `chart.household.rural_segment_comparison` — Handlebars table comparing rural household segments (full-width)
 - `chart.household.district_pie_unified` — Cartodiagram map with per-district segment pies (full-width, state-filterable)
 - `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment
-- `chart.household.segment_distribution_pie` — Overall segment distribution pie
+- `chart.household.segment_distribution_pie` — Overall segment distribution pie (acts as the shared segment legend — colors are stable across every chart via `supersetColors`)
 - `chart.household.state_segment_distribution_bar` — Per-state segment stacked bar
+- `chart.household.mpce_by_segment` — MPCE (monthly per-capita expenditure) line by segment
 
 ## Layout configuration
 
@@ -43,20 +44,76 @@ spec:
     - chart.household.state_segment_distribution_bar
 ```
 
-## State filter
+## Data exploration story
 
-The dashboard includes a **State** native filter that controls the unified district pie chart:
+The dashboard is designed so a reader can narrow from "all rural India
+segments" down to a single district and see every chart stay in sync.
+There are four complementary mechanisms:
 
-- **Default behavior**: Shows all three states (Bihar, Jharkhand, Madhya Pradesh) when no filter applied
-- **Filter options**: 36 Indian states/UTs from the hh_master dataset
-- **Effect**: Selecting a state filters the Cartodiagram to show only that state's districts
-- **Target datasets**: Both `dataset.household.hh_master` and `dataset.household.state_district_segment_geo`
+### 1. Native filters (top-right filter bar)
 
-To use:
-1. Open the filter panel (top-right)
-2. Select a state from the dropdown (e.g., "Bihar")
-3. The **District Segments by State** map zooms to that state
-4. Clear the filter to see all states again
+| Filter | Default | Targets | What it narrows |
+|--------|---------|---------|-----------------|
+| **State** | Bihar (first alphabetically) | `hh_master`, `state_district_segment_geo` | Rural Segments table + District Segments map |
+| **Sector** | unset | `hh_master` | Rural Segments table only |
+| **Social group of HH head** | unset | `hh_master` | Rural Segments table only |
+
+**Filter coverage gap (known):** the four pre-aggregated LCA views
+(`segment_distribution`, `segment_minor_bucket`,
+`state_segment_distribution`, `mpce_by_segment`) don't carry
+`Sector_label` / `Social_Group_of_HH_Head_label` columns, so those
+filters have no effect on the summary charts. Extending coverage would
+require rebuilding those views to aggregate by the extra dimensions.
+
+### 2. Cross-filters
+
+`crossFiltersEnabled: true` at the dashboard level (see
+`household_survey.yaml` line 17). Clicking a pie slice on the District
+Segments map or a cell in the Rural Segments table pins that value as an
+ephemeral filter that propagates to every other chart whose dataset
+exposes the clicked column. Clear a cross-filter from the small chip
+that appears above the dashboard.
+
+### 3. Drill to detail (Superset 5.x built-in)
+
+Right-click any chart → **Drill to detail** → Superset shows the raw
+rows from the source dataset that feed the aggregated cell. No
+per-chart YAML configuration — the feature is enabled automatically.
+Useful for: "which 4 households in Bhagalpur landed in the R1 slice?"
+
+### 4. Drill by (Superset 5.x built-in)
+
+Right-click any chart → **Drill by** → pick another column from the
+dataset → Superset opens a chart pivoted on that dimension. Useful
+sequence:
+
+1. On the **Segment Distribution** pie → drill by `state_label` →
+   segment share per state.
+2. On **State Segment Distribution** bar → drill by `segment_order` →
+   per-segment ordering within each state.
+3. On **Rural Segments** table → drill by `district_code` → district
+   counts within the currently-selected state.
+
+Drill-by uses the same dataset columns the chart already references, so
+it "just works" for charts whose dataset carries rich dimensions
+(notably `hh_master` and `state_district_segment_geo`).
+
+### Recommended exploration flow
+
+1. Load the dashboard — State filter is pre-pinned to **Bihar**, so the
+   District Segments map renders only Bihar's 38 districts at zoom 6.
+2. Scan the map — CARTO Voyager's state + district outlines make the
+   administrative geography visible under each pie. Hover a pie to read
+   the segment breakdown.
+3. Click a district pie → cross-filter pins that district → the Rural
+   Segments table updates to show just that district's rows.
+4. Right-click the pinned district → **Drill to detail** → see the
+   raw households.
+5. Switch the State filter to Jharkhand or Madhya Pradesh to repeat.
+6. For summary-chart exploration (segment distribution, MPCE, minor
+   structure), use **Drill by** on each chart — those views are
+   aggregated across all three states so the State filter doesn't
+   apply.
 
 ## Operational notes
 
