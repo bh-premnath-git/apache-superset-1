@@ -24,8 +24,7 @@ WITH base AS (
             COALESCE(h.internet_val_total,0) +
             COALESCE(h.clothing_val_total,0) +
             COALESCE(h.footwear_val_total,0)
-        ) / NULLIF(h.hh_size, 0) AS mpce,
-        s.wt
+        ) / NULLIF(h.hh_size, 0) AS mpce
     FROM household.vw_hh_segments s
     JOIN household.hh_master h ON h."HHID" = s.hhid
     WHERE (
@@ -45,14 +44,26 @@ WITH base AS (
         COALESCE(h.footwear_val_total,0)
     ) > 0
 ),
-segment_stats AS (
+-- Weighted mean per segment, materialised as its own CTE so the stddev
+-- calculation below can reference it without nesting aggregates (Postgres
+-- rejects SUM(... SUM(...) ...) with "aggregate function calls cannot be
+-- nested").
+segment_mean AS (
     SELECT
         segment,
+        SUM(mpce * wt) / NULLIF(SUM(wt), 0) AS wmean,
+        SUM(wt)                             AS weighted_count
+    FROM base
+    GROUP BY segment
+),
+segment_stats AS (
+    SELECT
+        b.segment,
         CASE
-            WHEN segment IN ('R1','R2','R3','R4') THEN 'Rural'
+            WHEN b.segment IN ('R1','R2','R3','R4') THEN 'Rural'
             ELSE 'Urban'
         END AS sector,
-        CASE segment
+        CASE b.segment
             WHEN 'R1' THEN 1
             WHEN 'R2' THEN 2
             WHEN 'R3' THEN 3
@@ -61,15 +72,16 @@ segment_stats AS (
             WHEN 'U2' THEN 6
             WHEN 'U3' THEN 7
         END AS segment_order,
-        ROUND((SUM(mpce * wt) / NULLIF(SUM(wt), 0))::numeric, 0) AS mean_mpce,
+        ROUND(MAX(m.wmean)::numeric, 0) AS mean_mpce,
         ROUND(
             SQRT(
-                (SUM(wt * (mpce - (SUM(mpce * wt) / NULLIF(SUM(wt), 0)))^2) / NULLIF(SUM(wt), 0))::numeric
+                (SUM(b.wt * (b.mpce - m.wmean)^2) / NULLIF(SUM(b.wt), 0))::numeric
             ), 0
         ) AS stddev_mpce,
-        SUM(wt) AS weighted_count
-    FROM base
-    GROUP BY segment
+        MAX(m.weighted_count) AS weighted_count
+    FROM base b
+    JOIN segment_mean m USING (segment)
+    GROUP BY b.segment
 ),
 rural_overall AS (
     SELECT
