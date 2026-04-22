@@ -37,6 +37,7 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 
 ### Control-plane runtime
 - `docker/scripts/seed_dashboard.py`
+- `docker/scripts/reconciler_entrypoint.sh` — injects `STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL` from the `plugin-dist` volume before execing the reconciler
 
 ### Declarative assets
 - `assets/databases/*.yaml`
@@ -51,7 +52,7 @@ The reconciler continuously watches YAML assets and applies them to Superset thr
 - `seed/pg/HH.master.csv`
 
 ### In-repo custom plugins (source)
-- `superset-plugins/plugin-chart-state-district-pies/` — React/TypeScript source for the `state_district_pies` dynamic plugin
+- `superset-plugins/plugin-chart-state-district-pies/` — React/TypeScript source for the `state_district_pies` dynamic plugin; built in-stack by the `plugin-builder` service (node:lts-alpine3.22) and served by Superset at `/static/assets/plugins/state-district-pies/main.<contenthash>.js`
 
 ## Current key runtime truths
 

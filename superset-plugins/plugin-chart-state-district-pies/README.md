@@ -96,9 +96,25 @@ Suggested sources:
 
 ## Build
 
+The default flow builds this plugin inside the Compose stack via the
+`plugin-builder` service (`node:lts-alpine3.22`), which emits a
+content-hashed UMD bundle (`dist/main.<hash>.js`) plus `dist/bundle-url.txt`
+into a named volume consumed by both `superset` (for serving) and
+`superset-runtime-seed` (for registration). No host-side Node toolchain is
+required.
+
+```bash
+# From the repo root
+docker compose up -d --build
+# ...or rebuild just the plugin after editing source:
+docker compose up -d --force-recreate plugin-builder superset-runtime-seed
+```
+
+For out-of-stack iteration, the direct npm commands still work:
+
 ```bash
 npm install
-npm run build            # emits dist/main.js (UMD)
+npm run build            # emits dist/main.<hash>.js (UMD) + dist/bundle-url.txt
 npm run serve            # dev server on http://localhost:8080
 ```
 

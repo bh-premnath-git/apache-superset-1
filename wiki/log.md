@@ -88,6 +88,30 @@
   the existing `position_json` and rewrites it on difference, so layout spec
   changes take effect on re-reconcile without needing to drop the dashboard.
 
+## [2026-04-22] feature | Compose-native plugin build for state_district_pies
+- Replaced the "build on host, publish to CDN" flow for the
+  `state_district_pies` dynamic plugin with a one-shot `plugin-builder`
+  service (`node:lts-alpine3.22`) in `docker-compose.yml`. Builds the UMD
+  bundle inside the Compose stack; no host-side Node toolchain needed.
+- New named volumes `plugin-dist` and `plugin-node-modules`. `plugin-dist`
+  is mounted read-only into `superset` at
+  `/app/superset/static/assets/plugins/state-district-pies/` so Superset
+  serves the bundle same-origin, and read-only into `superset-runtime-seed`
+  at `/plugin-dist/` so the reconciler can resolve the URL.
+- Webpack now emits `main.<contenthash>.js` plus `dist/bundle-url.txt`
+  (`/static/assets/plugins/state-district-pies/main.<hash>.js`). Content
+  hash busts Superset's URL-keyed dynamic-plugin cache on every rebuild.
+- New `docker/scripts/reconciler_entrypoint.sh` wraps
+  `seed_dashboard.py`: reads `bundle-url.txt` and exports
+  `STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL`, but honors an already-set value
+  so external-CDN deployments keep working.
+- `superset` and `superset-runtime-seed` both `depends_on: plugin-builder`
+  with `condition: service_completed_successfully` — reconciler waits for
+  a successful build before registering the plugin.
+- Rebuild loop:
+  `docker compose up -d --force-recreate plugin-builder superset-runtime-seed`
+  after editing plugin source.
+
 ## [2026-04-21] fix | Household Survey polish — duplicate titles, state-map visibility, cross-filters
 - Each district pie chart rendered its title **twice**: once as the Superset
   chart header (from `metadata.name`) and again as an inline

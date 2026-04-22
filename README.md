@@ -1871,18 +1871,35 @@ superset-plugins/
 
 #### Build and register
 
+The default Compose stack builds the bundle for you. A dedicated
+`plugin-builder` service (`node:lts-alpine3.22`) runs `npm install && npm
+run build` once at startup and writes the UMD bundle into a shared named
+volume (`plugin-dist`). Superset mounts that volume at
+`/app/superset/static/assets/plugins/state-district-pies/` and serves the
+bundle from its own origin.
+
+The webpack config emits `main.<contenthash>.js` and writes the resolved
+URL to `dist/bundle-url.txt`. A wrapper entrypoint on the
+`superset-runtime-seed` container reads that file and exports
+`STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL=/static/assets/plugins/state-district-pies/main.<hash>.js`
+before execing the reconciler — so cache-busting is automatic.
+
 ```bash
-# 1. Build the UMD bundle
-cd superset-plugins/plugin-chart-state-district-pies
-npm install && npm run build
-# emits dist/main.js
+# First boot: nothing to do — `docker compose up -d --build` triggers the
+# plugin-builder service; `superset` and `superset-runtime-seed` gate on
+# its successful completion via `depends_on`.
 
-# 2. Host dist/main.js on any static origin (CDN, S3, container volume)
+# After editing plugin source:
+docker compose up -d --force-recreate plugin-builder superset-runtime-seed
+```
 
-# 3. Point the plugin YAML at the hosted URL via env var
+To override for an external CDN (staging/prod deployment with a published
+bundle), set the env var before the stack starts and the wrapper keeps
+that value:
+
+```bash
 export STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL=https://static.example.com/superset-plugins/state-district-pies/main.js
-
-# 4. The PluginReconciler picks it up on the next reconcile pass
+docker compose up -d
 ```
 
 See [`wiki/architecture/custom-viz-plugin.md`](wiki/architecture/custom-viz-plugin.md)
