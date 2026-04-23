@@ -8,19 +8,18 @@ spec:
   chartHeight: 55
   # Layout rules:
   # - `fullWidthFirst: 2` → first two charts (Rural Segments table and
-  #   District Segments stacked bar) each get their own full-width row.
+  #   District Segments Cartodiagram) each get their own full-width row.
   # - `chartsPerRow: 2` → remaining charts render in two columns per row.
   # - `chartHeights` → per-chart height overrides. The Rural Segments table
-  #   and the District Segments bar chart both need extra vertical space;
+  #   and the District Segments map both need extra vertical space;
   #   all other charts use the compact default (55).
   fullWidthFirst: 2
   chartsPerRow: 2
   crossFiltersEnabled: true
   chartHeights:
     chart.household.rural_segment_comparison: 105
-    # District-level stacked bar needs room for ~38 rotated x-axis labels
-    # plus the scroll legend on top.
-    chart.household.district_pie_unified: 80
+    # District-level Cartodiagram needs extra room for pies + map interaction.
+    chart.household.district_pie_unified: 95
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
@@ -30,7 +29,7 @@ spec:
     - chart.household.mpce_by_segment
   # ── Data exploration story (see wiki/assets/dashboard.household.survey.md) ─
   # 1. Native filters narrow the slice (State / Sector / Social Group).
-  # 2. Cross-filters propagate clicks: click a district bar in District
+  # 2. Cross-filters propagate clicks: click a district pie in District
   #    Segments by State → it pins the district across the other charts.
   #    Enabled via crossFiltersEnabled.
   # 3. Right-click any echarts / table / pivot-table cell → "Drill to detail"
@@ -42,9 +41,8 @@ spec:
   #    menu — cross-filters remain the interaction path there.
   #
   # ── Native filters ─────────────────────────────────────────────────────────
-  # State filter controls the District Segments bar (single select so only
-  # one state's ~38 districts render at a time — with all 112 districts
-  # the x-axis labels overlap into an unreadable smear).
+  # State filter controls the District Segments Cartodiagram (single select so
+  # only one state's districts render at a time, keeping pies readable).
   # defaultToFirstItem=true pins the first alphabetical state (Bihar) on
   # dashboard load so the chart is readable immediately; the user can
   # switch to Jharkhand or Madhya Pradesh via the filter bar.
@@ -62,7 +60,7 @@ spec:
       name: State
       filterType: filter_select
       description: >-
-        Narrow the District Segments bar chart + Rural Segments table to one
+        Narrow the District Segments map + Rural Segments table to one
         state. Defaults to Bihar; switch to Jharkhand or Madhya Pradesh via
         this filter. Does not affect the four summary charts (they're
         aggregated across all three states).

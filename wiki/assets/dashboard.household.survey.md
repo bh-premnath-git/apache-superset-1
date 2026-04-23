@@ -12,7 +12,7 @@ Household-facing dashboard for the household survey part of the repository.
 
 ## Current chart refs
 - `chart.household.rural_segment_comparison` — Handlebars table comparing rural household segments (full-width)
-- `chart.household.district_pie_unified` — Echarts 100% stacked bar: per-district segment mix for the state currently pinned by the **State** filter (full-width)
+- `chart.household.district_pie_unified` — Cartodiagram with per-district pies for the state currently pinned by the **State** filter (full-width)
 - `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment
 - `chart.household.segment_distribution_pie` — Overall segment distribution pie (acts as the shared segment legend — colors are stable across every chart via `supersetColors`)
 - `chart.household.state_segment_distribution_bar` — Per-state segment stacked bar
@@ -25,8 +25,8 @@ The dashboard uses:
 - `chartHeight: 55` — compact default vertical space for charts
 - `chartHeights` — per-chart height overrides for the two data-dense full-width charts:
   - Rural Segments table: `105`
-  - District Segments bar: `80` (room for ~38 rotated x-axis labels + scroll legend)
-- `fullWidthFirst: 2` — first two charts (Rural Segments table and District Segments bar) get full-width rows
+  - District Segments Cartodiagram: `95` (room for pie markers + map controls)
+- `fullWidthFirst: 2` — first two charts (Rural Segments table and District Segments Cartodiagram) get full-width rows
 - `chartsPerRow: 2` — remaining charts pair up side-by-side
 
 Example from `household_survey.yaml`:
@@ -38,7 +38,7 @@ spec:
   chartsPerRow: 2
   chartHeights:
     chart.household.rural_segment_comparison: 105
-    chart.household.district_pie_unified: 80
+    chart.household.district_pie_unified: 95
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
@@ -58,7 +58,7 @@ There are four complementary mechanisms:
 
 | Filter | Default | Targets | What it narrows |
 |--------|---------|---------|-----------------|
-| **State** | Bihar (first alphabetically) | `hh_master`, `state_district_segment_geo` | Rural Segments table + District Segments bar |
+| **State** | Bihar (first alphabetically) | `hh_master`, `state_district_segment_geo` | Rural Segments table + District Segments map |
 | **Sector** | unset | `hh_master` | Rural Segments table only |
 | **Social group of HH head** | unset | `hh_master` | Rural Segments table only |
 
@@ -71,8 +71,7 @@ require rebuilding those views to aggregate by the extra dimensions.
 
 ### 2. Cross-filters
 
-`crossFiltersEnabled: true` at the dashboard level. Clicking a stack
-segment on the District Segments bar or a cell in a summary chart pins
+`crossFiltersEnabled: true` at the dashboard level. Clicking a district pie slice on the District Segments map or a cell in a summary chart pins
 that value as an ephemeral filter that propagates to every other chart
 whose dataset exposes the clicked column. Clear a cross-filter from the
 small chip that appears above the dashboard.
@@ -97,7 +96,7 @@ sequence:
    segment share per state.
 2. On **State Segment Distribution** bar → drill by `segment_order` →
    per-segment ordering within each state.
-3. On **District Segments by State** bar → drill by `district_code` →
+3. On **District Segments by State** map → drill by `district_code` →
    district-level counts within the currently-selected state.
 
 Drill-by uses the same dataset columns the chart already references, so
@@ -114,12 +113,12 @@ chart (both support the context menu).
 ### Recommended exploration flow
 
 1. Load the dashboard — State filter is pre-pinned to **Bihar**, so the
-   District Segments bar renders only Bihar's 38 districts.
-2. Scan the bars — segment colours are stable across every chart on the
+   District Segments map renders only Bihar's districts.
+2. Scan the pies — segment colours are stable across every chart on the
    dashboard (via `color_scheme: supersetColors`) so a slice colour on
    this chart matches the same segment in the Segment Distribution pie
    and the State Segment Distribution bar.
-3. Click a stack segment → cross-filter pins that `(district, segment)`
+3. Click a pie slice → cross-filter pins that `(district, segment)`
    → the Rural Segments table + summary charts update in place.
 4. Right-click the pinned segment → **Drill to detail** → see the
    raw households.
