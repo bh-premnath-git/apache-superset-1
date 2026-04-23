@@ -9,3 +9,6 @@ spec:
   table: vw_segment_minor_bucket
   # One row per (segment, minor_bucket) with weighted percentage of
   # households. Rows per segment sum to 100.
+  dimensions:
+    - segment
+    - minor_bucket

@@ -7,6 +7,8 @@ spec:
   databaseRef: db.analytics
   schema: household
   table: vw_mpce_by_segment
+  dimensions:
+    - segment
   metrics:
     - metric_name: count
       expression: COUNT(*)

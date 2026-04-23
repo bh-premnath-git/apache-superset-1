@@ -8,3 +8,6 @@ spec:
   schema: household
   table: vw_state_segment_distribution
   # One row per (state_label, segment) with weighted share within state.
+  dimensions:
+    - state_label
+    - segment

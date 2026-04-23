@@ -7,6 +7,12 @@ spec:
   databaseRef: db.analytics
   schema: household
   table: hh_master
+  dimensions:
+    - State_label
+    - Sector_label
+    - Social_Group_of_HH_Head_label
+    - District
+    - segment
   metrics:
     - metric_name: count
       expression: COUNT(*)
