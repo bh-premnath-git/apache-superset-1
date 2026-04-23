@@ -1,6 +1,12 @@
 import * as React from 'react';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { createRoot } from 'react-dom/client';
+// Superset 6.x ships React 17 as its host runtime and only shares the base
+// `react-dom` module via Module Federation (not the `react-dom/client`
+// subpath). React 17's react-dom has no `createRoot`, so importing from
+// `react-dom/client` resolves to `undefined` at runtime and blows up the
+// extension with `TypeError: (0 , s.H) is not a function`. Use the legacy
+// `ReactDOM.render` API which is present on the shared singleton.
+import * as ReactDOM from 'react-dom';
 
 declare global {
   namespace JSX {
@@ -389,7 +395,7 @@ export function mount(target?: HTMLElement): void {
     el.id = MOUNT_ID;
     document.body.appendChild(el);
   }
-  createRoot(el).render(<ChatbotUI />);
+  ReactDOM.render(<ChatbotUI />, el);
 }
 
 // Superset's ExtensionsLoader calls `container.get('./index')` then invokes
