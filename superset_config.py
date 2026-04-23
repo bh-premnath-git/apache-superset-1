@@ -94,6 +94,7 @@ THEME_DEFAULT = {
         "brandLogoUrl": "/static/assets/images/logo.svg",
         "brandLogoHref": "/",
         "colorPrimary": "#000000",
+        "colorTextLightSolid": "#FFFFFF",
     },
 }
 THEME_DARK = {

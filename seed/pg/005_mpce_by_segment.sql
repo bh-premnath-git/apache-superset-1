@@ -8,7 +8,16 @@
 CREATE OR REPLACE VIEW household.vw_mpce_by_segment AS
 WITH base AS (
     SELECT
-        s.*,
+        s.hhid,
+        s.state_label,
+        s.state_map_name,
+        s.district_code,
+        s.sector_label,
+        s.wt,
+        s.n_children_u15,
+        s.minor_bucket,
+        s.segment,
+        s.segment_band,
         (
             COALESCE(h.cereal_val_total,0) + COALESCE(h.pulses_val_total,0) +
             COALESCE(h.dairy_val_total,0) + COALESCE(h.vegetables_val_total,0) +
@@ -27,7 +36,8 @@ WITH base AS (
         ) / NULLIF(h.hh_size, 0) AS mpce
     FROM household.vw_hh_segments s
     JOIN household.hh_master h ON h."HHID" = s.hhid
-    WHERE (
+    WHERE s.state_label IN ('Bihar', 'Jharkhand', 'Madhya Pradesh')
+      AND (
         COALESCE(h.cereal_val_total,0) + COALESCE(h.pulses_val_total,0) +
         COALESCE(h.dairy_val_total,0) + COALESCE(h.vegetables_val_total,0) +
         COALESCE(h.egg_fish_meat_val_total,0) + COALESCE(h."edible oil_val_total",0) +
@@ -50,11 +60,11 @@ WITH base AS (
 -- nested").
 segment_mean AS (
     SELECT
-        segment,
-        SUM(mpce * wt) / NULLIF(SUM(wt), 0) AS wmean,
-        SUM(wt)                             AS weighted_count
-    FROM base
-    GROUP BY segment
+        b.segment,
+        SUM(b.mpce * b.wt) / NULLIF(SUM(b.wt), 0) AS wmean,
+        SUM(b.wt)                                  AS weighted_count
+    FROM base b
+    GROUP BY b.segment
 ),
 segment_stats AS (
     SELECT
@@ -86,16 +96,16 @@ segment_stats AS (
 rural_overall AS (
     SELECT
         'Rural' AS sector,
-        ROUND((SUM(mpce * wt) / NULLIF(SUM(wt), 0))::numeric, 0) AS overall_mean
-    FROM base
-    WHERE segment IN ('R1','R2','R3','R4')
+        ROUND((SUM(b.mpce * b.wt) / NULLIF(SUM(b.wt), 0))::numeric, 0) AS overall_mean
+    FROM base b
+    WHERE b.segment IN ('R1','R2','R3','R4')
 ),
 urban_overall AS (
     SELECT
         'Urban' AS sector,
-        ROUND((SUM(mpce * wt) / NULLIF(SUM(wt), 0))::numeric, 0) AS overall_mean
-    FROM base
-    WHERE segment IN ('U1','U2','U3')
+        ROUND((SUM(b.mpce * b.wt) / NULLIF(SUM(b.wt), 0))::numeric, 0) AS overall_mean
+    FROM base b
+    WHERE b.segment IN ('U1','U2','U3')
 )
 SELECT
     s.segment,
