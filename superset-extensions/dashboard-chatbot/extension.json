@@ -1,8 +1,8 @@
 {
-  "publisher": "my_org",
-  "name": "dashboard_chatbot",
+  "publisher": "my-org",
+  "name": "dashboard-chatbot",
   "version": "0.1.0",
-  "title": "Dashboard Chatbot",
+  "displayName": "Dashboard Chatbot",
   "description": "Chat assistant extension scaffold for Superset dashboards.",
   "permissions": ["can_read"],
   "frontend": {

@@ -1,3 +1,13 @@
+# ⚠️  CURRENTLY DISABLED — Plugin builder service commented out in docker-compose.yml.
+# The dashboard now uses the built-in `cartodiagram` viz instead (Superset 6.1+).
+# To re-enable this custom plugin:
+#   1. Uncomment plugin-builder service in docker-compose.yml
+#   2. Uncomment plugin-dist volume mounts
+#   3. Set STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL or let builder populate it
+#   4. Change charts from vizType: cartodiagram to vizType: state_district_pies
+#
+# DYNAMIC_PLUGINS is lifecycle:testing (more stable than extensions but may still
+# have API 404 issues in 6.0-6.1 — see https://github.com/apache/superset/issues/35870)
 apiVersion: analytics/v1
 kind: Plugin
 metadata:
@@ -9,16 +19,18 @@ spec:
   # superset-plugins/plugin-chart-state-district-pies/README.md.
   vizType: state_district_pies
 
-  # Bundle URL is resolved from the environment so the repo never carries
-  # a hardcoded CDN hostname. The default Compose flow builds the bundle in
-  # the `plugin-builder` service (node:lts-alpine3.22) and the
-  # `reconciler_entrypoint.sh` wrapper exports
-  # STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL from /plugin-dist/bundle-url.txt
-  # (served by Superset at /static/assets/plugins/state-district-pies/...).
-  #
-  # To override for an external CDN, set the env var before starting the
-  # stack and the wrapper will keep that value.
+  # Bundle URL is what Superset's browser loads at runtime.
+  # Resolution is fully env-driven (see _resolve_bundle_url in seed_dashboard.py):
+  #   1. bundleUrlFromEnv → ready-to-use URL
+  #   2. bundlePathFromEnv → local .js path, combined with staticMountPath
+  #   3. bundleUrl → literal fallback (not used here)
   bundleUrlFromEnv: STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL
+  bundlePathFromEnv: STATE_DISTRICT_PIES_PLUGIN_BUNDLE_PATH
+
+  # staticMountPath tells the reconciler where Superset serves this plugin's
+  # assets so it can convert a local build path to a browser-loadable URL.
+  # Must match the volume mount in docker-compose.yml.
+  staticMountPath: /static/assets/plugins/state-district-pies
 
   description: |
     India state choropleth overlaid with a per-district proportional pie.

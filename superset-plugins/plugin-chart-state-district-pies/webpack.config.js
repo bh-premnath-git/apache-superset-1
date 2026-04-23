@@ -15,20 +15,31 @@ const fs = require('fs');
  * Compose `plugin-builder` flow can feed it into the reconciler.
  */
 
-const STATIC_MOUNT_PATH = '/static/assets/plugins/state-district-pies';
+const PLUGIN_NAME = 'state-district-pies';
+const STATIC_MOUNT_PATH = `/static/assets/plugins/${PLUGIN_NAME}`;
 
 class WriteBundleUrlPlugin {
-  constructor(staticPath) {
+  constructor(staticPath, pluginName) {
     this.staticPath = staticPath;
+    this.pluginName = pluginName;
   }
   apply(compiler) {
     compiler.hooks.done.tap('WriteBundleUrlPlugin', (stats) => {
       const assets = Object.keys(stats.compilation.assets);
       const main = assets.find((a) => /^main\.[^.]+\.js$/.test(a));
       if (!main) return;
+
+      // Write to plugin-specific subdirectory for auto-discovery
+      // e.g., dist/state-district-pies/bundle-url.txt
       const outDir = compiler.options.output.path;
-      fs.writeFileSync(path.join(outDir, 'bundle-url.txt'), `${this.staticPath}/${main}`);
-      fs.writeFileSync(path.join(outDir, 'bundle-name.txt'), main);
+      const pluginDir = path.join(outDir, this.pluginName);
+
+      if (!fs.existsSync(pluginDir)) {
+        fs.mkdirSync(pluginDir, { recursive: true });
+      }
+
+      fs.writeFileSync(path.join(pluginDir, 'bundle-url.txt'), `${this.staticPath}/${main}`);
+      fs.writeFileSync(path.join(pluginDir, 'bundle-name.txt'), main);
     });
   }
 }
@@ -68,11 +79,13 @@ module.exports = (_env, argv) => ({
   },
   externals: {
     react: 'react',
+    'react/jsx-runtime': 'react/jsx-runtime',
+    'react/jsx-dev-runtime': 'react/jsx-dev-runtime',
     'react-dom': 'react-dom',
     '@superset-ui/core': '@superset-ui/core',
     '@superset-ui/chart-controls': '@superset-ui/chart-controls',
   },
-  plugins: [new WriteBundleUrlPlugin(STATIC_MOUNT_PATH)],
+  plugins: [new WriteBundleUrlPlugin(STATIC_MOUNT_PATH, PLUGIN_NAME)],
   devServer: {
     static: path.resolve(__dirname, 'dist'),
     port: 8080,

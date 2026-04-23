@@ -69,6 +69,12 @@ FEATURE_FLAGS = {
     # upstream exceptions and do not expose the context menu today.
     "DRILL_BY": True,
     "DRILL_TO_DETAIL": True,
+    # Dynamic plugins (testing lifecycle) - required for state_district_pies custom viz
+    # API may 404 even when enabled (upstream issue #35870 in 6.0-6.1)
+    "DYNAMIC_PLUGINS": True,
+    # Extensions framework (development lifecycle) - required for chatbot extension
+    # API may 404 even when enabled (upstream discussion #38607)
+    "ENABLE_EXTENSIONS": True,
 }
 
 # Allow <style> tags and style/class attributes through the HTML sanitizer

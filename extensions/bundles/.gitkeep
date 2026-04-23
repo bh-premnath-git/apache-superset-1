@@ -1,0 +1,3 @@
+# This directory holds .supx extension bundles.
+# Place built extension packages here and reference them via env vars:
+#   DASHBOARD_CHATBOT_SUPX_PATH=/app/extensions/my-org.dashboard-chatbot-0.1.0.supx

@@ -733,9 +733,17 @@ class PluginReconciler(Reconciler):
         spec = asset.spec
         bundle_url = _resolve_bundle_url(spec)
         if not bundle_url:
-            env_key = spec.get("bundleUrlFromEnv", "")
-            hint = f"set ${env_key} in .env" if env_key else "set spec.bundleUrl"
-            raise SkipAsset(f"bundle URL not configured ({hint})")
+            url_env = spec.get("bundleUrlFromEnv", "")
+            path_env = spec.get("bundlePathFromEnv", "")
+            if url_env and path_env:
+                hint = f"set ${url_env} or ${path_env} in .env"
+            elif url_env:
+                hint = f"set ${url_env} in .env"
+            elif path_env:
+                hint = f"set ${path_env} in .env (path to built .js file)"
+            else:
+                hint = "set spec.bundleUrl or spec.bundleUrlFromEnv"
+            raise SkipAsset(f"bundle not configured ({hint})")
         if not spec.get("vizType"):
             raise SkipAsset("spec.vizType is required")
 
@@ -906,9 +914,44 @@ def _resolve_sqlalchemy_uri(spec: dict[str, Any]) -> str:
 
 
 def _resolve_bundle_url(spec: dict[str, Any]) -> str:
-    env_key = spec.get("bundleUrlFromEnv")
-    if env_key:
-        return os.getenv(env_key, "")
+    """Resolve plugin bundle URL from env or spec.
+
+    Resolution order (first non-empty wins):
+
+    1. ``bundleUrlFromEnv``  — env var holding a ready-to-use URL
+       (CDN, static-serve path, etc.).
+    2. ``bundlePathFromEnv`` — env var holding a **local filesystem path**
+       to the built ``.js`` file.  Combined with ``staticMountPath``
+       (or derived from ``vizType``) to produce a browser-loadable URL.
+    3. ``bundleUrl``         — literal URL in the spec (last resort).
+
+    All three mechanisms are fully dynamic — no plugin name is hardcoded
+    in this function.
+    """
+    # Priority 1: direct URL from env
+    url_env_key = spec.get("bundleUrlFromEnv")
+    if url_env_key:
+        url = os.getenv(url_env_key, "")
+        if url:
+            return url
+
+    # Priority 2: local build path → derive URL (requires staticMountPath in spec)
+    path_env_key = spec.get("bundlePathFromEnv")
+    if path_env_key:
+        local_path = os.getenv(path_env_key, "")
+        if local_path and os.path.isfile(local_path):
+            mount = spec.get("staticMountPath")
+            if not mount:
+                # Fail fast: staticMountPath must be declared in YAML for path-based loading
+                raise ValueError(
+                    f"Plugin {spec.get('vizType', 'unknown')} declares bundlePathFromEnv "
+                    f"({path_env_key}) but missing required spec.staticMountPath. "
+                    f"Add staticMountPath: /static/assets/plugins/<plugin-dir> to the YAML."
+                )
+            filename = os.path.basename(local_path)
+            return f"{mount.rstrip('/')}/{filename}"
+
+    # Priority 3: literal URL in spec
     return spec.get("bundleUrl", "")
 
 

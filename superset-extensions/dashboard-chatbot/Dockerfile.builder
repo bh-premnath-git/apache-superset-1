@@ -1,0 +1,34 @@
+# Builder for dashboard-chatbot extension
+# Produces a .supx package ready for Superset Extensions framework
+
+FROM node:lts-alpine3.22 AS frontend-build
+WORKDIR /build/frontend
+
+# Copy frontend source
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.11-alpine AS backend-build
+WORKDIR /build
+RUN apk add --no-cache nodejs npm
+RUN pip install apache-superset-extensions-cli
+
+# Copy backend source
+COPY backend/ ./backend/
+COPY extension.json ./
+
+# Copy built frontend from previous stage
+COPY --from=frontend-build /build/frontend/dist ./frontend/dist/
+
+# Build the extension package
+# The superset-extensions CLI packages frontend + backend into .supx
+RUN superset-extensions bundle --output /output/my-org.dashboard-chatbot-0.1.0.supx
+
+# Final stage - just copy the output
+FROM alpine:latest
+WORKDIR /output
+COPY --from=backend-build /output/ .
+CMD ["cp", "*.supx", "/output/"]

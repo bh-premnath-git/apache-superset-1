@@ -11,11 +11,8 @@ volumes:
   superset-home:
   keycloak-db-data:
   keycloak-ssl:
-  # Disabled while evaluating built-in Cartodiagram as a replacement for the
-  # custom state_district_pies plugin. Re-enable with the plugin-builder
-  # service below.
-  # plugin-dist:
-  # plugin-node-modules:
+  plugin-dist:
+  plugin-node-modules:
 
 # ── Re-usable anchor: MCP-specific env (merged on top of *superset-env) ──────
 x-mcp-env: &mcp-env
@@ -82,31 +79,47 @@ x-keycloak-env: &keycloak-env
 
 services:
 
-  # ── Dynamic-plugin builder ──────────────────────────────────────────────────
-  # One-shot Node build for the in-repo `state_district_pies` viz plugin.
-  # Emits `main.<contenthash>.js` + `bundle-url.txt` into the `plugin-dist`
-  # volume, which Superset serves as static content and the reconciler reads
-  # to resolve STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL.
+  # ── Dynamic-plugin builder ────────────────────────────────────────────────
+  # Builds custom viz plugins into /plugin-dist/<name>/ for auto-discovery.
+  # The reconciler entrypoint scans /plugin-dist/*/, derives env vars from
+  # directory names (kebab-case → UPPER_SNAKE + _PLUGIN_BUNDLE_URL).
   #
-  # DISABLED: evaluating the built-in Cartodiagram plugin (Superset 5.0+) as a
-  # zero-code replacement. Plugin source under
-  # superset-plugins/plugin-chart-state-district-pies/ is preserved. When the
-  # env var STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL is unset, the reconciler
-  # skips the state_district_pies plugin asset cleanly (see
-  # docker/scripts/reconciler_entrypoint.sh and
-  # docker/scripts/seed_dashboard.py:_resolve_bundle_url).
-  # plugin-builder:
-  #   image: node:lts-alpine3.22
-  #   container_name: superset-plugin-builder
-  #   restart: "no"
-  #   working_dir: /plugin
-  #   volumes:
-  #     - ./superset-plugins/plugin-chart-state-district-pies:/plugin
-  #     - plugin-node-modules:/plugin/node_modules
-  #     - plugin-dist:/plugin/dist
-  #   command: sh -c "npm install --no-audit --no-fund && npm run build"
-  #   networks:
-  #     - superset-net
+  # NOTE: This is for PLUGINS only (visualization plugins). For EXTENSIONS
+  # (like dashboard-chatbot), build manually with `superset-extensions` CLI:
+  #   cd superset-extensions/dashboard-chatbot/ && pip install apache-superset-extensions-cli
+  #   superset-extensions build && superset-extensions bundle
+  #   # Copy .supx to extensions/bundles/
+  plugin-builder:
+    image: node:lts-alpine3.22
+    container_name: superset-plugin-builder
+    restart: "no"
+    working_dir: /plugin
+    volumes:
+      - ./superset-plugins/plugin-chart-state-district-pies:/plugin
+      - plugin-node-modules:/plugin/node_modules
+      - plugin-dist:/plugin/dist  # Outputs to /plugin-dist/state-district-pies/
+    command: sh -c "npm install --legacy-peer-deps && npm run build"
+    networks:
+      - superset-net
+
+  # ── Extension builder (one-shot) ────────────────────────────────────────────
+  # Builds the dashboard-chatbot extension into a .supx package for the
+  # Superset Extensions framework. Outputs to extensions/bundles/.
+  #
+  # NOTE: Extensions are lifecycle:development (upstream 6.x). The API may 404.
+  #   This builder prepares the package; registration depends on upstream fixes.
+  extension-builder:
+    build:
+      context: ./superset-extensions/dashboard-chatbot
+      dockerfile: Dockerfile.builder
+    container_name: superset-extension-builder
+    restart: "no"
+    volumes:
+      - ./extensions/bundles:/output
+    networks:
+      - superset-net
+    # NOTE: This is a one-shot builder; it builds the .supx bundle and exits.
+    # The reconciler auto-discovers the bundle from extensions/bundles/.
 
   # ── Superset metadata DB ───────────────────────────────────────────────────
   metadata-db:
@@ -118,7 +131,9 @@ services:
       POSTGRES_PASSWORD: ${METADATA_DB_PASS:-superset}
       POSTGRES_DB:       ${METADATA_DB_NAME:-superset}
     volumes:
-      - metadata-db-data:/var/lib/postgresql/data
+      # Postgres 18+ requires mount at /var/lib/postgresql (not /data subdir)
+      # See: https://github.com/docker-library/postgres/issues/37
+      - metadata-db-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${METADATA_DB_USER:-superset} -d ${METADATA_DB_NAME:-superset}"]
       interval: 10s
@@ -153,7 +168,8 @@ services:
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASS:-keycloak}
       POSTGRES_DB:       ${KEYCLOAK_DB_NAME:-keycloak}
     volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
+      # Postgres 18+ requires mount at /var/lib/postgresql (not /data subdir)
+      - keycloak-db-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
       interval: 10s
@@ -200,7 +216,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-keycloak-bootstrap
     restart: "no"
     depends_on:
@@ -218,7 +234,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-init
     restart: "no"
     depends_on:
@@ -247,15 +263,14 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-app
     restart: unless-stopped
     depends_on:
       superset-init:
         condition: service_completed_successfully
-      # plugin-builder disabled — evaluating built-in Cartodiagram.
-      # plugin-builder:
-      #   condition: service_completed_successfully
+      plugin-builder:
+        condition: service_completed_successfully
     environment:
       <<: *superset-env
     ports:
@@ -265,7 +280,7 @@ services:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./extensions/bundles:/app/extensions:ro
-      # - plugin-dist:/app/superset/static/assets/plugins/state-district-pies:ro
+      - plugin-dist:/app/superset/static/assets/plugins:ro  # Serves all plugins at /static/assets/plugins/<name>/
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
       interval: 15s
@@ -281,7 +296,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-celery-worker
     restart: unless-stopped
     depends_on:
@@ -304,7 +319,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-celery-beat
     restart: unless-stopped
     depends_on:
@@ -333,7 +348,8 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - analytics-db-data:/var/lib/postgresql/data
+      # Postgres 18+ requires mount at /var/lib/postgresql (not /data subdir)
+      - analytics-db-data:/var/lib/postgresql
       - ./seed/pg:/docker-entrypoint-initdb.d:ro
     # The postgres official entrypoint runs everything in
     # /docker-entrypoint-initdb.d on a temporary local socket *before* the
@@ -405,7 +421,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.0.0}
+        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     container_name: superset-runtime-seed
     restart: unless-stopped
     depends_on:
@@ -413,9 +429,10 @@ services:
         condition: service_healthy
       analytics-db:
         condition: service_healthy
-      # plugin-builder disabled — evaluating built-in Cartodiagram.
-      # plugin-builder:
-      #   condition: service_completed_successfully
+      plugin-builder:
+        condition: service_completed_successfully
+      extension-builder:
+        condition: service_completed_successfully
     environment:
       <<: *superset-env
     entrypoint: ["/app/docker/scripts/reconciler_entrypoint.sh"]
@@ -424,6 +441,7 @@ services:
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./assets:/app/assets
       - ./extensions/bundles:/app/extensions:ro
-      # - plugin-dist:/plugin-dist:ro
+      - plugin-dist:/plugin-dist:ro  # Auto-discovery scans /plugin-dist/*/
+      #   Reconciler derives env vars: <name> → <NAME>_PLUGIN_BUNDLE_URL
     networks:
       - superset-net

@@ -10,3 +10,7 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.apache_superset_extensions.build]
+include = ["src/**/*.py"]
+exclude = ["tests/**/*", "**/*.pyc"]
