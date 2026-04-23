@@ -1,13 +1,18 @@
-# ⚠️  CURRENTLY DISABLED — Plugin builder service commented out in docker-compose.yml.
-# The dashboard now uses the built-in `cartodiagram` viz instead (Superset 6.1+).
-# To re-enable this custom plugin:
-#   1. Uncomment plugin-builder service in docker-compose.yml
-#   2. Uncomment plugin-dist volume mounts
-#   3. Set STATE_DISTRICT_PIES_PLUGIN_BUNDLE_URL or let builder populate it
-#   4. Change charts from vizType: cartodiagram to vizType: state_district_pies
+# ⚠️  NOT WIRED INTO ANY DASHBOARD.  The household_survey dashboard uses the
+# built-in ``cartodiagram`` viz (Superset 6.1+), so registering this custom
+# plugin is optional scaffolding.
 #
-# DYNAMIC_PLUGINS is lifecycle:testing (more stable than extensions but may still
-# have API 404 issues in 6.0-6.1 — see https://github.com/apache/superset/issues/35870)
+# Additionally, FEATURE_FLAGS['DYNAMIC_PLUGINS'] is currently False in
+# superset_config.py because the frontend ``DynamicPluginProvider`` hangs in
+# ``loading: true`` when ``/dynamic-plugins/api/read`` 404s — a regression in
+# Superset 6.0/6.1 closed as ``not planned`` upstream
+# (https://github.com/apache/superset/issues/35870).  The reconciler therefore
+# skips this asset (``preflight`` raises ``SkipAsset`` or the API 404s).
+#
+# To actually register this plugin once upstream is fixed:
+#   1. Flip FEATURE_FLAGS['DYNAMIC_PLUGINS'] back to True
+#   2. Keep plugin-builder running in docker-compose.yml (currently enabled)
+#   3. Point a chart at ``vizType: state_district_pies`` so it's used
 apiVersion: analytics/v1
 kind: Plugin
 metadata:
