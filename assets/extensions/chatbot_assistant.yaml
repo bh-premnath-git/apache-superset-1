@@ -1,0 +1,27 @@
+# ⚠️  ENABLE_EXTENSIONS is lifecycle:development as of Superset 6.x.
+# The /api/v1/extensions/ endpoint and .supx runtime loader may be unavailable
+# in released builds. Treat this as scaffolding until upstream maturity.
+# Tracking:
+#   https://github.com/apache/superset/discussions/38607
+#   https://github.com/apache/superset/issues/34162
+# This file is registration metadata only; build source code to .supx first.
+# See: extensions/dashboard-chatbot/README.md
+apiVersion: analytics/v1
+kind: Extension
+metadata:
+  key: ext.my_org.dashboard_chatbot
+  name: Dashboard Chatbot Assistant
+spec:
+  publisher: my-org
+  extensionName: dashboard-chatbot
+  version: "0.1.0"
+  # Build and host a .supx bundle, then inject either path or URL from env.
+  # Example path:
+  #   DASHBOARD_CHATBOT_SUPX_PATH=/app/extensions/my-org.dashboard-chatbot-0.1.0.supx
+  # Example URL:
+  #   DASHBOARD_CHATBOT_SUPX_URL=https://registry.example.com/extensions/my-org.dashboard-chatbot-0.1.0.supx
+  supxPathFromEnv: DASHBOARD_CHATBOT_SUPX_PATH
+  # supxUrlFromEnv: DASHBOARD_CHATBOT_SUPX_URL
+  featureFlag: ENABLE_EXTENSIONS
+  permissions:
+    - can_read

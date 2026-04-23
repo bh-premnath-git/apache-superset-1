@@ -14,6 +14,26 @@
 
 # Project Knowledge Base Log
 
+## [2026-04-23] feature | add concrete chatbot extension source scaffold
+- Added in-repo extension implementation scaffold at `extensions/dashboard-chatbot/` with `extension.json`, backend entrypoint, and frontend entrypoint.
+- Backend scaffold now includes placeholder `GET /health` and `POST /ask` routes for integration wiring.
+- Frontend scaffold exports a minimal `mount(el)` placeholder panel to prove a real extension UI entrypoint exists.
+
+## [2026-04-23] docs | define chatbot .supx file location
+- Added concrete chatbot extension bundle location: `extensions/bundles/my-org.dashboard-chatbot-0.1.0.supx`.
+- Mounted `./extensions/bundles` into Superset and runtime-seed containers at `/app/extensions` so `DASHBOARD_CHATBOT_SUPX_PATH` resolves in-container.
+- Updated `.env.example` with `DASHBOARD_CHATBOT_SUPX_PATH` and `DASHBOARD_CHATBOT_SUPX_URL` examples.
+
+## [2026-04-23] docs | clarify extension implementation beyond YAML
+- Clarified that `assets/extensions/chatbot_assistant.yaml` is registration metadata and cannot produce extension behavior alone.
+- Added `extensions/dashboard-chatbot/README.md` with official Superset CLI-based implementation flow (`init`, `build`, `bundle`) and how it connects to env-injected `.supx` registration.
+- Added executable helper `docker/scripts/scaffold_chatbot_extension.sh` to bootstrap a real extension source tree.
+
+## [2026-04-23] research | dashboard chatbot extension strategy
+- Researched current upstream Superset guidance for embedding, security token flow, and extension maturity.
+- Added `wiki/research/dashboard-chatbot-extension.md` with a repo-specific recommendation: ship chatbot as a host-app sidecar around embedded dashboards now; treat `.supx` as phase 2.
+- Added `assets/extensions/chatbot_assistant.yaml` as extension scaffolding (env-injected `.supx` path, guarded by `ENABLE_EXTENSIONS`).
+
 ## [2026-04-21] bootstrap | initial wiki seed
 - Created the first project knowledge base pages under `karpathy/wiki/`.
 - Captured the current authoritative architecture around Docker Compose, Superset runtime seeding, dataset/chart/dashboard assets, and plugin/extension maturity.
