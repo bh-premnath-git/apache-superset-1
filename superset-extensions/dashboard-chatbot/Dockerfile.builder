@@ -27,7 +27,7 @@ COPY --from=frontend-build /build/frontend/dist ./frontend/dist/
 
 # Build the extension package
 # The superset-extensions CLI packages frontend + backend into .supx
-RUN superset-extensions bundle --output /output/my-org.dashboard-chatbot-0.1.0.supx
+RUN mkdir -p /output && superset-extensions bundle --output /output/my-org.dashboard-chatbot-0.1.0.supx
 
 # Final stage - just copy the output
 FROM alpine:latest
