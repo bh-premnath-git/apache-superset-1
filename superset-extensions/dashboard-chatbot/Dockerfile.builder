@@ -20,7 +20,9 @@ RUN pip install apache-superset-extensions-cli
 COPY backend/ ./backend/
 COPY extension.json ./
 
-# Copy built frontend from previous stage
+# Copy frontend sources (CLI expects convention frontend/src/index.tsx)
+COPY frontend/ ./frontend/
+# Also copy built frontend artifacts from previous stage
 COPY --from=frontend-build /build/frontend/dist ./frontend/dist/
 
 # Build the extension package
