@@ -45,4 +45,27 @@ else
   echo "[reconciler-entrypoint] note: ${PLUGINS_DIR} not found — no plugins to discover"
 fi
 
+# ── Extension bundle auto-discovery ──────────────────────────────────────────
+EXTENSIONS_DIR="${EXTENSIONS_DIR:-/app/extensions}"
+
+if [ -d "$EXTENSIONS_DIR" ]; then
+  for supx_file in "$EXTENSIONS_DIR"/*.supx; do
+    [ -f "$supx_file" ] || continue  # Skip if no .supx files
+
+    # Extract publisher and name from filename (my-org.name-0.1.0.supx)
+    basename_supx="$(basename "$supx_file")"
+    # Remove .supx extension
+    name_version="${basename_supx%.supx}"
+    # Remove version suffix (last -X.Y.Z part)
+    publisher_name="$(echo "$name_version" | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+$//')"
+    # Convert to env var name (my-org.name → MY_ORG_NAME + _SUPX_PATH)
+    env_var="$(echo "$publisher_name" | tr '[:lower:]-' '[:upper:]_')_SUPX_PATH"
+
+    export "$env_var=$supx_file"
+    echo "[reconciler-entrypoint] ${env_var}=${supx_file} (auto-discovered)"
+  done
+else
+  echo "[reconciler-entrypoint] note: ${EXTENSIONS_DIR} not found — no extensions to discover"
+fi
+
 exec python -u /app/docker/scripts/seed_dashboard.py "$@"

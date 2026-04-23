@@ -29,8 +29,7 @@ COPY --from=frontend-build /build/frontend/dist ./frontend/dist/
 # The superset-extensions CLI packages frontend + backend into .supx
 RUN mkdir -p /output && superset-extensions bundle --output /output/my-org.dashboard-chatbot-0.1.0.supx
 
-# Final stage - just copy the output to volume-mounted /output
+# Final stage - copy .supx to volume-mounted /output at runtime
 FROM alpine:latest
-WORKDIR /output
-COPY --from=backend-build /output/ .
-CMD ["ls", "-la", "/output/"]
+COPY --from=backend-build /output/ /built/
+CMD ["sh", "-c", "cp /built/*.supx /output/ && ls -la /output/"]
