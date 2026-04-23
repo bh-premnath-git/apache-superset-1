@@ -6,12 +6,11 @@ module.exports = {
     path: path.resolve(__dirname, 'dist'),
     filename: 'remoteEntry.[contenthash].js',
     library: {
-      type: 'module',
+      type: 'umd',
+      name: 'dashboardChatbot',
     },
+    globalObject: 'this',
     clean: true,
-  },
-  experiments: {
-    outputModule: true,
   },
   module: {
     rules: [

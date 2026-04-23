@@ -694,18 +694,23 @@ class DashboardReconciler(Reconciler):
             resolved_native_filters = native_filters
         new_meta = {
             **existing_meta,
-            "positions": position,
             "default_filters": existing_meta.get("default_filters", "{}"),
             "cross_filters_enabled": cross_filters_enabled,
             "native_filter_configuration": resolved_native_filters,
         }
-        if (
-            existing_position == position
-            and existing_meta.get("cross_filters_enabled") == cross_filters_enabled
-            and existing_meta.get("native_filter_configuration")
-            == resolved_native_filters
-        ):
+        # Always update if position is empty or different
+        should_update = (
+            not existing_position  # Empty position
+            or existing_position != position
+            or existing_meta.get("cross_filters_enabled") != cross_filters_enabled
+            or existing_meta.get("native_filter_configuration") != resolved_native_filters
+        )
+        
+        if not should_update:
+            log(f"  Dashboard layout unchanged (id={dashboard_id})")
             return
+            
+        log(f"  Updating dashboard layout (id={dashboard_id}, {len(chart_ids)} charts)")
         client.put(
             f"/api/v1/dashboard/{dashboard_id}",
             {
@@ -713,6 +718,7 @@ class DashboardReconciler(Reconciler):
                 "json_metadata": json.dumps(new_meta),
             },
         )
+        log(f"  Dashboard layout updated (id={dashboard_id})")
 
 
 class PluginReconciler(Reconciler):
