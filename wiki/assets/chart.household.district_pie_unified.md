@@ -25,11 +25,10 @@ centroid, filtered by the dashboard's **State** native filter.
   issue #34247).
 - The issue is now closed upstream (closed on **October 7, 2025**), and this
   chart has been restored to Cartodiagram for the intended state/district map
-  experience. This repo also keeps explicit `chart_size.values` so ZoomConfig
-  controls do not hit null-object errors in Explore.
+  experience.
 - To keep the map readable when many districts are shown, per-pie labels and
   per-pie legends are disabled in the pie sub-chart; tooltips still show values
-  on hover. The base map is OpenStreetMap for a light (white) background.
+  on hover.
 
 ## Dataset dependency
 

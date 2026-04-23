@@ -9,9 +9,6 @@
   - CARTO Voyager base tiles for clear boundaries
   - linear `chart_size` scaling
   - hidden per-pie labels/legend to avoid tiled label clutter
-- Added explicit `chart_size.values` and switched to OpenStreetMap base tiles
-  to prevent Explore `ZoomConfigControl` null-object errors and keep a light
-  (white) map/background style.
 - Updated dashboard/docs text to describe pie-click interaction and the restored
   map behavior.
 
