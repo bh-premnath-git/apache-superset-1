@@ -4,6 +4,7 @@
 - [Project Overview](overview.md) — What this repository is, how it runs, and what is authoritative.
 
 ## Architecture
+- [Dashboard Chatbot Extension Skeleton](../extensions/dashboard-chatbot/README.md) — Practical extension build workflow (CLI scaffold → build → .supx → YAML registration).
 - [Reconciler Engine](architecture/reconciler-engine.md) — How `docker/scripts/seed_dashboard.py` discovers, orders, and applies assets.
 - [Custom Viz Plugin](architecture/custom-viz-plugin.md) — Source layout, data pipeline, and deployment flow for the `state_district_pies` dynamic plugin.
 
@@ -30,6 +31,7 @@
 
 ## Research
 - [Plugins vs Extensions](research/plugins-vs-extensions.md) — Current maturity and operational difference between dynamic plugins and the extension framework.
+- [Dashboard Chatbot Extension Research](research/dashboard-chatbot-extension.md) — Recommended architecture for chatbot-on-dashboard in this repo (embed-first now, extension later).
 
 ## Conventions
 - Prefer reading the smallest relevant page first.

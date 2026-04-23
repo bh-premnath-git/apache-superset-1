@@ -264,6 +264,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./extensions/bundles:/app/extensions:ro
       # - plugin-dist:/app/superset/static/assets/plugins/state-district-pies:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
@@ -422,6 +423,7 @@ services:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./assets:/app/assets
+      - ./extensions/bundles:/app/extensions:ro
       # - plugin-dist:/plugin-dist:ro
     networks:
       - superset-net
