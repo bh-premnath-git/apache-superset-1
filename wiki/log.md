@@ -1,3 +1,17 @@
+## [2026-04-22] fix | Restore District Segments by State to Cartodiagram (Superset 6.1.0 RC)
+
+- Restored `chart.household.district_pie_unified` from `echarts_timeseries_bar`
+  back to built-in `cartodiagram` so the panel is a true map with per-district
+  pies.
+- Re-added `assets/charts/_district_pie_subchart.yaml` and wired it through
+  `selectedChartRef: chart.household.district_pie_subchart`.
+- Kept readability safeguards from earlier tuning:
+  - CARTO Voyager base tiles for clear boundaries
+  - linear `chart_size` scaling
+  - hidden per-pie labels/legend to avoid tiled label clutter
+- Updated dashboard/docs text to describe pie-click interaction and the restored
+  map behavior.
+
 # Project Knowledge Base Log
 
 ## [2026-04-21] bootstrap | initial wiki seed
