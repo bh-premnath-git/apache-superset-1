@@ -18,8 +18,8 @@ spec:
   crossFiltersEnabled: true
   chartHeights:
     chart.household.rural_segment_comparison: 105
-    # District-level Cartodiagram needs extra room for pies + map interaction.
-    chart.household.district_pie_unified: 95
+    # District-level Cartodiagram height reduced.
+    chart.household.district_pie_unified: 70
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified

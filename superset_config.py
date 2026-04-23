@@ -196,6 +196,31 @@ TALISMAN_CONFIG = {
     "force_https": False,
 }
 
+# ── Custom CSS for Button Styling Only ─────────────────────────────────────
+# Injects CSS to make all primary buttons black with white text,
+# without affecting the rest of the UI theme.
+EXTRA_STATIC_HEAD = """
+<style>
+  /* Primary buttons: black background, white text */
+  .ant-btn-primary,
+  .ant-btn-primary:hover,
+  .ant-btn-primary:focus,
+  .ant-btn-primary:active {
+    background-color: #000000 !important;
+    border-color: #000000 !important;
+    color: #FFFFFF !important;
+  }
+  /* OAuth/Login buttons specifically */
+  .ant-btn-primary[type="submit"],
+  button[data-test="oauth-button"],
+  a.ant-btn-primary[href*="oauth"],
+  a.ant-btn-primary[href*="keycloak"] {
+    background-color: #000000 !important;
+    border-color: #000000 !important;
+    color: #FFFFFF !important;
+  }
+</style>
+"""
 
 # ── MCP (Model Context Protocol) Server ──────────────────────────────────────
 # The built-in ``superset mcp run`` CLI is available in Superset 6.1.x+.
