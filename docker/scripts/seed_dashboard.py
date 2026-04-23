@@ -560,6 +560,12 @@ class DashboardReconciler(Reconciler):
             full_width_first = spec.get("fullWidthFirst", 0)
             cross_filters_enabled = bool(spec.get("crossFiltersEnabled", False))
             native_filters = self._build_native_filters(spec, ctx)
+            # Link charts to the dashboard first. Setting position_json alone
+            # is not enough — Superset renders CHART positions whose chartId
+            # maps to a slice that isn't in ``dashboard.slices`` as an empty
+            # "Loading…" tile, so the dashboard appears stuck on load. See:
+            # https://github.com/apache/superset/issues/24188
+            self._link_charts_to_dashboard(client, dashboard_id, chart_ids)
             self._sync_layout(
                 client,
                 dashboard_id,
@@ -572,6 +578,35 @@ class DashboardReconciler(Reconciler):
                 native_filters,
             )
         return dashboard_id
+
+    def _link_charts_to_dashboard(
+        self,
+        client: SupersetClient,
+        dashboard_id: int,
+        chart_ids: list[int],
+    ) -> None:
+        """Ensure each chart's ``dashboards`` relation contains this dashboard.
+
+        Superset's ``PUT /api/v1/dashboard/{id}`` with ``position_json``
+        updates layout but does not always rewrite the many-to-many
+        ``slices`` relation (varies by release — 6.1.0rc2 leaves it
+        untouched), which is what drives rendering.  Pushing the dashboard
+        id onto each chart is the canonical cross-version way to link.
+        """
+        for cid in chart_ids:
+            try:
+                detail = client.get(f"/api/v1/chart/{cid}")
+            except urllib.error.HTTPError:
+                continue
+            current = detail.get("result", {}).get("dashboards") or []
+            current_ids = [d["id"] for d in current if isinstance(d, dict) and "id" in d]
+            if dashboard_id in current_ids:
+                continue
+            merged = sorted({*current_ids, dashboard_id})
+            try:
+                client.put(f"/api/v1/chart/{cid}", {"dashboards": merged})
+            except urllib.error.HTTPError as ex:
+                log(f"    ⚠ could not link chart {cid} to dashboard {dashboard_id}: {ex}")
 
     def _build_native_filters(
         self, spec: dict[str, Any], ctx: ReconcileContext

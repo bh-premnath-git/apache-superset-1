@@ -179,15 +179,30 @@ WTF_CSRF_CHECK_DEFAULT = False
 # 'unsafe-inline' in style-src.
 # See: https://github.com/apache/superset/issues/25205
 TALISMAN_ENABLED = True
+# Tile servers used by the Cartodiagram viz (and any other map-based chart)
+# load raster tiles as <img> elements, so they have to be whitelisted under
+# img-src or the browser blocks them and the chart renders blank / never
+# finishes loading.  The district_pie_unified chart references CARTO Voyager
+# (basemaps.cartocdn.com); OpenStreetMap and Mapbox are included because they
+# are the other two providers Superset's map vizzes ship with by default.
+_MAP_TILE_HOSTS = [
+    "https://*.basemaps.cartocdn.com",
+    "https://*.tile.openstreetmap.org",
+    "https://tile.openstreetmap.org",
+    "https://api.mapbox.com",
+    "https://*.tiles.mapbox.com",
+]
+
 TALISMAN_CONFIG = {
     "content_security_policy": {
         "default-src": ["'self'"],
-        "img-src": ["'self'", "data:", "blob:"],
+        "img-src": ["'self'", "data:", "blob:", *_MAP_TILE_HOSTS],
         "worker-src": ["'self'", "blob:"],
         "connect-src": [
             "'self'",
             "https://api.mapbox.com",
             "https://events.mapbox.com",
+            *_MAP_TILE_HOSTS,
         ],
         "object-src": "'none'",
         "style-src": [

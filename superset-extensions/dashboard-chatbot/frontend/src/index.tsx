@@ -24,7 +24,10 @@ interface ChatResponse {
 }
 
 // API base URL - can be configured via window global or defaults to same-origin
-const API_BASE_URL = (typeof window !== 'undefined' && (window as Window & { CHATBOT_API_URL?: string }).CHATBOT_API_URL) || '';
+const API_BASE_URL =
+  (typeof window !== 'undefined' &&
+    (window as Window & { CHATBOT_API_URL?: string }).CHATBOT_API_URL) ||
+  '';
 
 function ChatbotUI() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -46,7 +49,6 @@ function ChatbotUI() {
     const question = input.trim();
     if (!question || isLoading) return;
 
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -116,7 +118,8 @@ function ChatbotUI() {
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
         display: 'flex',
         flexDirection: 'column',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         zIndex: 9999,
       }
     : {
@@ -251,9 +254,17 @@ function ChatbotUI() {
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: '85%',
               padding: '10px 14px',
-              borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-              background: msg.error ? '#fff2f0' : msg.role === 'user' ? '#000' : '#f5f5f5',
-              color: msg.role === 'user' ? '#fff' : msg.error ? '#cf1322' : '#333',
+              borderRadius:
+                msg.role === 'user'
+                  ? '16px 16px 4px 16px'
+                  : '16px 16px 16px 4px',
+              background: msg.error
+                ? '#fff2f0'
+                : msg.role === 'user'
+                ? '#000'
+                : '#f5f5f5',
+              color:
+                msg.role === 'user' ? '#fff' : msg.error ? '#cf1322' : '#333',
               fontSize: 13,
               lineHeight: 1.5,
               wordBreak: 'break-word',
@@ -321,7 +332,9 @@ function ChatbotUI() {
           ref={inputRef}
           type="text"
           value={input}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+            setInput(e.target.value)
+          }
           onKeyDown={handleKeyDown}
           placeholder="Type a message..."
           disabled={isLoading}
@@ -340,7 +353,8 @@ function ChatbotUI() {
           disabled={!input.trim() || isLoading}
           style={{
             padding: '10px 16px',
-            background: !input.trim() || isLoading ? '#d9d9d9' : '#000',
+            background:
+              !input.trim() || isLoading ? '#d9d9d9' : '#000',
             color: '#fff',
             border: 'none',
             borderRadius: 20,
@@ -364,7 +378,40 @@ function ChatbotUI() {
   );
 }
 
-export function mount(el: HTMLElement) {
-  const root = createRoot(el);
-  root.render(<ChatbotUI />);
+// Idempotent mount: append a floating root once, re-use it across re-activations.
+const MOUNT_ID = 'my-org-dashboard-chatbot-root';
+
+export function mount(target?: HTMLElement): void {
+  if (typeof document === 'undefined') return;
+  let el = target ?? document.getElementById(MOUNT_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = MOUNT_ID;
+    document.body.appendChild(el);
+  }
+  createRoot(el).render(<ChatbotUI />);
+}
+
+// Superset's ExtensionsLoader calls `container.get('./index')` then invokes
+// the returned factory with zero arguments. Calling factory() resolves the
+// module; any registration must happen either as a module-level side effect
+// or by re-invoking the default export. We expose both: top-level mount on
+// load (side-effect registration), plus a default-export activate function
+// so loaders that call `mod.default()` behave identically.
+export default function activate(): void {
+  mount();
+}
+
+if (typeof window !== 'undefined') {
+  // Run registration at import time so Module Federation's factory() call
+  // (which just executes the module body) wires up the UI without needing
+  // the host to invoke a specific API method.
+  try {
+    mount();
+  } catch (err) {
+    // Never throw from a Module Federation container — the host will swallow
+    // the error but the console trace is useful during development.
+    // eslint-disable-next-line no-console
+    console.error('[dashboard-chatbot] mount failed', err);
+  }
 }
