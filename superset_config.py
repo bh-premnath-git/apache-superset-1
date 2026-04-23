@@ -72,9 +72,22 @@ FEATURE_FLAGS = {
     # upstream exceptions and do not expose the context menu today.
     "DRILL_BY": True,
     "DRILL_TO_DETAIL": True,
-    # Dynamic plugins (testing lifecycle) - required for state_district_pies custom viz
-    # API may 404 even when enabled (upstream issue #35870 in 6.0-6.1)
-    "DYNAMIC_PLUGINS": True,
+    # ── Dynamic plugins ────────────────────────────────────────────────────
+    # DYNAMIC_PLUGINS is intentionally DISABLED.  With the flag ON, Superset's
+    # ``<DynamicPluginProvider>`` in superset-frontend/src/components/
+    # DynamicPlugins/index.tsx starts with ``loading: true`` and fetches
+    # ``/dynamic-plugins/api/read``.  On Superset 6.0/6.1 that endpoint 404s
+    # even when the flag is on (apache/superset#35870, closed ``not planned``),
+    # and the reducer has no FAILED branch — the catch only logs, so the
+    # provider stays ``loading: true`` forever and every dashboard spins
+    # indefinitely.
+    #
+    # Our only custom viz (state_district_pies) is not wired into any
+    # dashboard — ``assets/dashboards/household_survey.yaml`` uses the
+    # built-in ``cartodiagram`` viz instead.  So keeping the flag off is
+    # correct and removes the hang.  Re-enable only when upstream fixes
+    # #35870 AND a chart actually references a dynamic plugin viz type.
+    "DYNAMIC_PLUGINS": False,
     # Extensions framework (development lifecycle) - required for chatbot extension
     # API may 404 even when enabled (upstream discussion #38607)
     "ENABLE_EXTENSIONS": True,
