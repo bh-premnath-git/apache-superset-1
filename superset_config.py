@@ -47,6 +47,9 @@ class CeleryConfig:
 
 CELERY_CONFIG = CeleryConfig
 
+# Extensions path - directory where .supx bundles are loaded from
+EXTENSIONS_PATH = "/app/extensions"
+
 FEATURE_FLAGS = {
     "ALERT_REPORTS": True,
     "EMBEDDED_SUPERSET": True,
@@ -126,7 +129,7 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
     AUTH_TYPE = AUTH_OAUTH
     CUSTOM_SECURITY_MANAGER = CustomSsoSecurityManager
     AUTH_USER_REGISTRATION = True
-    AUTH_USER_REGISTRATION_ROLE = "Gamma"
+    AUTH_USER_REGISTRATION_ROLE = "Admin"
     AUTH_ROLES_SYNC_AT_LOGIN = True
     AUTH_ROLES_MAPPING = {
         "superset_admin": ["Admin"],

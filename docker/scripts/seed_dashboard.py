@@ -759,12 +759,12 @@ class PluginReconciler(Reconciler):
         existing: dict[str, Any] | None = None
         try:
             existing = client.find_by_field(
-                "/api/v1/dynamic_plugins/", "key", viz_type
+                "/api/v1/dynamic-plugins/", "key", viz_type
             )
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 raise SkipAsset(
-                    "/api/v1/dynamic_plugins/ not available — enable "
+                    "/api/v1/dynamic-plugins/ not available — enable "
                     "FEATURE_FLAGS['DYNAMIC_PLUGINS'] = True in superset_config.py"
                 ) from ex
             if ex.code != 405:
@@ -773,7 +773,7 @@ class PluginReconciler(Reconciler):
         if existing:
             plugin_id = int(existing["id"])
             client.put(
-                f"/api/v1/dynamic_plugins/{plugin_id}",
+                f"/api/v1/dynamic-plugins/{plugin_id}",
                 {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
             )
             log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
@@ -781,7 +781,7 @@ class PluginReconciler(Reconciler):
 
         try:
             created = client.post(
-                "/api/v1/dynamic_plugins/",
+                "/api/v1/dynamic-plugins/",
                 {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
             )
             plugin_id = int(created["id"])
@@ -790,7 +790,7 @@ class PluginReconciler(Reconciler):
         except urllib.error.HTTPError as ex:
             if ex.code in (404, 405):
                 raise SkipAsset(
-                    "/api/v1/dynamic_plugins/ write API unavailable in this Superset build"
+                    "/api/v1/dynamic-plugins/ write API unavailable in this Superset build"
                 ) from ex
             # Duplicate key/write race: treat as already present if backend reports it.
             msg = str(ex).lower()
