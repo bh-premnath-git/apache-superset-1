@@ -52,14 +52,16 @@ if [ -d "$EXTENSIONS_DIR" ]; then
   for supx_file in "$EXTENSIONS_DIR"/*.supx; do
     [ -f "$supx_file" ] || continue  # Skip if no .supx files
 
-    # Extract publisher and name from filename (my-org.name-0.1.0.supx)
+    # Extract extension name from filename (publisher.name-X.Y.Z.supx)
     basename_supx="$(basename "$supx_file")"
     # Remove .supx extension
     name_version="${basename_supx%.supx}"
-    # Remove version suffix (last -X.Y.Z part)
+    # Remove version suffix (last -X.Y.Z part) → "publisher.name"
     publisher_name="$(echo "$name_version" | sed -E 's/-[0-9]+\.[0-9]+\.[0-9]+$//')"
-    # Convert to env var name (my-org.name → MY_ORG_NAME + _SUPX_PATH)
-    env_var="$(echo "$publisher_name" | tr '[:lower:]-' '[:upper:]_')_SUPX_PATH"
+    # Extract just the name part after the dot (e.g., "dashboard-chatbot")
+    ext_name="$(echo "$publisher_name" | cut -d'.' -f2)"
+    # Convert to env var name (dashboard-chatbot → DASHBOARD_CHATBOT + _SUPX_PATH)
+    env_var="$(echo "$ext_name" | tr '[:lower:]-' '[:upper:]_')_SUPX_PATH"
 
     export "$env_var=$supx_file"
     echo "[reconciler-entrypoint] ${env_var}=${supx_file} (auto-discovered)"
