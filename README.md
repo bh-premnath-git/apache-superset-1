@@ -840,6 +840,22 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
 | `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 | `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 
+**Drill by requires two conditions to both hold** — Superset's
+`FEATURE_FLAGS["DRILL_BY"]` alone is not sufficient:
+
+1. The viz plugin's upstream `ChartMetadata.behaviors` must include
+   `Behavior.DRILL_BY` (all echarts plugins do; `cartodiagram` and
+   `handlebars` do not).
+2. The chart's dataset must expose at least one dimension that the
+   chart is **not** already using as `x_axis` or `groupby`. Superset
+   populates the drill-by submenu from "dataset dimensions minus
+   chart dimensions"; if the set is empty the menu item is hidden.
+   Pre-aggregated SQL views that were defined at the exact grain a
+   single chart consumes will silently disable drill-by on every
+   chart that reads them — grain the view one level finer and carry
+   the extra dimensions on the Dataset YAML so drill-by has pivot
+   targets.
+
 **Additional Superset Built-in Types**
 
 | Type | Description |

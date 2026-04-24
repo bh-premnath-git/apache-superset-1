@@ -17,8 +17,12 @@ Segment-level MPCE summary dataset used by the MPCE line chart.
 
 ## Declared shape
 
-- dimension: `segment`
-- metrics:
+- Dimensions: `segment`, `sector`. `sector` is declared even though
+  the chart does not group by it, so Superset's drill-by menu has a
+  pivot target. `segment_order` is intentionally omitted because it
+  is 1:1 with `segment` and a drill-by on it would produce the same
+  slices.
+- Metrics:
   - `count` (`COUNT(*)`)
   - `weighted_mean_mpce` (`SUM(mean_mpce * weighted_count) / NULLIF(SUM(weighted_count), 0)`)
 

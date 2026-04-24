@@ -93,23 +93,40 @@ households in Bhagalpur landed in the R1 slice?"
 Right-click any chart whose upstream `ChartMetadata` registers
 `Behavior.DRILL_BY` → **Drill by** → pick another column from the
 dataset → Superset opens a chart pivoted on that dimension.
-`FEATURE_FLAGS["DRILL_BY"] = True` in `superset_config.py` enables
-the feature at the app level; per-chart availability still depends
-on the plugin's `behaviors` list. Useful sequence:
 
-1. On the **Distribution of Segments in 3 States** pie (`pie`) →
-   drill by `state_label` → segment share per state.
-2. On **Segment Distribution within State** bar
-   (`echarts_timeseries_bar`) → drill by `segment` → per-segment
-   ordering within each state.
-3. On **District Segment Breakdown (Drill-by)** bar
-   (`echarts_timeseries_bar`) → drill by `district_name` /
-   `segment` → district-level counts within the currently-selected
-   state. This chart is the drill-by path for the map next to it.
+Two conditions must both hold for the menu item to appear:
 
-Drill-by uses the same dataset columns the chart already references, so
-it "just works" for charts whose dataset carries rich dimensions
-(notably `hh_master` and `state_district_segment_geo`).
+1. The viz plugin must declare `Behavior.DRILL_BY` in its `ChartMetadata`
+   (all the echarts plugins used on this dashboard do; cartodiagram and
+   handlebars do not).
+2. The chart's dataset must expose at least one dimension that the
+   chart is **not** already using as `x_axis` or `groupby`. Superset's
+   drill-by submenu is populated from "dataset dimensions minus chart
+   dimensions"; if nothing is left, the menu item is hidden. This
+   dashboard's four pre-aggregated LCA views were originally defined
+   at the exact grain the chart consumed, so drill-by was silently
+   empty on every one of them. The views have been rewritten at a
+   finer grain (`state_label, sector_label` added) so drill-by now
+   has real pivot targets.
+
+`FEATURE_FLAGS["DRILL_BY"] = True` in `superset_config.py` enables the
+feature at the app level; the two conditions above decide whether a
+given chart gets the menu item.
+
+Concrete drill-by paths on this dashboard:
+
+1. **Distribution of Segments in 3 States** (`pie` on
+   `segment_distribution`) → drill by `state_label` or `sector_label`.
+2. **Segment Distribution within State** (`echarts_timeseries_bar` on
+   `state_segment_distribution`) → drill by `sector_label`.
+3. **Household Structure — Proportion of Minor** (`echarts_timeseries_bar`
+   on `segment_minor_bucket`) → drill by `state_label` or `sector_label`.
+4. **Average MPCE by Segment** (`echarts_timeseries_line` on
+   `mpce_by_segment`) → drill by `sector`.
+5. **District Segment Breakdown (Drill-by)** (`echarts_timeseries_bar`
+   on `state_district_segment_geo`) → drill by `district_name` or
+   `segment`. This chart is the drill-by path for the Cartodiagram
+   map next to it.
 
 **Upstream exceptions on this dashboard (no context menu at all):**
 

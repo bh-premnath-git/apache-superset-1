@@ -22,6 +22,16 @@ Line chart of average monthly per-capita consumption expenditure (MPCE) by segme
 - point symbols enabled (`circle`, size `8`)
 - line width `2`, y-axis formatted as INR values
 
+## Drill-by / Drill to detail
+
+The upstream `echarts_timeseries_line` plugin registers
+`[InteractiveChart, DrillToDetail, DrillBy]`, and the backing dataset
+now declares `sector` on top of the `segment` column the chart already
+uses. Right-clicking a point exposes Drill by → `sector`, opening a
+chart pivoted on Rural / Urban. The underlying view already carries
+the `sector` column — this dashboard just needed the dataset YAML to
+declare it as a dimension.
+
 ## Related pages
 
 - [dataset.household.mpce_by_segment](../dataset/dataset.household.mpce_by_segment.md)

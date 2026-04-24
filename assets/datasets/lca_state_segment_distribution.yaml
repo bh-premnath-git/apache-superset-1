@@ -7,7 +7,12 @@ spec:
   databaseRef: db.analytics
   schema: household
   table: vw_state_segment_distribution
-  # One row per (state_label, segment) with weighted share within state.
+  # Grain: (state_label, sector_label, segment) with SUM(wt) already
+  # applied inside the view. The per-state stacked bar re-aggregates
+  # to (state_label, segment) at query time. sector_label is carried
+  # so drill-by has a pivot target from a chart that already uses
+  # state_label + segment.
   dimensions:
     - state_label
+    - sector_label
     - segment

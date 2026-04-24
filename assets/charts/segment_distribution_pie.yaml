@@ -12,17 +12,21 @@ spec:
     groupby:
       - segment
     metric:
-      label: weighted_share
+      label: weighted_count
       expressionType: SQL
       hasCustomLabel: true
       optionName: am_weighted_share
-      # The view already stores per-segment weighted share in `pct`; use MAX
-      # since there is exactly one row per segment.
-      sqlExpression: MAX(pct)
+      # View grain is (state_label, sector_label, segment); re-aggregate
+      # to per-segment here. Pie label_type=key_percent computes the %
+      # per slice from these sums, so we no longer need the pre-computed
+      # pct column the view used to expose. Carrying extra dimensions on
+      # the view/dataset turns state_label and sector_label into
+      # drill-by pivot targets for this chart.
+      sqlExpression: SUM(seg_weight)
     show_legend: true
     legendType: scroll
     legendOrientation: right
-    number_format: ".0f%"
+    number_format: ",.0f"
     donut: false
     label_type: key_percent
     color_scheme: supersetColors
