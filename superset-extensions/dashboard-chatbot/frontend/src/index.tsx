@@ -152,12 +152,12 @@ function ChatbotUI() {
         title="Open Chat"
       >
         <svg
-          width="28"
-          height="28"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
           stroke="#fff"
-          strokeWidth="2"
+          strokeWidth="1"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
