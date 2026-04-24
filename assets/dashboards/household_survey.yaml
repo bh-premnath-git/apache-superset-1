@@ -23,6 +23,11 @@ spec:
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
+    # Drill-by companion to the Cartodiagram above. Same dataset, same
+    # state-filter coverage, but vizType=echarts_timeseries_bar which
+    # registers Behavior.DRILL_BY — so the state → district → segment
+    # drill-by path the dashboard promises actually works here.
+    - chart.household.district_segment_distribution_bar
     - chart.household.minor_structure
     - chart.household.segment_distribution_pie
     - chart.household.state_segment_distribution_bar
@@ -34,11 +39,18 @@ spec:
   #    Enabled via crossFiltersEnabled.
   # 3. Right-click any echarts / table / pivot-table cell → "Drill to detail"
   #    shows the underlying hh_master rows; "Drill by" pivots to a different
-  #    dimension (state → district → segment). Force-enabled dashboard-wide
-  #    via FEATURE_FLAGS.DRILL_BY / DRILL_TO_DETAIL in superset_config.py;
-  #    no per-chart YAML is required. Upstream exceptions: the Handlebars
-  #    viz (Rural Segments table) does not currently expose the context
-  #    menu — cross-filters remain the interaction path there.
+  #    dimension (state → district → segment). FEATURE_FLAGS.DRILL_BY /
+  #    DRILL_TO_DETAIL in superset_config.py enable the context menu at the
+  #    app level, but the menu items only appear on charts whose upstream
+  #    ChartMetadata registers the corresponding Behavior. Upstream
+  #    exceptions on this dashboard:
+  #      - cartodiagram (chart.household.district_pie_unified) registers
+  #        neither DRILL_TO_DETAIL nor DRILL_BY; use the companion
+  #        chart.household.district_segment_distribution_bar instead for
+  #        district-level drill-by.
+  #      - Handlebars (chart.household.rural_segment_comparison) exposes
+  #        no context menu at all; cross-filters remain the interaction
+  #        path there.
   #
   # ── Native filters ─────────────────────────────────────────────────────────
   # State filter controls the District Segments Cartodiagram (single select so

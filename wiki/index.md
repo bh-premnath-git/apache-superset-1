@@ -31,6 +31,7 @@ It complements the root `README.md` with task-focused runbooks and full asset re
 ### Charts
 - [chart.household.district_pie_subchart](assets/chart/chart.household.district_pie_subchart.md)
 - [chart.household.district_pie_unified](assets/chart/chart.household.district_pie_unified.md)
+- [chart.household.district_segment_distribution_bar](assets/chart/chart.household.district_segment_distribution_bar.md)
 - [chart.household.minor_structure](assets/chart/chart.household.minor_structure.md)
 - [chart.household.mpce_by_segment](assets/chart/chart.household.mpce_by_segment.md)
 - [chart.household.rural_segment_comparison](assets/chart/chart.household.rural_segment_comparison.md)

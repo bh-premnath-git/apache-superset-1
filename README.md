@@ -834,11 +834,11 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
 
 | Type | Used In | Description |
 |---|---|---|
-| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in) |
-| `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table |
-| `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml` | ECharts bar chart |
-| `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart |
-| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart |
+| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in). Upstream `ChartMetadata` does **not** register `Behavior.DRILL_BY` or `Behavior.DRILL_TO_DETAIL`, so the right-click menu is empty on this viz regardless of the feature flags — use the sibling `district_segment_distribution_bar` for drill-by on the same dataset. |
+| `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table. Does not expose the right-click context menu. |
+| `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml`, `district_segment_distribution_bar.yaml` | ECharts bar chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+| `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 
 **Additional Superset Built-in Types**
 

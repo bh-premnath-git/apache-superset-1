@@ -12,7 +12,8 @@ Household-facing dashboard for the household survey part of the repository.
 
 ## Current chart refs
 - `chart.household.rural_segment_comparison` — Handlebars table comparing rural household segments (full-width)
-- `chart.household.district_pie_unified` — Cartodiagram with per-district pies for the state currently pinned by the **State** filter (full-width)
+- `chart.household.district_pie_unified` — Cartodiagram with per-district pies for the state currently pinned by the **State** filter (full-width). No context-menu actions — see [chart.household.district_pie_unified](chart.household.district_pie_unified.md) for why.
+- `chart.household.district_segment_distribution_bar` — echarts stacked bar of districts × segment on the same dataset as the Cartodiagram above. Exists as the drill-by companion to the map because the Cartodiagram plugin does not register `Behavior.DRILL_BY`.
 - `chart.household.minor_structure` — 100%-stacked bar of U15 minor buckets by LCA segment
 - `chart.household.segment_distribution_pie` — Overall segment distribution pie (acts as the shared segment legend — colors are stable across every chart via `supersetColors`)
 - `chart.household.state_segment_distribution_bar` — Per-state segment stacked bar
@@ -38,10 +39,11 @@ spec:
   chartsPerRow: 2
   chartHeights:
     chart.household.rural_segment_comparison: 105
-    chart.household.district_pie_unified: 95
+    chart.household.district_pie_unified: 70
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
+    - chart.household.district_segment_distribution_bar
     - chart.household.minor_structure
     - chart.household.segment_distribution_pie
     - chart.household.state_segment_distribution_bar
@@ -58,7 +60,7 @@ There are four complementary mechanisms:
 
 | Filter | Default | Targets | What it narrows |
 |--------|---------|---------|-----------------|
-| **State** | Bihar (first alphabetically) | `hh_master`, `state_district_segment_geo` | Rural Segments table + District Segments map |
+| **State** | Bihar (first alphabetically) | `hh_master`, `state_district_segment_geo` | Rural Segments table + District Segments map + District Segment Breakdown bar |
 | **Sector** | unset | `hh_master` | Rural Segments table only |
 | **Social group of HH head** | unset | `hh_master` | Rural Segments table only |
 
@@ -78,37 +80,57 @@ small chip that appears above the dashboard.
 
 ### 3. Drill to detail (Superset built-in)
 
-Right-click any echarts / table / pivot-table chart → **Drill to
-detail** → Superset shows the raw rows from the source dataset that
-feed the aggregated cell. Force-enabled dashboard-wide via
-`FEATURE_FLAGS["DRILL_TO_DETAIL"] = True` in `superset_config.py`.
-Useful for: "which households in Bhagalpur landed in the R1 slice?"
+Right-click any chart whose upstream `ChartMetadata` registers
+`Behavior.DRILL_TO_DETAIL` → **Drill to detail** → Superset shows the
+raw rows from the source dataset that feed the aggregated cell.
+`FEATURE_FLAGS["DRILL_TO_DETAIL"] = True` in `superset_config.py`
+enables the feature at the app level; per-chart availability still
+depends on the plugin's `behaviors` list. Useful for: "which
+households in Bhagalpur landed in the R1 slice?"
 
 ### 4. Drill by (Superset built-in)
 
-Right-click any echarts / table / pivot-table chart → **Drill by** →
-pick another column from the dataset → Superset opens a chart pivoted
-on that dimension. Force-enabled dashboard-wide via
-`FEATURE_FLAGS["DRILL_BY"] = True` in `superset_config.py`. Useful
-sequence:
+Right-click any chart whose upstream `ChartMetadata` registers
+`Behavior.DRILL_BY` → **Drill by** → pick another column from the
+dataset → Superset opens a chart pivoted on that dimension.
+`FEATURE_FLAGS["DRILL_BY"] = True` in `superset_config.py` enables
+the feature at the app level; per-chart availability still depends
+on the plugin's `behaviors` list. Useful sequence:
 
-1. On the **Segment Distribution** pie → drill by `state_label` →
-   segment share per state.
-2. On **State Segment Distribution** bar → drill by `segment_order` →
-   per-segment ordering within each state.
-3. On **District Segments by State** map → drill by `district_code` →
-   district-level counts within the currently-selected state.
+1. On the **Distribution of Segments in 3 States** pie (`pie`) →
+   drill by `state_label` → segment share per state.
+2. On **Segment Distribution within State** bar
+   (`echarts_timeseries_bar`) → drill by `segment` → per-segment
+   ordering within each state.
+3. On **District Segment Breakdown (Drill-by)** bar
+   (`echarts_timeseries_bar`) → drill by `district_name` /
+   `segment` → district-level counts within the currently-selected
+   state. This chart is the drill-by path for the map next to it.
 
 Drill-by uses the same dataset columns the chart already references, so
 it "just works" for charts whose dataset carries rich dimensions
 (notably `hh_master` and `state_district_segment_geo`).
 
-**Upstream exception:** the Handlebars viz used by the Rural Segments
-table is not on the list of chart types that expose Superset's
-right-click context menu. Cross-filters remain the only interaction
-path on that one chart. If Drill by on the Rural Segments table
-becomes a hard requirement we'd rebuild it as a Pivot Table or Table
-chart (both support the context menu).
+**Upstream exceptions on this dashboard (no context menu at all):**
+
+- **Cartodiagram** (`chart.household.district_pie_unified` — "District
+  Segments by State"). Upstream
+  `plugin-chart-cartodiagram/src/plugin/index.ts` constructs its
+  `ChartMetadata` without a `behaviors` entry, so neither
+  `Behavior.DRILL_BY` nor `Behavior.DRILL_TO_DETAIL` is registered.
+  Right-clicking the map surfaces no drill menu items regardless of
+  the feature flags. `chart.household.district_segment_distribution_bar`
+  is the companion that exposes drill-by over the same dataset.
+- **Handlebars** (`chart.household.rural_segment_comparison` — "Rural
+  Segments table"). Upstream does not expose the context menu on this
+  viz. Cross-filters remain the only interaction path. Rebuilding it
+  as a Pivot Table or Table chart would restore drill-by.
+
+The other four charts (`household_minor_structure` —
+`echarts_timeseries_bar`, `segment_distribution_pie` — `pie`,
+`state_segment_distribution_bar` — `echarts_timeseries_bar`,
+`mpce_by_segment` — `echarts_timeseries_line`) are all echarts plugins
+and expose both menu items out of the box.
 
 ### Recommended exploration flow
 
@@ -138,12 +160,15 @@ If a chart ref is missing at reconcile time, the reconciler logs the missing cha
 - `assets/dashboards/household_survey.yaml`
 - `assets/charts/rural_segment_comparison.yaml`
 - `assets/charts/district_pie_unified.yaml`
+- `assets/charts/district_segment_distribution_bar.yaml`
 - `superset_config.py` — `FEATURE_FLAGS["DRILL_BY"]` /
   `FEATURE_FLAGS["DRILL_TO_DETAIL"]` set to `True` so the context menu
-  is available on every chart type that supports it.
+  is available on every chart type whose upstream `ChartMetadata`
+  registers the corresponding `Behavior`.
 
 ## Related pages
 - [chart.household.district_pie_unified](chart.household.district_pie_unified.md)
+- [chart.household.district_segment_distribution_bar](chart.household.district_segment_distribution_bar.md)
 - [chart.household.rural_segment_comparison](chart.household.rural_segment_comparison.md)
 - [dataset.household.hh_master](dataset.household.hh_master.md)
 - [dataset.household.state_district_segment_geo](dataset.household.state_district_segment_geo.md)
