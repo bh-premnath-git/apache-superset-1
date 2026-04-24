@@ -83,6 +83,21 @@ For deeper details:
 
 ## Table of Contents
 
+- [Quick Start](#quick-start-docker-compose)
+- [Documentation](#documentation-status)
+- [Architecture Highlights](#architecture--design-pattern-highlights)
+- [Why This Exists](#1-why-this-exists)
+- [Design Philosophy](#2-design-philosophy)
+- [System Architecture](#3-system-architecture)
+- [Core Engine Design](#4-core-engine-design)
+- [Superset Integration](#5-superset-integration-layer)
+- [MCP Layer](#6-mcp-layer)
+- [Identity and Auth](#7-identity-and-auth-layer)
+- [Asset Model](#8-asset-model)
+- [Runtime Modes](#9-runtime-modes)
+- [Reference](#reference-docs)
+- [License](#license)
+
 ---
 
 ## 1. Why This Exists
@@ -131,47 +146,58 @@ This project does **not** aim to:
 ## 3. System Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Git Repository                               │
-│   assets/  config/  env/  branding/  plugins/  extensions/          │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Control Plane Engine                              │
-│                                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌───────────────┐   │
-│  │  Loader  │→ │Validator │→ │ Dep. Graph   │→ │   Reconciler  │   │
-│  └──────────┘  └──────────┘  └──────────────┘  └───────┬───────┘   │
-│                                                          │           │
-│  ┌──────────────────────────┐   ┌──────────────────┐    │           │
-│  │      State Store         │◄──│    Diff Engine   │◄───┘           │
-│  │  (SQLite / PostgreSQL)   │   │  (checksum+spec) │                │
-│  └──────────────────────────┘   └──────────────────┘                │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │ REST API calls / import APIs
-                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Superset Runtime                               │
-│                                                                     │
-│  ┌──────────┐  ┌─────────┐  ┌────────────┐  ┌──────────────────┐   │
-│  │ Web/API  │  │ Celery  │  │ Celery Beat│  │   PostgreSQL     │   │
-│  │ :8088    │  │ Worker  │  │            │  │   (metadata DB)  │   │
-│  └──────────┘  └─────────┘  └────────────┘  └──────────────────┘   │
-│                                                                     │
-│  ┌──────────┐  ┌──────────────────────────────────────────────┐    │
-│  │  Redis   │  │   MCP Server (`superset mcp run`, :5008)     │    │
-│  │  :6379   │  │   streamable-HTTP, JWT/dev-impersonation     │    │
-│  └──────────┘  └──────────────────────────────────────────────┘    │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │
-              ┌─────────────┴──────────────┐
-              ▼                            ▼
-┌─────────────────────┐      ┌─────────────────────────┐
-│  Keycloak           │      │   Connected Data Sources │
-│  OIDC / SSO         │      │   Postgres, Snowflake,   │
-│                     │      │   ClickHouse, BigQuery   │
-└─────────────────────┘      └─────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Git Repository                                      │
+│  assets/  config/  env/  seed/  wiki/  docker/  extensions/  superset-plugins/ │
+└─────────────────────────────┬─────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Build Phase (One-shot)                               │
+│  ┌──────────────┐  ┌────────────────┐                                       │
+│  │plugin-builder│  │extension-builder│ → /extensions/bundles/              │
+│  └──────────────┘  └────────────────┘                                       │
+│         │                                                                     │
+│         ▼                                                                     │
+│  /plugin-dist/<name>/ (volume)                                                │
+└─────────────────────────────┬─────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Control Plane Engine (Runtime)                        │
+│                                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌─────────────────┐           │
+│  │  Loader  │→ │Validator │→ │  Dep. Graph  │→ │   Reconciler    │           │
+│  └──────────┘  └──────────┘  └──────────────┘  └────────┬────────┘           │
+│                                                         │                     │
+│  ┌────────────────────────┐   ┌──────────────────┐     │                     │
+│  │      State Store       │◄──│    Diff Engine   │◄────┘                     │
+│  │  (SQLite / PostgreSQL) │   │  (checksum+spec) │                         │
+│  └────────────────────────┘   └──────────────────┘                         │
+└─────────────────────────────┬─────────────────────────────────────────────────┘
+                              │ REST API calls
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Superset Runtime                                     │
+│                                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌──────────────────┐           │
+│  │  superset│  │  celery  │  │celery-beat │  │   metadata-db    │           │
+│  │  :8088   │  │  worker  │  │            │  │   (PostgreSQL)   │           │
+│  └──────────┘  └──────────┘  └────────────┘  └──────────────────┘           │
+│                                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────────────────────────────┐   │
+│  │  redis   │  │    mcp   │  │  superset-runtime-seed (reconciler)      │   │
+│  │  :6379   │  │  :5008   │  │  Long-lived watcher, auto-syncs assets  │   │
+│  └──────────┘  └──────────┘  └──────────────────────────────────────────┘   │
+└─────────────────────────────┬─────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│    Keycloak     │  │   analytics-db  │  │  Connected Data │
+│  OIDC / SSO     │  │  (PostgreSQL)   │  │    Sources      │
+│  :8080          │  │  Seed: CSV/SQL  │  │                 │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
 ### 3.1 Reconcile Data Flow
@@ -315,14 +341,32 @@ Retry strategy:
 
 ## 5. Superset Integration Layer
 
-### 5.1 Authentication Strategy
+The control plane integrates with Superset via:
 
+- **REST API** — for asset CRUD operations (dashboards, charts, datasets, databases)
+- **Import/Export APIs** — for bulk bundle operations where available
+- **Database connections** — via SQLAlchemy URIs injected from environment variables
 
-### 5.2 Import/Export API Usage
+### 5.1 Authentication
 
+The reconciler (`superset-runtime-seed` service) uses a service account with Admin privileges. Credentials are configured via environment variables:
 
-### 5.3 REST API Client
+```bash
+SUPERSET_ADMIN_USERNAME=admin
+SUPERSET_ADMIN_PASSWORD=admin
+```
 
+### 5.2 Asset Sync Flow
+
+1. `seed_dashboard.py` loads YAML assets from `/app/assets`
+2. Validates cross-references (`databaseRef`, `datasetRef`, `chartRefs`)
+3. Resolves logical keys to runtime IDs via the reconciler state store
+4. Calls Superset REST APIs to create/update resources
+5. Persists runtime mappings for idempotent re-runs
+
+### 5.3 Custom Plugin Registration
+
+Dynamic plugins are auto-discovered from `/plugin-dist/*/dist/bundle-url.txt` and registered via the custom plugins API. Note: `DYNAMIC_PLUGINS` feature flag is currently disabled pending upstream fixes (see `assets/plugins/state_district_pies.yaml`).
 
 ---
 
@@ -443,14 +487,29 @@ User → Superset → Redirect to Keycloak → Authenticate → Return to Supers
 
 ### 7.2 Role Mapping
 
+Keycloak roles are mapped to Superset roles via `custom_sso_security_manager.py`:
+
+- Keycloak `superset_admin` → Superset `Admin` role
+- Keycloak `superset_alpha` → Superset `Alpha` role  
+- Keycloak `superset_gamma` → Superset `Gamma` role
+- Keycloak `superset_public` → Superset `Public` role
+
+Role claim is extracted from the JWT token's `role_keys` claim (configurable via `KEYCLOAK_ROLE_CLAIM`).
 
 ### 7.3 Service Accounts
 
-The control plane itself should use a dedicated machine identity, separate from browser login users.
+The reconciler (`superset-runtime-seed`) uses a dedicated service account:
+
+```bash
+SUPERSET_ADMIN_USERNAME=admin
+SUPERSET_ADMIN_PASSWORD=admin
+```
+
+This account is created during `superset-init` and used for all REST API operations. Browser users authenticate via Keycloak OIDC.
 
 ### 7.4 Direct Token Sign-In
 
-Direct “raw Keycloak token → browser session in Superset” should be treated as an optional custom extension, not a baseline assumption.
+Direct "raw Keycloak token → browser session in Superset" is implemented via `custom_sso_security_manager.py` using `CustomSsoSecurityManager`. The `/login/keycloak` endpoint accepts a Keycloak JWT and establishes a Superset session. Useful for embedding scenarios.
 
 ---
 
@@ -458,21 +517,18 @@ Direct “raw Keycloak token → browser session in Superset” should be treate
 
 ### 8.1 Supported Asset Types
 
-- Database
-- Dataset
-- Chart
-- Dashboard
-- DashboardFilter
-- Role
-- User
-- RLS
-- Theme
-- Branding
-- Alert
-- Report
-- Embedding
-- Plugin
-- Extension
+Currently implemented reconcilers (from `@/bhprojects/apache-superset-1/docker/scripts/seed_dashboard.py`):
+
+| Kind | Dependencies | Description |
+|------|--------------|-------------|
+| `Database` | — | Connection to a SQL database |
+| `Dataset` | `Database` | Virtual dataset (table/view) |
+| `Chart` | `Dataset` | Visualization with params and viz type |
+| `Dashboard` | `Chart` | Dashboard with layout, filters, and charts |
+| `Plugin` | — | Dynamic visualization plugin (requires `DYNAMIC_PLUGINS` flag) |
+| `Extension` | — | `.supx` extension bundles |
+
+Future kinds (schema defined, reconciler pending): `DashboardFilter`, `Role`, `User`, `RLS`, `Theme`, `Branding`, `Alert`, `Report`, `Embedding`
 
 ### 8.2 Example Assets
 
@@ -751,15 +807,41 @@ spec:
 
 ### 8.4 Reconciler Registry
 
+The reconciler registry (`RECONCILERS` in `seed_dashboard.py`) maps each `kind` to its implementation:
+
+```python
+RECONCILERS = (
+    DatabaseReconciler(),      # kind: Database
+    DatasetReconciler(),       # kind: Dataset, depends_on: Database
+    ChartReconciler(),         # kind: Chart, depends_on: Dataset
+    DashboardReconciler(),     # kind: Dashboard, depends_on: Chart
+    PluginReconciler(),        # kind: Plugin (dynamic viz)
+    ExtensionReconciler(),     # kind: Extension (.supx bundles)
+)
+```
+
+**Adding a new kind:**
+1. Subclass `Reconciler` with `kind` and optional `depends_on`
+2. Implement `apply(client, asset, ctx) -> runtime_id`
+3. Add instance to `RECONCILERS` tuple
+4. The engine auto-orders by dependency graph
+
 ### 8.5 Available Chart Types
 
-Superset provides a wide range of built-in visualization types. Use these `vizType`
-values in Chart YAML assets:
+This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/charts/`):
 
-**Basic Charts**
+| Type | Used In | Description |
+|---|---|---|
+| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in) |
+| `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table |
+| `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml` | ECharts bar chart |
+| `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart |
+| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart |
+
+**Additional Superset Built-in Types**
+
 | Type | Description |
 |---|---|
-| `pie` | Pie chart for proportional data |
 | `bar` | Vertical bar chart |
 | `line` | Line chart for trends |
 | `area` | Stacked area chart |
@@ -878,14 +960,54 @@ Responsibilities:
 
 ---
 
-## 10. Serve Mode and Watcher
+## 10. Project Structure Reference
 
+```
+/bhprojects/apache-superset-1/
+├── assets/                    # Declarative analytics assets (YAML)
+│   ├── charts/               # 7 charts (household survey, LCA segments)
+│   ├── dashboards/           # 1 dashboard (household survey)
+│   ├── databases/            # 1 database (analytics warehouse)
+│   ├── datasets/             # 8 datasets (hh_master + LCA views)
+│   ├── extensions/           # Extension declarations
+│   └── plugins/              # Plugin declarations (state-district-pies)
+├── config/
+│   └── base.yaml             # Base configuration
+├── docker/
+│   ├── assets/               # Static assets (logo)
+│   ├── keycloak-nginx/       # Keycloak proxy config
+│   └── scripts/              # Bootstrap, seed, reconciler scripts
+├── env/
+│   ├── dev.yaml              # Dev environment config
+│   ├── prod.yaml             # Prod environment config
+│   └── staging.yaml          # Staging environment config
+├── extensions/
+│   └── bundles/              # Built .supx extension packages
+├── seed/
+│   └── pg/                   # Postgres seed SQL + CSV data
+├── superset-extensions/
+│   └── dashboard-chatbot/    # Custom extension source
+├── superset-plugins/
+│   └── plugin-chart-state-district-pies/  # Custom viz plugin
+├── wiki/                     # Documentation
+│   ├── architecture/         # System architecture docs
+│   ├── assets/               # Per-asset documentation
+│   ├── research/             # Research notes
+│   ├── runtime/              # Runtime runbooks
+│   └── troubleshooting/      # Troubleshooting guides
+├── docker-compose.yml        # Full stack definition
+├── Dockerfile                # Superset image builder
+├── superset_config.py        # Superset configuration
+└── custom_sso_security_manager.py  # Keycloak SSO integration
+```
+
+---
 
 ## Reference docs
 
 - [Superset Docker Compose setup](https://superset.apache.org/docs/installation/docker-compose)
 - [Superset configuration guide](https://superset.apache.org/docs/configuration/configuring-superset)
-- [Superset 6.1.0 database connections](https://superset.apache.org/user-docs/6.0.0/configuration/databases/)
+- [Superset 6.1 database connections](https://superset.apache.org/docs/configuration/databases/)
 - [SQLAlchemy database URLs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls)
 
 ---
