@@ -9,26 +9,30 @@ spec:
   params:
     viz_type: echarts_timeseries_bar
     row_limit: 50
-    # Rows per (segment, minor_bucket) already sum to 100% per segment,
-    # so we just surface them as a stacked bar.
+    # View grain is (state_label, sector_label, segment, minor_bucket);
+    # re-aggregate to (segment, minor_bucket) here. stack: Expand
+    # renders 100%-normalised bars so each segment's bar still totals
+    # to 100%, matching the previous "% per segment" visual.
+    # state_label / sector_label are carried so drill-by has pivot
+    # targets.
     x_axis: segment
     x_axis_sort_asc: true
     groupby:
       - minor_bucket
     metrics:
-      - label: weighted_pct
+      - label: weighted_count
         expressionType: SQL
         hasCustomLabel: true
         optionName: am_weighted_pct
-        sqlExpression: MAX(pct)
-    stack: Stack
+        sqlExpression: SUM(bucket_weight)
+    stack: Expand
     show_legend: true
     legendType: scroll
     legendOrientation: right
     show_value: true
-    y_axis_title: Percentage of Households (%)
+    y_axis_title: Share of households
     x_axis_title: Segment
-    y_axis_format: ".0f"
+    y_axis_format: ".0%"
     rich_tooltip: true
     color_scheme: d3Category10
     order_desc: true

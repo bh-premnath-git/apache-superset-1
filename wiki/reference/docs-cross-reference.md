@@ -34,6 +34,7 @@ and an explicit coverage matrix for **every YAML file under `assets/` (all subfo
 | `assets/datasets/lca_state_segment_distribution.yaml` | Dataset | [`wiki/assets/dataset/dataset.household.state_segment_distribution.md`](../assets/dataset/dataset.household.state_segment_distribution.md) |
 | `assets/charts/_district_pie_subchart.yaml` | Chart | [`wiki/assets/chart/chart.household.district_pie_subchart.md`](../assets/chart/chart.household.district_pie_subchart.md) |
 | `assets/charts/district_pie_unified.yaml` | Chart | [`wiki/assets/chart/chart.household.district_pie_unified.md`](../assets/chart/chart.household.district_pie_unified.md) |
+| `assets/charts/district_segment_distribution_bar.yaml` | Chart | [`wiki/assets/chart/chart.household.district_segment_distribution_bar.md`](../assets/chart/chart.household.district_segment_distribution_bar.md) |
 | `assets/charts/household_minor_structure.yaml` | Chart | [`wiki/assets/chart/chart.household.minor_structure.md`](../assets/chart/chart.household.minor_structure.md) |
 | `assets/charts/mpce_by_segment.yaml` | Chart | [`wiki/assets/chart/chart.household.mpce_by_segment.md`](../assets/chart/chart.household.mpce_by_segment.md) |
 | `assets/charts/rural_segment_comparison.yaml` | Chart | [`wiki/assets/chart/chart.household.rural_segment_comparison.md`](../assets/chart/chart.household.rural_segment_comparison.md) |

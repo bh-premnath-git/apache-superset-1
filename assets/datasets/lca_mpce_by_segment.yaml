@@ -7,8 +7,16 @@ spec:
   databaseRef: db.analytics
   schema: household
   table: vw_mpce_by_segment
+  # The underlying view already carries sector ('Rural' / 'Urban') in
+  # addition to segment. Declaring it here turns it into a drill-by
+  # pivot target for charts that only group on segment (e.g. the mpce
+  # line chart). Without this, drill-by on the mpce chart has no
+  # target and the menu item is hidden. segment_order is intentionally
+  # omitted — it is 1:1 with segment so drill-by on it produces the
+  # same result.
   dimensions:
     - segment
+    - sector
   metrics:
     - metric_name: count
       expression: COUNT(*)

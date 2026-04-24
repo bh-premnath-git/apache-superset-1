@@ -135,68 +135,49 @@ SELECT
         + COALESCE(u1_pct, 0) + COALESCE(u2_pct, 0)                                     AS c6
 FROM pct;
 
--- ── Weighted share of households by U15-minor bucket within each segment.
--- The bars in the reference image sum to 100% per segment (rows R1-R4,U1-U3)
--- and are split into No U15 minor / 1-2 U15 minors / 3+ U15 minors stacks.
+-- ── Weighted count of households by U15-minor bucket, segment, state and
+-- sector. Grain is (state_label, sector_label, segment, minor_bucket) so
+-- Superset's drill-by has state_label and sector_label as pivot targets
+-- on the "Household Structure" stacked bar. Charts re-aggregate at query
+-- time (the bar uses SUM(bucket_weight) with stack: Expand to render
+-- 100%-stacked bars per segment).
 CREATE OR REPLACE VIEW household.vw_segment_minor_bucket AS
-WITH per_bucket AS (
-    SELECT
-        segment,
-        minor_bucket,
-        SUM(wt) AS bucket_weight
-    FROM household.vw_hh_segments
-    GROUP BY segment, minor_bucket
-),
-per_segment AS (
-    SELECT segment, SUM(bucket_weight) AS seg_weight
-    FROM per_bucket
-    GROUP BY segment
-)
 SELECT
-    b.segment,
-    b.minor_bucket,
-    ROUND((b.bucket_weight * 100.0 / NULLIF(s.seg_weight, 0))::numeric, 1) AS pct,
-    b.bucket_weight,
-    s.seg_weight
-FROM per_bucket b
-JOIN per_segment s USING (segment);
+    state_label,
+    sector_label,
+    segment,
+    minor_bucket,
+    SUM(wt) AS bucket_weight
+FROM household.vw_hh_segments
+GROUP BY state_label, sector_label, segment, minor_bucket;
 
--- ── Overall segment distribution across the three states (pie chart).
+-- ── Overall segment distribution (pie chart).
+-- Grain is (state_label, sector_label, segment) so Superset's drill-by
+-- has state_label and sector_label as pivot targets. The pie chart
+-- aggregates back to per-segment at query time via SUM(seg_weight);
+-- pie label_type=key_percent computes the % per slice from those sums.
 CREATE OR REPLACE VIEW household.vw_segment_distribution AS
-WITH totals AS (
-    SELECT SUM(wt) AS total_weight FROM household.vw_hh_segments
-),
-per_seg AS (
-    SELECT segment, SUM(wt) AS seg_weight
-    FROM household.vw_hh_segments
-    GROUP BY segment
-)
 SELECT
-    p.segment,
-    p.seg_weight,
-    ROUND((p.seg_weight * 100.0 / NULLIF(t.total_weight, 0))::numeric, 1) AS pct
-FROM per_seg p
-CROSS JOIN totals t;
+    state_label,
+    sector_label,
+    segment,
+    SUM(wt) AS seg_weight
+FROM household.vw_hh_segments
+GROUP BY state_label, sector_label, segment;
 
--- ── Per-state segment mix (stacked bar, 3 bars = Bihar / MP / Jharkhand).
+-- ── Per-state segment mix (stacked bar: 3 bars = Bihar / Jharkhand / MP).
+-- Grain is (state_label, sector_label, segment) so drill-by has
+-- sector_label as a pivot target. The bar chart re-aggregates to
+-- per-state via SUM(seg_weight) with stack: Expand to render
+-- 100%-stacked bars per state.
 CREATE OR REPLACE VIEW household.vw_state_segment_distribution AS
-WITH per_state AS (
-    SELECT state_label, SUM(wt) AS state_weight
-    FROM household.vw_hh_segments
-    GROUP BY state_label
-),
-per_state_seg AS (
-    SELECT state_label, segment, SUM(wt) AS seg_weight
-    FROM household.vw_hh_segments
-    GROUP BY state_label, segment
-)
 SELECT
-    ps.state_label,
-    ps.segment,
-    ps.seg_weight,
-    ROUND((ps.seg_weight * 100.0 / NULLIF(s.state_weight, 0))::numeric, 1) AS pct
-FROM per_state_seg ps
-JOIN per_state s USING (state_label);
+    state_label,
+    sector_label,
+    segment,
+    SUM(wt) AS seg_weight
+FROM household.vw_hh_segments
+GROUP BY state_label, sector_label, segment;
 
 -- ── Long-form (state, district, segment) weighted count.
 -- Feeds the custom `state_district_pies` viz plugin, which groups on

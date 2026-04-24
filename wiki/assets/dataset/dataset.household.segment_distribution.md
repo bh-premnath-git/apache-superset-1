@@ -2,7 +2,7 @@
 
 ## Purpose
 
-One-row-per-segment weighted distribution dataset across the covered states.
+Weighted segment distribution dataset across the covered states.
 
 ## Source of truth
 
@@ -17,9 +17,16 @@ One-row-per-segment weighted distribution dataset across the covered states.
 
 ## Declared shape
 
-- dimension: `segment`
-- each row contains weighted count/share values used for high-level segment split visuals
+- Grain: `(state_label, sector_label, segment)` with `SUM(wt)`
+  pre-computed as `seg_weight` inside the view. Multiple rows per
+  segment — one per `(state_label, sector_label)` combination.
+- Dimensions: `state_label`, `sector_label`, `segment`.
+- Measure column: `seg_weight` — charts that want per-segment totals
+  run `SUM(seg_weight)` in their metric, and Superset's drill-by has
+  `state_label` / `sector_label` as pivot targets.
 
 ## Downstream consumer
 
-- `chart.household.segment_distribution_pie`
+- `chart.household.segment_distribution_pie` — groupby `segment`,
+  metric `SUM(seg_weight)`; pie `label_type: key_percent` normalises
+  the sums to slice percentages.

@@ -17,8 +17,14 @@ Pre-aggregated dataset for minor-age bucket composition within each segment.
 
 ## Declared shape
 
-- dimensions: `segment`, `minor_bucket`
-- rows represent weighted percentages; rows per segment sum to ~100
+- Grain: `(state_label, sector_label, segment, minor_bucket)` with
+  `SUM(wt)` pre-computed as `bucket_weight` inside the view.
+- Dimensions: `state_label`, `sector_label`, `segment`, `minor_bucket`.
+- Measure column: `bucket_weight`. The stacked-bar chart re-aggregates
+  via `SUM(bucket_weight)` and uses `stack: Expand` to render
+  100%-normalised bars per segment.
+- `state_label` / `sector_label` are carried so Superset's drill-by
+  has pivot targets.
 
 ## Downstream consumer
 

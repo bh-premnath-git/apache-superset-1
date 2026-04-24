@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Pre-aggregated weighted segment distribution per state.
+Weighted segment distribution dataset, per state + sector.
 
 ## Source of truth
 
@@ -17,8 +17,13 @@ Pre-aggregated weighted segment distribution per state.
 
 ## Declared shape
 
-- dimensions: `state_label`, `segment`
-- one row per state+segment combination with weighted share values
+- Grain: `(state_label, sector_label, segment)` with `SUM(wt)`
+  pre-computed as `seg_weight` inside the view.
+- Dimensions: `state_label`, `sector_label`, `segment`.
+- Measure column: `seg_weight`. Charts re-aggregate via `SUM(seg_weight)`
+  and use `stack: Expand` to render 100%-normalised bars.
+- `sector_label` is carried so Superset's drill-by has a pivot target
+  from a chart that already uses `state_label` + `segment`.
 
 ## Downstream consumer
 

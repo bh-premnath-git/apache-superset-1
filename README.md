@@ -834,11 +834,44 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
 
 | Type | Used In | Description |
 |---|---|---|
-| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in) |
-| `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table |
-| `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml` | ECharts bar chart |
-| `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart |
-| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart |
+| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in). Upstream `ChartMetadata` does **not** register `Behavior.DRILL_BY` or `Behavior.DRILL_TO_DETAIL`, so the right-click menu is empty on this viz regardless of the feature flags — use the sibling `district_segment_distribution_bar` for drill-by on the same dataset. |
+| `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table. Does not expose the right-click context menu. |
+| `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml`, `district_segment_distribution_bar.yaml` | ECharts bar chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+| `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+
+**Drill by lives on the right-click context menu on a data element**
+(a pie slice, a bar, a line point, a table cell) — **not** on the
+three-dot chart-header menu. The header menu shows
+`Force refresh / Enter fullscreen / Edit chart / View query / View
+as table / Drill to detail / Share / Download` and never exposes
+Drill by. To use Drill by, right-click directly on a chart element.
+
+**Drill by requires three conditions to all hold** — Superset's
+`FEATURE_FLAGS["DRILL_BY"]` alone is not sufficient:
+
+1. The viz plugin's upstream `ChartMetadata.behaviors` must include
+   `Behavior.DRILL_BY` (all echarts plugins do; `cartodiagram` and
+   `handlebars` do not).
+2. The chart's dataset must expose at least one dimension that the
+   chart is **not** already using as `x_axis` or `groupby`. Superset
+   populates the drill-by submenu from "dataset dimensions minus
+   chart dimensions"; if the set is empty the menu item is hidden.
+   Pre-aggregated SQL views that were defined at the exact grain a
+   single chart consumes will silently disable drill-by on every
+   chart that reads them — grain the view one level finer and carry
+   the extra dimensions on the Dataset YAML so drill-by has pivot
+   targets.
+3. Superset's cached column list for the dataset must be current.
+   Superset introspects columns at dataset-creation time and never
+   re-introspects unless asked, so a view that gained columns after
+   the dataset was created will appear in Postgres but not in
+   Superset's chart explorer until the dataset is refreshed. The
+   reconciler (`docker/scripts/seed_dashboard.py::DatasetReconciler._refresh_columns_if_view_changed`)
+   detects this case by comparing declared `dimensions:` against the
+   dataset's cached columns and calls `PUT /api/v1/dataset/{id}/refresh`
+   when any are missing. Manual equivalent: Data → Datasets → edit
+   → Columns tab → **Sync columns from source**.
 
 **Additional Superset Built-in Types**
 
