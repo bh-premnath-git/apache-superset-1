@@ -14,6 +14,7 @@ export function validateNonEmpty(v: unknown): boolean | string {
 export const Behavior = {
   INTERACTIVE_CHART: 'INTERACTIVE_CHART',
   DRILL_TO_DETAIL: 'DRILL_TO_DETAIL',
+  DRILL_BY: 'DRILL_BY',
 } as const;
 
 export class ChartMetadata {

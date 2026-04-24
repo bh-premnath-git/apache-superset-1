@@ -29,7 +29,11 @@ export default class StateDistrictPiesChartPlugin extends ChartPlugin<StateDistr
       thumbnail: THUMBNAIL,
       tags: [t('Geo'), t('Choropleth'), t('Pie'), t('Custom')],
       category: t('Map'),
-      behaviors: [Behavior.INTERACTIVE_CHART, Behavior.DRILL_TO_DETAIL],
+      behaviors: [
+        Behavior.INTERACTIVE_CHART,
+        Behavior.DRILL_TO_DETAIL,
+        Behavior.DRILL_BY,
+      ],
     });
 
     super({

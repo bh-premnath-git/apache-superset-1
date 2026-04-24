@@ -4,17 +4,31 @@
 # 112 at once. Geometry from household.vw_state_district_segment_geo.
 #
 # Config notes (plugin-chart-cartodiagram, Superset 6.x):
-# - map_view.mode = FIT_DATA → auto-fit to the filtered state's geometry
-#   extent. The other six fields (zoom/latitude/longitude and their
-#   fixed* counterparts) are non-optional in the plugin's MapViewConfigs
-#   type; missing values trigger the "zoom config null" error and the map
-#   falls back to the world view. They are set to a sensible India-centred
-#   fallback so the map is usable even before the first data fit.
+# - map_view.mode. The plugin's MapViewConfigs type accepts exactly two
+#   literal values: 'FIT_DATA' | 'CUSTOM' (see superset-frontend/plugins/
+#   plugin-chart-cartodiagram/src/types.ts). We use CUSTOM so the map is
+#   always centred on India via fixedZoom/fixedLatitude/fixedLongitude.
+#   FIT_DATA was the previous setting, but when the initial query is slow
+#   or the State filter selection is empty, OlChartMap's FIT_DATA branch
+#   early-returns without touching the OpenLayers view, leaving it at the
+#   OL default (zoom 0, world view). CUSTOM always applies the fixed*
+#   coordinates on load, so the user sees India immediately and the
+#   district pies overlay once data arrives. The zoom/latitude/longitude
+#   triplet mirrors fixed* because all six fields are required by the
+#   MapViewConfigs type even when only one mode is active.
 # - chart_size.type = FIXED with a uniform 28x28 sub-chart across the
 #   plugin's full zoom range (MIN_ZOOM_LEVEL=0 … MAX_ZOOM_LEVEL=28).
 #   Upstream default is 100x100, which is far too large when ~38 district
 #   pies share Bihar's bounding box. FIXED keeps pies readable regardless
 #   of pan/zoom.
+#
+# Drill-by note: upstream plugin-chart-cartodiagram does NOT declare
+# Behavior.DRILL_BY in its ChartMetadata (only DRILL_TO_DETAIL is
+# inherited dashboard-wide via the FEATURE_FLAGS), so the right-click
+# menu on this chart exposes "Drill to detail" but not "Drill by". Users
+# who need drill-by from state → district → segment should use the sibling
+# state_segment_distribution_bar or segment_distribution_pie charts on
+# this dashboard — they are echarts plugins and register DRILL_BY.
 apiVersion: analytics/v1
 kind: Chart
 metadata:
@@ -29,7 +43,7 @@ spec:
     geom_column: geometry
     row_limit: 10000
     map_view:
-      mode: FIT_DATA
+      mode: CUSTOM
       zoom: 5
       latitude: 23.0
       longitude: 82.0
