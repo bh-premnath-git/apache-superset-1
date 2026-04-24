@@ -3,10 +3,18 @@
 # Defaults (in the dashboard) to Bihar so ~38 districts render instead of all
 # 112 at once. Geometry from household.vw_state_district_segment_geo.
 #
-# Superset 6.1.0 RC note:
-# - Upstream issue #34247 (Cartodiagram + pie) was closed on 2025-10-07.
-# - This chart intentionally uses a dedicated pie sub-chart with labels/legend
-#   disabled to avoid tiled legend clutter while preserving hover tooltips.
+# Config notes (plugin-chart-cartodiagram, Superset 6.x):
+# - map_view.mode = FIT_DATA → auto-fit to the filtered state's geometry
+#   extent. The other six fields (zoom/latitude/longitude and their
+#   fixed* counterparts) are non-optional in the plugin's MapViewConfigs
+#   type; missing values trigger the "zoom config null" error and the map
+#   falls back to the world view. They are set to a sensible India-centred
+#   fallback so the map is usable even before the first data fit.
+# - chart_size.type = FIXED with a uniform 28x28 sub-chart across the
+#   plugin's full zoom range (MIN_ZOOM_LEVEL=0 … MAX_ZOOM_LEVEL=28).
+#   Upstream default is 100x100, which is far too large when ~38 district
+#   pies share Bihar's bounding box. FIXED keeps pies readable regardless
+#   of pan/zoom.
 apiVersion: analytics/v1
 kind: Chart
 metadata:
@@ -22,9 +30,12 @@ spec:
     row_limit: 10000
     map_view:
       mode: FIT_DATA
-      zoom: 6
-      latitude: 24.0
+      zoom: 5
+      latitude: 23.0
       longitude: 82.0
+      fixedZoom: 5
+      fixedLatitude: 23.0
+      fixedLongitude: 82.0
     layer_configs:
       - type: XYZ
         url: https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png
@@ -36,3 +47,41 @@ spec:
       b: 255
       a: 0.0
     chart_background_border_radius: 4
+    chart_size:
+      type: FIXED
+      configs:
+        zoom: 6
+        width: 28
+        height: 28
+        slope: 0
+        exponent: 1
+      values:
+        '0': { width: 28, height: 28 }
+        '1': { width: 28, height: 28 }
+        '2': { width: 28, height: 28 }
+        '3': { width: 28, height: 28 }
+        '4': { width: 28, height: 28 }
+        '5': { width: 28, height: 28 }
+        '6': { width: 28, height: 28 }
+        '7': { width: 28, height: 28 }
+        '8': { width: 28, height: 28 }
+        '9': { width: 28, height: 28 }
+        '10': { width: 28, height: 28 }
+        '11': { width: 28, height: 28 }
+        '12': { width: 28, height: 28 }
+        '13': { width: 28, height: 28 }
+        '14': { width: 28, height: 28 }
+        '15': { width: 28, height: 28 }
+        '16': { width: 28, height: 28 }
+        '17': { width: 28, height: 28 }
+        '18': { width: 28, height: 28 }
+        '19': { width: 28, height: 28 }
+        '20': { width: 28, height: 28 }
+        '21': { width: 28, height: 28 }
+        '22': { width: 28, height: 28 }
+        '23': { width: 28, height: 28 }
+        '24': { width: 28, height: 28 }
+        '25': { width: 28, height: 28 }
+        '26': { width: 28, height: 28 }
+        '27': { width: 28, height: 28 }
+        '28': { width: 28, height: 28 }
