@@ -29,11 +29,34 @@ interface ChatResponse {
   next_step?: string;
 }
 
-// API base URL - can be configured via window global or defaults to same-origin
+// Superset mounts extension backends at
+// /extensions/<publisher>/<name>/<endpoint> (see superset_core's @api
+// decorator, which derives the prefix from the extension manifest). The
+// publisher/name values here MUST match extension.json exactly. A different
+// deployment can override the prefix via window.CHATBOT_API_URL, e.g. when
+// routing to a mock server during local dev.
+const EXTENSION_API_PREFIX = '/extensions/my-org/dashboard-chatbot';
 const API_BASE_URL =
   (typeof window !== 'undefined' &&
     (window as Window & { CHATBOT_API_URL?: string }).CHATBOT_API_URL) ||
-  '';
+  EXTENSION_API_PREFIX;
+
+// Superset's Flask-AppBuilder endpoints are CSRF-protected. The token is
+// rendered into the host page as a <meta name="csrf-token"> tag (Superset 6.x)
+// or exposed on window.csrf_token. Fall back to reading the csrf_access_token
+// cookie as a last resort.
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  const metaToken = meta?.getAttribute('content');
+  if (metaToken) return metaToken;
+  const winToken = (window as Window & { csrf_token?: string }).csrf_token;
+  if (winToken) return winToken;
+  const cookieMatch = document.cookie.match(
+    /(?:^|; )csrf_access_token=([^;]+)/,
+  );
+  return cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+}
 
 function ChatbotUI() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -66,9 +89,16 @@ function ChatbotUI() {
     setIsLoading(true);
 
     try {
+      const csrfToken = getCsrfToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+
       const response = await fetch(`${API_BASE_URL}/ask`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers,
         body: JSON.stringify({ question }),
       });
 
@@ -76,7 +106,14 @@ function ChatbotUI() {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data: ChatResponse = await response.json();
+      // superset_core's RestApi.response() wraps payloads as {result: ...};
+      // the older Blueprint scaffolding returned the answer at the top level,
+      // so accept either shape to stay compatible with both runtimes.
+      const raw = (await response.json()) as
+        | ChatResponse
+        | { result?: ChatResponse };
+      const data: ChatResponse =
+        'result' in raw && raw.result ? raw.result : (raw as ChatResponse);
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
