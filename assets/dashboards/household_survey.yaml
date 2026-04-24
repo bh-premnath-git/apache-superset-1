@@ -5,21 +5,23 @@ metadata:
   name: Household Survey Overview
 spec:
   slug: household-survey
-  chartHeight: 55
+  chartHeight: 70
   # Layout rules:
-  # - `fullWidthFirst: 2` → first two charts (Rural Segments table and
-  #   District Segments Cartodiagram) each get their own full-width row.
-  # - `chartsPerRow: 2` → remaining charts render in two columns per row.
-  # - `chartHeights` → per-chart height overrides. The Rural Segments table
-  #   and the District Segments map both need extra vertical space;
-  #   all other charts use the compact default (55).
-  fullWidthFirst: 2
-  chartsPerRow: 2
+  # - `chartsPerRow: 1` → every chart occupies its own full-width row.
+  #   The LCA views now carry more dimensions (state_label, sector_label)
+  #   so the summary bars/pies render wider labels and legends that do
+  #   not fit comfortably in a half-row; stacking keeps them readable.
+  # - `chartHeight: 70` → slightly taller default so the taller bar
+  #   charts still have vertical breathing room without per-chart
+  #   overrides.
+  # - `chartHeights` → per-chart height overrides for the two
+  #   data-dense charts that need more vertical space than the default.
+  chartsPerRow: 1
   crossFiltersEnabled: true
   chartHeights:
     chart.household.rural_segment_comparison: 105
     # District-level Cartodiagram height reduced.
-    chart.household.district_pie_unified: 70
+    chart.household.district_pie_unified: 85
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified

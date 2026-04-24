@@ -23,23 +23,25 @@ Household-facing dashboard for the household survey part of the repository.
 
 The dashboard uses:
 
-- `chartHeight: 55` — compact default vertical space for charts
-- `chartHeights` — per-chart height overrides for the two data-dense full-width charts:
+- `chartHeight: 70` — default row height for stacked full-width charts.
+- `chartHeights` — per-chart height overrides for the two data-dense
+  charts that need more vertical space:
   - Rural Segments table: `105`
-  - District Segments Cartodiagram: `95` (room for pie markers + map controls)
-- `fullWidthFirst: 2` — first two charts (Rural Segments table and District Segments Cartodiagram) get full-width rows
-- `chartsPerRow: 2` — remaining charts pair up side-by-side
+  - District Segments Cartodiagram: `85`
+- `chartsPerRow: 1` — every chart occupies its own full-width row.
+  The LCA views now carry more dimensions (state_label, sector_label)
+  so the summary bars/pies render wider labels/legends that did not
+  fit comfortably in the previous two-column layout.
 
 Example from `household_survey.yaml`:
 ```yaml
 spec:
   slug: household-survey
-  chartHeight: 55
-  fullWidthFirst: 2
-  chartsPerRow: 2
+  chartHeight: 70
+  chartsPerRow: 1
   chartHeights:
     chart.household.rural_segment_comparison: 105
-    chart.household.district_pie_unified: 70
+    chart.household.district_pie_unified: 85
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
@@ -89,6 +91,15 @@ depends on the plugin's `behaviors` list. Useful for: "which
 households in Bhagalpur landed in the R1 slice?"
 
 ### 4. Drill by (Superset built-in)
+
+**Where the menu lives.** "Drill by" lives on Superset's *right-click
+context menu on a data element* (a pie slice, a bar, a line point, a
+table cell) — **not** on the three-dot chart-header menu (which shows
+`Force refresh / Enter fullscreen / Edit chart / View query / View as
+table / Drill to detail / Share / Download`). The header menu never
+surfaces Drill by in any Superset release; expecting it there is the
+most common cause of "I don't see Drill by". To use Drill by, right-
+click directly on a chart element.
 
 Right-click any chart whose upstream `ChartMetadata` registers
 `Behavior.DRILL_BY` → **Drill by** → pick another column from the

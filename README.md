@@ -840,7 +840,14 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
 | `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 | `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 
-**Drill by requires two conditions to both hold** — Superset's
+**Drill by lives on the right-click context menu on a data element**
+(a pie slice, a bar, a line point, a table cell) — **not** on the
+three-dot chart-header menu. The header menu shows
+`Force refresh / Enter fullscreen / Edit chart / View query / View
+as table / Drill to detail / Share / Download` and never exposes
+Drill by. To use Drill by, right-click directly on a chart element.
+
+**Drill by requires three conditions to all hold** — Superset's
 `FEATURE_FLAGS["DRILL_BY"]` alone is not sufficient:
 
 1. The viz plugin's upstream `ChartMetadata.behaviors` must include
@@ -855,6 +862,16 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
    chart that reads them — grain the view one level finer and carry
    the extra dimensions on the Dataset YAML so drill-by has pivot
    targets.
+3. Superset's cached column list for the dataset must be current.
+   Superset introspects columns at dataset-creation time and never
+   re-introspects unless asked, so a view that gained columns after
+   the dataset was created will appear in Postgres but not in
+   Superset's chart explorer until the dataset is refreshed. The
+   reconciler (`docker/scripts/seed_dashboard.py::DatasetReconciler._refresh_columns_if_view_changed`)
+   detects this case by comparing declared `dimensions:` against the
+   dataset's cached columns and calls `PUT /api/v1/dataset/{id}/refresh`
+   when any are missing. Manual equivalent: Data → Datasets → edit
+   → Columns tab → **Sync columns from source**.
 
 **Additional Superset Built-in Types**
 

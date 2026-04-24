@@ -377,7 +377,57 @@ class DatasetReconciler(Reconciler):
 
         self._sync_metrics(client, dataset_id, spec.get("metrics") or [])
         self._sync_main_dttm(client, dataset_id, spec.get("timeColumn"))
+        self._refresh_columns_if_view_changed(client, dataset_id, spec)
         return dataset_id
+
+    def _refresh_columns_if_view_changed(
+        self,
+        client: SupersetClient,
+        dataset_id: int,
+        spec: dict[str, Any],
+    ) -> None:
+        """Reconcile Superset's cached column list with the physical object.
+
+        Superset caches the column list of a dataset in its metadata DB at
+        creation time and never re-introspects unless asked. When the
+        backing table/view is ALTER'd or recreated with new columns (for
+        example, when ``seed/pg/*.sql`` evolves a view to carry extra
+        dimensions for drill-by), Superset's dataset keeps the old column
+        list, so new dimensions don't show up in the chart explorer and
+        drill-by has no pivot targets.
+
+        The ``declared`` dimensions in the YAML are the source of truth
+        for "what columns we expect on this dataset". If any are missing
+        from Superset's cached list, we POST ``/api/v1/dataset/{id}/refresh``
+        which re-introspects the physical object. That endpoint also
+        upserts ``groupby: true`` / ``filterable: true`` on every column
+        it discovers (see apache/superset issue #24136), which is exactly
+        what drill-by needs — the submenu is built from columns where
+        ``groupby: true``.
+        """
+        declared = spec.get("dimensions") or []
+        if not declared:
+            return
+        try:
+            detail = client.get(f"/api/v1/dataset/{dataset_id}")
+        except urllib.error.HTTPError:
+            return
+        existing_cols = {
+            c.get("column_name")
+            for c in (detail.get("result", {}).get("columns") or [])
+            if c.get("column_name")
+        }
+        missing = [c for c in declared if c not in existing_cols]
+        if not missing:
+            return
+        log(
+            f"    refreshing dataset columns (missing declared dimensions: "
+            f"{', '.join(missing)})"
+        )
+        try:
+            client.put(f"/api/v1/dataset/{dataset_id}/refresh", {})
+        except urllib.error.HTTPError as ex:
+            log(f"    ⚠ could not refresh dataset {dataset_id}: {ex}")
 
     def _sync_metrics(
         self,
