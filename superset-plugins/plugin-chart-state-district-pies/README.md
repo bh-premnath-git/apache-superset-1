@@ -121,7 +121,7 @@ npm run serve            # dev server on http://localhost:8080
 ## Register with Superset
 
 Via `assets/plugins/state_district_pies.yaml` in this repo — see
-[`wiki/architecture/custom-viz-plugin.md`](../../wiki/architecture/custom-viz-plugin.md).
+[`wiki/assets/plugin/plugin.chart.state_district_pies.md`](../../wiki/assets/plugin/plugin.chart.state_district_pies.md).
 
 ## Test
 

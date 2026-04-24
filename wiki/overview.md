@@ -44,5 +44,5 @@ The active analytics experience centers on the **Household Survey** dashboard (`
 - Historical notes should be marked clearly as historical to avoid confusion with current state.
 ## Documentation coverage
 
-The wiki now includes per-asset pages for every declarative chart and dataset under `assets/charts/` and `assets/datasets/`. Use `wiki/index.md` as the canonical entry point.
+The wiki now includes per-asset pages for all declarative assets under `assets/` (database, datasets, charts, dashboard, plugin, and extension). Use `wiki/index.md` as the canonical entry point.
 
