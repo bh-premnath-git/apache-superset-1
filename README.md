@@ -54,6 +54,33 @@ docker compose down -v
 
 ---
 
+## Documentation Status (Updated 2026-04-24)
+
+Project runbooks and asset references are maintained under [`wiki/`](wiki/index.md).
+
+- Wiki home: [`wiki/index.md`](wiki/index.md)
+- System overview: [`wiki/overview.md`](wiki/overview.md)
+- Architecture summary: [`wiki/architecture/README.md`](wiki/architecture/README.md)
+- Runtime seeding runbook: [`wiki/runtime/database-seeding.md`](wiki/runtime/database-seeding.md)
+- Troubleshooting (chart visibility): [`wiki/troubleshooting/chart-visibility-in-ui.md`](wiki/troubleshooting/chart-visibility-in-ui.md)
+- Full asset catalog (all databases/datasets/charts/dashboard docs): [`wiki/index.md`](wiki/index.md)
+
+This section exists to keep operational docs discoverable while the longer design document below remains available for deep reference.
+
+## Architecture & Design Pattern Highlights
+
+At a glance, this project follows a **GitOps + reconcile loop** design pattern for analytics assets:
+
+- **Declarative desired state** in `assets/` (database → dataset → chart → dashboard).
+- **Dependency-aware reconciliation** so resources apply in stable order and can be retried safely.
+- **Idempotent operations** so repeated runs converge to the same runtime state.
+- **Separation of concerns** between platform/runtime orchestration (Compose/services), data seeding (`seed/pg/`), and asset declarations (`assets/`).
+- **Extension points** for custom visual plugins and Superset extensions without coupling core asset flows.
+
+For deeper details:
+- Architecture narrative in this README: [System Architecture](#3-system-architecture) and [Core Engine Design](#4-core-engine-design).
+- Wiki architecture companion: [`wiki/architecture/README.md`](wiki/architecture/README.md).
+
 ## Table of Contents
 
 ---
