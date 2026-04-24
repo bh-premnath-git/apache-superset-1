@@ -90,6 +90,6 @@ state and district columns:
 
 ## Related pages
 
-- [Custom Viz Plugin architecture](../architecture/custom-viz-plugin.md)
+- [plugin.chart.state_district_pies](../plugin/plugin.chart.state_district_pies.md)
 - [chart.household.district_pie_unified](chart.household.district_pie_unified.md) — Current unified Cartodiagram approach
 - [dataset.household.hh_master](dataset.household.hh_master.md)

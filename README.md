@@ -64,6 +64,7 @@ Project runbooks and asset references are maintained under [`wiki/`](wiki/index.
 - Runtime seeding runbook: [`wiki/runtime/database-seeding.md`](wiki/runtime/database-seeding.md)
 - Troubleshooting (chart visibility): [`wiki/troubleshooting/chart-visibility-in-ui.md`](wiki/troubleshooting/chart-visibility-in-ui.md)
 - Full asset catalog (all databases/datasets/charts/dashboard docs): [`wiki/index.md`](wiki/index.md)
+- Documentation cross-reference (all README/wiki files in this repo): [`wiki/reference/docs-cross-reference.md`](wiki/reference/docs-cross-reference.md)
 
 This section exists to keep operational docs discoverable while the longer design document below remains available for deep reference.
 
@@ -96,6 +97,7 @@ For deeper details:
 - [Asset Model](#8-asset-model)
 - [Runtime Modes](#9-runtime-modes)
 - [Reference](#reference-docs)
+- [Documentation Cross-Reference](#documentation-cross-reference)
 - [License](#license)
 
 ---
@@ -1009,6 +1011,16 @@ Responsibilities:
 - [Superset configuration guide](https://superset.apache.org/docs/configuration/configuring-superset)
 - [Superset 6.1 database connections](https://superset.apache.org/docs/configuration/databases/)
 - [SQLAlchemy database URLs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls)
+
+---
+
+## Documentation Cross-Reference
+
+For a repo-wide list of every `README.md` and every file under `wiki/` (including subfolders), plus where each file is linked from, see:
+
+- [`wiki/reference/docs-cross-reference.md`](wiki/reference/docs-cross-reference.md)
+
+This page is maintained specifically to keep documentation synchronized with the actual project tree.
 
 ---
 

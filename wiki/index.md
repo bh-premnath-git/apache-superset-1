@@ -11,6 +11,7 @@ It complements the root `README.md` with task-focused runbooks and full asset re
 2. [Architecture](architecture/README.md) — runtime services, reconciliation flow, and extension/plugin model.
 3. [Database seeding runbook](runtime/database-seeding.md) — how the analytics database is seeded and validated.
 4. [Troubleshooting: chart visibility](troubleshooting/chart-visibility-in-ui.md) — common “chart missing/not rendering” paths.
+5. [Documentation cross-reference](reference/docs-cross-reference.md) — repo-wide README/wiki inventory.
 
 ## Asset reference pages
 
@@ -40,6 +41,12 @@ It complements the root `README.md` with task-focused runbooks and full asset re
 
 ### Dashboard
 - [dashboard.household.survey](assets/dashboard/dashboard.household.survey.md)
+
+### Plugins
+- [plugin.chart.state_district_pies](assets/plugin/plugin.chart.state_district_pies.md)
+
+### Extensions
+- [extension.ext.my_org.dashboard_chatbot](assets/extension/extension.ext.my_org.dashboard_chatbot.md)
 
 ## Research notes
 

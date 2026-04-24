@@ -5,7 +5,7 @@
 #   https://github.com/apache/superset/discussions/38607
 #   https://github.com/apache/superset/issues/34162
 # This file is registration metadata only; build source code to .supx first.
-# See: extensions/dashboard-chatbot/README.md
+# See: wiki/research/dashboard-chatbot-extension.md
 apiVersion: analytics/v1
 kind: Extension
 metadata:

@@ -17,7 +17,13 @@
 
 This asset is the upstream dependency for:
 - `dataset.household.hh_master`
-- `dataset.sales.orders`
+- `dataset.household.district_segment_pie`
+- `dataset.household.mpce_by_segment`
+- `dataset.household.segment_distribution`
+- `dataset.household.segment_minor_bucket`
+- `dataset.household.state_district_segment`
+- `dataset.household.state_district_segment_geo`
+- `dataset.household.state_segment_distribution`
 
 If this asset fails to reconcile, downstream datasets cannot be created.
 
