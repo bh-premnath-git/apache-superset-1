@@ -5,6 +5,8 @@ description = "Backend module for Dashboard Chatbot Superset extension"
 requires-python = ">=3.10"
 dependencies = [
   "flask>=2.3",
+  "flask-appbuilder>=4.3",
+  "apache-superset-core>=0.1.0rc2",
 ]
 
 [build-system]
