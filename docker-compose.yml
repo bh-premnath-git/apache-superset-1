@@ -281,8 +281,6 @@ services:
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./extensions/bundles:/app/extensions:ro
       - plugin-dist:/app/superset/static/assets/plugins:ro  # Serves all plugins at /static/assets/plugins/<name>/
-      - ./docker/assets/loader.gif:/app/superset/static/assets/loading.cff8a5da.gif:ro
-      - ./docker/assets/loader.gif:/app/superset/static/assets/images/loading.gif:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
       interval: 15s

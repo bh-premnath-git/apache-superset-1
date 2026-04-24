@@ -53,6 +53,10 @@ COPY docker/assets/logo.svg /app/superset/static/assets/images/logo.svg
 # directly (or fall back from /favicon.ico) also get the custom icon.
 COPY docker/assets/logo.svg /app/superset/static/assets/images/favicon.png
 
+# Custom splash/loader shown before the SPA initializes. Superset 6.x renders
+# this via the theme's brandSpinnerUrl token (see superset_config.py).
+COPY docker/assets/loader.gif /app/superset/static/assets/images/loader.gif
+
 # Superset 6.x registers /static/service-worker.js from the host page, but
 # this image ships without the production PWA bundle and returns 404 at that
 # path. Installing a no-op service worker at the expected location satisfies

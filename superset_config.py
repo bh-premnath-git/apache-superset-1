@@ -115,12 +115,14 @@ THEME_DEFAULT = {
     "token": {
         "brandLogoUrl": "/static/assets/images/logo.svg",
         "brandLogoHref": "/",
+        "brandSpinnerUrl": "/static/assets/images/loader.gif",
     },
 }
 THEME_DARK = {
     "token": {
         "brandLogoUrl": "/static/assets/images/logo.svg",
         "brandLogoHref": "/",
+        "brandSpinnerUrl": "/static/assets/images/loader.gif",
     },
     "algorithm": "dark",
 }
