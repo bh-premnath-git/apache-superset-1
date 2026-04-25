@@ -1,37 +1,27 @@
-# Unified Cartodiagram chart: per-district pie sub-chart plotted at district
-# centroids. Responds to the dashboard State filter to show one state at a time.
-# Defaults (in the dashboard) to Bihar so ~38 districts render instead of all
-# 112 at once. Geometry from household.vw_state_district_segment_geo.
+# District Segments by State — rendered by the in-house ``state_district_pies``
+# viz plugin, which is statically registered into the Superset SPA bundle by
+# the frontend-builder stage of the Dockerfile (see
+# docker/frontend-build/register-plugin.mjs).
 #
-# Config notes (plugin-chart-cartodiagram, Superset 6.x):
-# - map_view.mode. The plugin's MapViewConfigs type accepts exactly two
-#   literal values: 'FIT_DATA' | 'CUSTOM' (see superset-frontend/plugins/
-#   plugin-chart-cartodiagram/src/types.ts). We use CUSTOM so the map is
-#   always centred on India via fixedZoom/fixedLatitude/fixedLongitude.
-#   FIT_DATA was the previous setting, but when the initial query is slow
-#   or the State filter selection is empty, OlChartMap's FIT_DATA branch
-#   early-returns without touching the OpenLayers view, leaving it at the
-#   OL default (zoom 0, world view). CUSTOM always applies the fixed*
-#   coordinates on load, so the user sees India immediately and the
-#   district pies overlay once data arrives. The zoom/latitude/longitude
-#   triplet mirrors fixed* because all six fields are required by the
-#   MapViewConfigs type even when only one mode is active.
-# - chart_size.type = FIXED with a uniform 18x18 sub-chart across the
-#   plugin's full zoom range (MIN_ZOOM_LEVEL=0 … MAX_ZOOM_LEVEL=28).
-#   Upstream default is 100x100, which is far too large when ~38 district
-#   pies share Bihar's bounding box. We previously used 28x28 but pies
-#   that size visibly bled across district/state borders (cartodiagram
-#   places sub-charts as screen-space overlays anchored at centroid
-#   points, so the overlay does not get clipped to district polygons).
-#   18x18 keeps pies readable while reducing cross-border overlap.
+# Why static registration instead of the cartodiagram + dynamic plugin route:
+#   - Cartodiagram (chart.household.district_pie_unified, vizType=cartodiagram
+#     + a sub-chart) does not expose Behavior.DRILL_BY in upstream metadata,
+#     so the dashboard's "drill by everywhere" contract was broken on this
+#     tile.
+#   - The dynamic plugin path (``/dynamic-plugins/api/read``) returns 404 in
+#     Superset 6.0/6.1 even with FEATURE_FLAGS['DYNAMIC_PLUGINS']=True
+#     (apache/superset#35870, closed ``not planned``), leaving the SPA stuck
+#     in ``loading: true`` forever.
+# Static registration sidesteps both: the plugin ChartMetadata declares
+# DRILL_TO_DETAIL + DRILL_BY directly, and there is no runtime fetch.
 #
-# Drill-by note: upstream plugin-chart-cartodiagram does NOT declare
-# Behavior.DRILL_BY in its ChartMetadata (only DRILL_TO_DETAIL is
-# inherited dashboard-wide via the FEATURE_FLAGS), so the right-click
-# menu on this chart exposes "Drill to detail" but not "Drill by". Users
-# who need drill-by from state → district → segment should use the sibling
-# state_segment_distribution_bar or segment_distribution_pie charts on
-# this dashboard — they are echarts plugins and register DRILL_BY.
+# GeoJSON hosting: the india-districts.geojson file at the repo root is
+# baked into the runtime image at /app/superset/static/assets/ by the
+# Dockerfile, so the browser fetches it from the same origin as the SPA.
+# The same file is currently used for both the state layer and the district
+# centroids (matched on the GADM ``NAME_1`` / ``NAME_2`` properties); a
+# proper state-dissolved GeoJSON can replace ``state_geojson_url`` later
+# without touching the chart key.
 apiVersion: analytics/v1
 kind: Chart
 metadata:
@@ -39,66 +29,25 @@ metadata:
   name: 'District Segments by State'
 spec:
   datasetRef: dataset.household.state_district_segment_geo
-  vizType: cartodiagram
-  selectedChartRef: chart.household.district_pie_subchart
+  vizType: state_district_pies
   params:
-    viz_type: cartodiagram
-    geom_column: geometry
+    viz_type: state_district_pies
+    state_column: state_label
+    district_column: district_name
+    category_column: segment
+    metric:
+      label: hh_weight
+      expressionType: SQL
+      hasCustomLabel: true
+      optionName: am_state_district_pies_weight
+      sqlExpression: SUM(hh_weight)
     row_limit: 10000
-    map_view:
-      mode: CUSTOM
-      zoom: 5
-      latitude: 23.0
-      longitude: 82.0
-      fixedZoom: 5
-      fixedLatitude: 23.0
-      fixedLongitude: 82.0
-    layer_configs:
-      - type: XYZ
-        url: https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png
-        title: CARTO Voyager
-        attribution: © OpenStreetMap contributors © CARTO
-    chart_background_color:
-      r: 255
-      g: 255
-      b: 255
-      a: 0.0
-    chart_background_border_radius: 4
-    chart_size:
-      type: FIXED
-      configs:
-        zoom: 6
-        width: 18
-        height: 18
-        slope: 0
-        exponent: 1
-      values:
-        '0': { width: 18, height: 18 }
-        '1': { width: 18, height: 18 }
-        '2': { width: 18, height: 18 }
-        '3': { width: 18, height: 18 }
-        '4': { width: 18, height: 18 }
-        '5': { width: 18, height: 18 }
-        '6': { width: 18, height: 18 }
-        '7': { width: 18, height: 18 }
-        '8': { width: 18, height: 18 }
-        '9': { width: 18, height: 18 }
-        '10': { width: 18, height: 18 }
-        '11': { width: 18, height: 18 }
-        '12': { width: 18, height: 18 }
-        '13': { width: 18, height: 18 }
-        '14': { width: 18, height: 18 }
-        '15': { width: 18, height: 18 }
-        '16': { width: 18, height: 18 }
-        '17': { width: 18, height: 18 }
-        '18': { width: 18, height: 18 }
-        '19': { width: 18, height: 18 }
-        '20': { width: 18, height: 18 }
-        '21': { width: 18, height: 18 }
-        '22': { width: 18, height: 18 }
-        '23': { width: 18, height: 18 }
-        '24': { width: 18, height: 18 }
-        '25': { width: 18, height: 18 }
-        '26': { width: 18, height: 18 }
-        '27': { width: 18, height: 18 }
-        '28': { width: 18, height: 18 }
+    state_geojson_url: /static/assets/india-districts.geojson
+    district_geojson_url: /static/assets/india-districts.geojson
+    state_feature_key_prop: NAME_1
+    district_feature_key_prop: NAME_2
+    color_scheme: supersetColors
+    min_pie_radius: 4
+    max_pie_radius: 18
+    show_legend: true
+    show_tooltip: true

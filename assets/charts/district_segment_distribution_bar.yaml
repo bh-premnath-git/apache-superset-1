@@ -1,21 +1,15 @@
 # District-level segment breakdown companion chart.
 #
-# Why this chart exists: the sibling "District Segments by State" chart
-# (chart.household.district_pie_unified) uses vizType=cartodiagram, whose
-# upstream ChartMetadata does NOT register Behavior.DRILL_BY — so the
-# right-click menu on that map only exposes "Drill to detail", never
-# "Drill by" (see superset-frontend/plugins/plugin-chart-cartodiagram/
-# src/plugin/index.ts on apache/superset master). This chart covers the
-# same district × segment slice but uses echarts_timeseries_bar, which
-# DOES register DRILL_BY, so the state → district → segment drill-by
-# path that the dashboard's "Data exploration story" promises actually
-# works here.
+# Why this chart exists: it's a 1-D drill-by partner to the sibling map
+# chart "District Segments by State" (chart.household.district_pie_unified,
+# vizType=state_district_pies). Both read the same long-form view; this
+# one renders the (district × segment) slice as a stacked bar so users
+# can compare district mixes without map context.
 #
-# Dataset: household.vw_state_district_segment_geo (same view the
-# cartodiagram reads) — long-form rows keyed by (state_label,
-# district_name, segment) with hh_weight. state_label is filtered by
-# the dashboard's State native filter, so the bars collapse to the
-# districts of the currently selected state.
+# Dataset: household.vw_state_district_segment_geo — long-form rows keyed
+# by (state_label, district_name, segment) with hh_weight. state_label is
+# filtered by the dashboard's State native filter, so the bars collapse
+# to the districts of the currently selected state.
 apiVersion: analytics/v1
 kind: Chart
 metadata:

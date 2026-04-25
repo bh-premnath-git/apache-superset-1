@@ -156,12 +156,12 @@ This project does **not** aim to:
                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        Build Phase (One-shot)                               │
-│  ┌──────────────┐  ┌────────────────┐                                       │
-│  │plugin-builder│  │extension-builder│ → /extensions/bundles/              │
-│  └──────────────┘  └────────────────┘                                       │
-│         │                                                                     │
-│         ▼                                                                     │
-│  /plugin-dist/<name>/ (volume)                                                │
+│  ┌────────────────────────┐  ┌────────────────┐                              │
+│  │frontend-builder stage  │  │extension-builder│ → /extensions/bundles/     │
+│  │(./Dockerfile, multi-   │  └────────────────┘                              │
+│  │stage; bakes viz plugins│                                                  │
+│  │into the SPA bundle)    │                                                  │
+│  └────────────────────────┘                                                  │
 └─────────────────────────────┬─────────────────────────────────────────────────┘
                               │
                               ▼
@@ -368,7 +368,16 @@ SUPERSET_ADMIN_PASSWORD=admin
 
 ### 5.3 Custom Plugin Registration
 
-Dynamic plugins are auto-discovered from `/plugin-dist/*/dist/bundle-url.txt` and registered via the custom plugins API. Note: `DYNAMIC_PLUGINS` feature flag is currently disabled pending upstream fixes (see `assets/plugins/state_district_pies.yaml`).
+Custom viz plugins live under `superset-plugins/` and are compiled into the
+Superset SPA bundle by the **frontend-builder** stage of `./Dockerfile`. The
+build clones upstream Superset source at the matching tag, drops the plugin
+into `superset-frontend/plugins/`, and runs
+`docker/frontend-build/register-plugin.mjs` to patch
+`src/visualizations/presets/MainPreset.ts` with a static `new
+PluginClass().configure({ key })` registration. The runtime image then has
+the viz available without any DB row, REST upsert, or `/dynamic-plugins/api/read`
+fetch — and `FEATURE_FLAGS["DYNAMIC_PLUGINS"]` is intentionally `False`
+(apache/superset#35870 makes runtime registration unreliable on 6.0–6.1).
 
 ---
 
@@ -527,7 +536,7 @@ Currently implemented reconcilers (from `@/bhprojects/apache-superset-1/docker/s
 | `Dataset` | `Database` | Virtual dataset (table/view) |
 | `Chart` | `Dataset` | Visualization with params and viz type |
 | `Dashboard` | `Chart` | Dashboard with layout, filters, and charts |
-| `Plugin` | — | Dynamic visualization plugin (requires `DYNAMIC_PLUGINS` flag) |
+| `Plugin` | — | _Deprecated._ Viz plugins are now compiled into the SPA bundle by `./Dockerfile` (frontend-builder stage). The `PluginReconciler` class is retained for back-compat but is never exercised because no `kind: Plugin` YAMLs ship under `assets/`. |
 | `Extension` | — | `.supx` extension bundles |
 
 Future kinds (schema defined, reconciler pending): `DashboardFilter`, `Role`, `User`, `RLS`, `Theme`, `Branding`, `Alert`, `Report`, `Embedding`
@@ -736,28 +745,21 @@ spec:
     - "https://internal.example.com"
 ```
 
-**Plugin**
-```yaml
-apiVersion: analytics/v1
-kind: Plugin
-metadata:
-  key: plugin.chart.custom_waterfall
-  name: Custom Waterfall Chart
-spec:
-  vizType: custom_waterfall
-  # Bundle URL injected from environment — dynamic plugin bundles must be
-  # built from source and self-hosted (CDN, S3, static server).
-  # See: https://github.com/apache-superset/dynamic-import-demo-plugin
-  #
-  # Workflow:
-  #   1. Fork the demo plugin repo or scaffold with @superset-ui/generator-superset
-  #   2. npm install && npm run build-prod
-  #   3. Host /dist/main.js on your infrastructure
-  #   4. Set WATERFALL_PLUGIN_BUNDLE_URL=https://your-cdn.example.com/.../main.js
-  bundleUrlFromEnv: WATERFALL_PLUGIN_BUNDLE_URL
-  description: "Waterfall chart with positive/negative deltas and subtotals"
-  featureFlag: DYNAMIC_PLUGINS          # required feature flag
-```
+**Plugin** (deprecated — kept for reference only)
+
+`kind: Plugin` is no longer used in this repo. Viz plugins are now compiled
+into the SPA bundle by `./Dockerfile`. To add another plugin:
+
+1. Drop the package under `superset-plugins/<name>/` (peer-dep on
+   `@superset-ui/core` and `@superset-ui/chart-controls`, default-exporting
+   the `ChartPlugin` subclass).
+2. Edit `docker/frontend-build/register-plugin.mjs` to import and configure
+   it in `MainPreset.ts`.
+3. Reference the new viz type in a `kind: Chart` YAML
+   (`spec.vizType: <viz_type>`).
+
+Rebuild the image (`docker compose build superset`) and the plugin ships
+with the SPA, with no runtime registration step.
 
 **Extension**
 ```yaml
@@ -834,11 +836,11 @@ This project uses these viz types (from `@/bhprojects/apache-superset-1/assets/c
 
 | Type | Used In | Description |
 |---|---|---|
-| `cartodiagram` | `district_pie_unified.yaml` | Map with proportional pie overlays (Superset 6.1+ built-in). Upstream `ChartMetadata` does **not** register `Behavior.DRILL_BY` or `Behavior.DRILL_TO_DETAIL`, so the right-click menu is empty on this viz regardless of the feature flags — use the sibling `district_segment_distribution_bar` for drill-by on the same dataset. |
+| `state_district_pies` | `district_pie_unified.yaml` | In-house viz plugin (`superset-plugins/plugin-chart-state-district-pies`) compiled into the SPA bundle by `./Dockerfile`. Choropleth of states overlaid with a per-district pie. `ChartMetadata.behaviors` registers `INTERACTIVE_CHART`, `DRILL_TO_DETAIL`, and `DRILL_BY`. |
 | `handlebars` | `rural_segment_comparison.yaml` | Custom HTML/template-based table. Does not expose the right-click context menu. |
 | `echarts_timeseries_bar` | `state_segment_distribution_bar.yaml`, `household_minor_structure.yaml`, `district_segment_distribution_bar.yaml` | ECharts bar chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 | `echarts_timeseries_line` | `mpce_by_segment.yaml` | ECharts line chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
-| `pie` | `segment_distribution_pie.yaml`, `_district_pie_subchart.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
+| `pie` | `segment_distribution_pie.yaml` | Simple pie chart. Registers `Behavior.DRILL_BY` and `Behavior.DRILL_TO_DETAIL`. |
 
 **Drill by lives on the right-click context menu on a data element**
 (a pie slice, a bar, a line point, a table cell) — **not** on the
@@ -851,8 +853,8 @@ Drill by. To use Drill by, right-click directly on a chart element.
 `FEATURE_FLAGS["DRILL_BY"]` alone is not sufficient:
 
 1. The viz plugin's upstream `ChartMetadata.behaviors` must include
-   `Behavior.DRILL_BY` (all echarts plugins do; `cartodiagram` and
-   `handlebars` do not).
+   `Behavior.DRILL_BY` (all echarts plugins do, and our in-house
+   `state_district_pies` plugin does; `handlebars` does not).
 2. The chart's dataset must expose at least one dimension that the
    chart is **not** already using as `x_axis` or `groupby`. Superset
    populates the drill-by submenu from "dataset dimensions minus
