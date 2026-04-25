@@ -813,14 +813,15 @@ class PluginReconciler(Reconciler):
     exposes only HTML CRUD routes (``/dynamic-plugins/{add,edit/<pk>,delete/<pk>,
     list/}``) — there is no JSON API at ``/api/v1/dynamic-plugins/`` or
     ``/dynamic-plugins/api/*``. Rather than scrape HTML forms (CSRF tokens,
-    redirects, brittle row parsing), we upsert into the ``dynamic_plugins``
+    redirects, brittle row parsing), we upsert into the ``dynamic_plugin``
     table directly using the metadata DB credentials the reconciler container
     already has via ``METADATA_DB_*`` env vars. This is the same write path
     the ORM uses, just without bootstrapping the full Superset Flask app.
 
-    The ``DYNAMIC_PLUGINS`` feature flag still controls whether Superset will
-    *load* these plugins at runtime, but seeding the row does not require it.
-    Plugins are matched by their ``key`` field (``dynamic_plugins.key``).
+    The ``DYNAMIC_PLUGINS`` feature flag controls whether the table exists
+    at all — Superset only registers the ``DynamicPlugin`` model (and runs
+    its migration) when the flag is on. Plugins are matched by their
+    ``key`` field (``dynamic_plugin.key``).
 
     The reconciler **skips** (rather than fails) when the bundle URL is not
     yet configured — this lets template YAML live in the repo without
@@ -858,7 +859,7 @@ class PluginReconciler(Reconciler):
             import psycopg2
         except ImportError as ex:
             raise SkipAsset(
-                "psycopg2 not available — cannot seed dynamic_plugins row"
+                "psycopg2 not available — cannot seed dynamic_plugin row"
             ) from ex
 
         conn_kwargs = {
@@ -876,27 +877,26 @@ class PluginReconciler(Reconciler):
 
         with psycopg2.connect(**conn_kwargs) as conn:
             with conn.cursor() as cur:
-                # When FEATURE_FLAGS['DYNAMIC_PLUGINS'] is off (the default
-                # for this deployment — see superset_config.py), Superset
+                # When FEATURE_FLAGS['DYNAMIC_PLUGINS'] is off, Superset
                 # does not register the DynamicPlugin model, so its Alembic
-                # migration never creates the ``dynamic_plugins`` table.
+                # migration never creates the ``dynamic_plugin`` table.
                 # Skip cleanly instead of failing — the YAML already
                 # documents that these assets are optional scaffolding.
-                cur.execute("SELECT to_regclass('dynamic_plugins')")
+                cur.execute("SELECT to_regclass('dynamic_plugin')")
                 if cur.fetchone()[0] is None:
                     raise SkipAsset(
-                        "'dynamic_plugins' table does not exist — "
+                        "'dynamic_plugin' table does not exist — "
                         "FEATURE_FLAGS['DYNAMIC_PLUGINS'] is disabled"
                     )
                 cur.execute(
-                    'SELECT id FROM dynamic_plugins WHERE "key" = %s',
+                    'SELECT id FROM dynamic_plugin WHERE "key" = %s',
                     (viz_type,),
                 )
                 row = cur.fetchone()
                 if row:
                     plugin_id = int(row[0])
                     cur.execute(
-                        'UPDATE dynamic_plugins '
+                        'UPDATE dynamic_plugin '
                         'SET name = %s, bundle_url = %s, changed_on = NOW() '
                         'WHERE id = %s',
                         (asset.name, bundle_url, plugin_id),
@@ -904,7 +904,7 @@ class PluginReconciler(Reconciler):
                     log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
                 else:
                     cur.execute(
-                        'INSERT INTO dynamic_plugins '
+                        'INSERT INTO dynamic_plugin '
                         '(name, "key", bundle_url, created_on, changed_on) '
                         'VALUES (%s, %s, %s, NOW(), NOW()) RETURNING id',
                         (asset.name, viz_type, bundle_url),
