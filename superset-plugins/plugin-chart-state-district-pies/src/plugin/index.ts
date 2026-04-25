@@ -1,9 +1,5 @@
-import {
-  Behavior,
-  ChartMetadata,
-  ChartPlugin,
-  t,
-} from '@superset-ui/core';
+import { Behavior, ChartMetadata, ChartPlugin } from '@superset-ui/core';
+import { t } from '@apache-superset/core/translation';
 
 import buildQuery from './buildQuery';
 import controlPanel from './controlPanel';
