@@ -39,15 +39,18 @@ RUN node /tmp/register-plugin.mjs /work/superset/superset-frontend
 
 WORKDIR /work/superset/superset-frontend
 
-# Install from lockfile so npm also resolves peer dependencies required by
-# Superset 6.1's frontend tree (for example @react-spring/web, @deck.gl/widgets
-# and @fontsource/inter). Using --legacy-peer-deps skips that peer resolution
-# and causes webpack "Module not found" failures during build.
+# Install from lockfile. We intentionally use --legacy-peer-deps because
+# Superset's published @superset-ui packages still advertise older React peer
+# ranges, while the Superset 6.1 frontend tree installs React 18. Without
+# legacy peer handling npm 10+ fails with ERESOLVE before install completes.
+#
+# Lockfile integrity still protects exact dependency versions; this flag only
+# relaxes npm's peer dependency solver to tolerate that known metadata mismatch.
 #
 # Install and build are separate RUN steps so the failing layer's step number
 # identifies the phase even when buildkit's parallel-target output truncates
 # the actual error text.
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --legacy-peer-deps
 RUN npm run build
 
 # ── Stage 2: runtime image with custom drivers, branding, and the rebuilt
