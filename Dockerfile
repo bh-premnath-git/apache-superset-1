@@ -10,13 +10,16 @@
 ARG SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2
 ARG SUPERSET_SOURCE_REF=6.1.0rc2
 
-FROM node:20-bullseye AS frontend-builder
+FROM node:22-bullseye AS frontend-builder
 
 ARG SUPERSET_SOURCE_REF
 ENV SUPERSET_SOURCE_REF=${SUPERSET_SOURCE_REF}
 
+# `zstd` is a runtime dependency of the `simple-zstd` npm package, which the
+# Superset frontend's webpack.proxy-config.js requires at config-load time.
+# Without the binary on PATH, `webpack` fails before the build even starts.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates python3 make g++ \
+        git ca-certificates python3 make g++ zstd \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work
