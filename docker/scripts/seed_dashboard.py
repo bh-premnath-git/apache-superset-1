@@ -876,6 +876,18 @@ class PluginReconciler(Reconciler):
 
         with psycopg2.connect(**conn_kwargs) as conn:
             with conn.cursor() as cur:
+                # When FEATURE_FLAGS['DYNAMIC_PLUGINS'] is off (the default
+                # for this deployment — see superset_config.py), Superset
+                # does not register the DynamicPlugin model, so its Alembic
+                # migration never creates the ``dynamic_plugins`` table.
+                # Skip cleanly instead of failing — the YAML already
+                # documents that these assets are optional scaffolding.
+                cur.execute("SELECT to_regclass('dynamic_plugins')")
+                if cur.fetchone()[0] is None:
+                    raise SkipAsset(
+                        "'dynamic_plugins' table does not exist — "
+                        "FEATURE_FLAGS['DYNAMIC_PLUGINS'] is disabled"
+                    )
                 cur.execute(
                     'SELECT id FROM dynamic_plugins WHERE "key" = %s',
                     (viz_type,),
