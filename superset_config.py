@@ -87,7 +87,7 @@ FEATURE_FLAGS = {
     # built-in ``cartodiagram`` viz instead.  So keeping the flag off is
     # correct and removes the hang.  Re-enable only when upstream fixes
     # #35870 AND a chart actually references a dynamic plugin viz type.
-    "DYNAMIC_PLUGINS": False,
+    "DYNAMIC_PLUGINS": True,
     # Extensions framework (development lifecycle) - required for chatbot extension
     # API may 404 even when enabled (upstream discussion #38607)
     "ENABLE_EXTENSIONS": True,
