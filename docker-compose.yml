@@ -192,12 +192,16 @@ services:
       - superset-net
 
   # ── Keycloak bootstrap ──────────────────────────────────────────────────────
+  #
+  # All services below that need the Superset+plugin image reference
+  # ``apache-superset-1-superset:local`` (built once by the ``superset``
+  # service). Without this consolidation, ``docker compose build`` would
+  # treat each service as an independent bake target and run the same
+  # heavy frontend build in parallel — multiplexing buildx output until
+  # the bake driver bails with ``read |0: file already closed`` and
+  # swallows the real error text.
   keycloak-bootstrap:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-keycloak-bootstrap
     restart: "no"
     depends_on:
@@ -211,11 +215,7 @@ services:
 
   # ── Superset web ───────────────────────────────────────────────────────────
   superset-init:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-init
     restart: "no"
     depends_on:
@@ -239,12 +239,19 @@ services:
       - superset-net
 
   # ── Superset web ───────────────────────────────────────────────────────────
+  #
+  # The ``superset`` service is the canonical builder for the Superset
+  # image (with our viz plugin baked in). Every other service that needs
+  # this image references ``image: apache-superset-1-superset:local``
+  # rather than redeclaring ``build:`` — so ``docker compose build`` runs
+  # the heavy frontend build exactly once.
   superset:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-app
     restart: unless-stopped
     depends_on:
@@ -270,11 +277,7 @@ services:
 
   # ── Celery worker ──────────────────────────────────────────────────────────
   celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-celery-worker
     restart: unless-stopped
     depends_on:
@@ -293,11 +296,7 @@ services:
 
   # ── Celery beat (scheduled tasks) ─────────────────────────────────────────
   celery-beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-celery-beat
     restart: unless-stopped
     depends_on:
@@ -353,11 +352,7 @@ services:
   # superset_config.py, and exposes the Model Context Protocol over HTTP at
   # ${MCP_PORT}.  Auth mode is env-driven (see README §6.4).
   mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-mcp
     restart: unless-stopped
     depends_on:
@@ -395,11 +390,7 @@ services:
 
   # ── Runtime REST seeding ───────────────────────────────────────────────────
   superset-runtime-seed:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
+    image: apache-superset-1-superset:local
     container_name: superset-runtime-seed
     restart: unless-stopped
     depends_on:

@@ -43,8 +43,12 @@ WORKDIR /work/superset/superset-frontend
 # peerDependencies. Superset 6.1 ships React 18; the plugin code itself is
 # compatible (no class-component lifecycle hooks, no legacy refs), but npm
 # refuses to resolve without the override.
-RUN npm install --legacy-peer-deps --no-audit --no-fund \
-    && npm run build
+#
+# Install and build are separate RUN steps so the failing layer's step
+# number identifies the phase even when buildkit's parallel-target output
+# truncates the actual error text.
+RUN npm install --legacy-peer-deps --no-audit --no-fund
+RUN npm run build
 
 # ── Stage 2: runtime image with custom drivers, branding, and the rebuilt
 # frontend bundle from stage 1 ──────────────────────────────────────────────
