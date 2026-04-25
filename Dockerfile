@@ -1,10 +1,50 @@
-# Custom Superset image with common SQLAlchemy DB drivers.
+# ── Stage 1: rebuild the Superset frontend with our viz plugin baked in ─────
 #
-# The base tag is parameterised so operators can bump between release
-# candidates or pinned stable versions without editing this file.  The
-# default targets the 6.1 line because it bundles the built-in ``superset
-# mcp run`` CLI (see README §6).
+# We clone the upstream Superset source at the same tag that the runtime
+# image was built from, drop our plugin into ``superset-frontend/plugins/``
+# (where npm workspaces auto-discover it), patch ``MainPreset.ts`` to
+# register the plugin statically, and rebuild the SPA bundle. The result
+# replaces ``/app/superset/static/assets`` in the runtime image, so the
+# plugin ships with the rest of the JS — no /dynamic-plugins/api/read,
+# no DYNAMIC_PLUGINS feature flag, no Module-Federation runtime load.
 ARG SUPERSET_BASE_IMAGE=apache/superset:6.1.0rc2
+ARG SUPERSET_SOURCE_REF=6.1.0rc2
+
+FROM node:20-bullseye AS frontend-builder
+
+ARG SUPERSET_SOURCE_REF
+ENV SUPERSET_SOURCE_REF=${SUPERSET_SOURCE_REF}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git ca-certificates python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+RUN git clone --depth 1 --branch "${SUPERSET_SOURCE_REF}" \
+        https://github.com/apache/superset.git superset
+
+# Drop the plugin source into the frontend workspace. ``plugins/*`` is in
+# the workspaces glob in superset-frontend/package.json, so npm treats it
+# like any other in-tree plugin (e.g. @superset-ui/plugin-chart-echarts).
+COPY superset-plugins/plugin-chart-state-district-pies \
+     /work/superset/superset-frontend/plugins/plugin-chart-state-district-pies
+
+# Run the patcher: rewrites the plugin's package.json entry points to point
+# at src (workspace mode) and edits MainPreset.ts to register the plugin.
+COPY docker/frontend-build/register-plugin.mjs /tmp/register-plugin.mjs
+RUN node /tmp/register-plugin.mjs /work/superset/superset-frontend
+
+WORKDIR /work/superset/superset-frontend
+
+# --legacy-peer-deps because the plugin advertises React 16/17 in its
+# peerDependencies. Superset 6.1 ships React 18; the plugin code itself is
+# compatible (no class-component lifecycle hooks, no legacy refs), but npm
+# refuses to resolve without the override.
+RUN npm install --legacy-peer-deps --no-audit --no-fund \
+    && npm run build
+
+# ── Stage 2: runtime image with custom drivers, branding, and the rebuilt
+# frontend bundle from stage 1 ──────────────────────────────────────────────
 FROM ${SUPERSET_BASE_IMAGE}
 
 USER root
@@ -37,6 +77,11 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     cryptography \
     fastmcp
 
+# Replace the prebuilt SPA bundle with our rebuild that has the
+# state_district_pies plugin compiled in.
+COPY --from=frontend-builder /work/superset/superset/static/assets \
+     /app/superset/static/assets
+
 # Copy startup bootstrap script.
 COPY docker/scripts/bootstrap.sh /app/bootstrap.sh
 COPY docker/scripts/init.sh /app/init.sh
@@ -46,6 +91,13 @@ COPY docker/scripts/reconciler_entrypoint.sh /app/docker/scripts/reconciler_entr
 RUN chmod +x /app/bootstrap.sh
 RUN chmod +x /app/init.sh
 RUN chmod +x /app/docker/scripts/reconciler_entrypoint.sh
+
+# Self-host the India districts GeoJSON so the state_district_pies chart
+# fetches it from the same origin as the SPA. Without this the browser
+# hits CORS / mixed-content issues against external GeoJSON sources, and
+# the CSP would also need to whitelist them. See
+# assets/charts/district_pie_unified.yaml for the chart wiring.
+COPY india-districts.geojson /app/superset/static/assets/india-districts.geojson
 
 # Copy custom branding assets.
 COPY docker/assets/logo.svg /app/superset/static/assets/images/logo.svg

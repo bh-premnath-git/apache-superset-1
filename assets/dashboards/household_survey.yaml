@@ -46,10 +46,10 @@ spec:
   #    app level, but the menu items only appear on charts whose upstream
   #    ChartMetadata registers the corresponding Behavior. Upstream
   #    exceptions on this dashboard:
-  #      - cartodiagram (chart.household.district_pie_unified) registers
-  #        neither DRILL_TO_DETAIL nor DRILL_BY; use the companion
-  #        chart.household.district_segment_distribution_bar instead for
-  #        district-level drill-by.
+  #      - state_district_pies (chart.household.district_pie_unified) is
+  #        our in-house plugin; its ChartMetadata registers
+  #        DRILL_TO_DETAIL + DRILL_BY directly, so the context menu is
+  #        fully wired here.
   #      - Handlebars (chart.household.rural_segment_comparison) exposes
   #        no context menu at all; cross-filters remain the interaction
   #        path there.

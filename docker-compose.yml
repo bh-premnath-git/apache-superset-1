@@ -11,8 +11,6 @@ volumes:
   superset-home:
   keycloak-db-data:
   keycloak-ssl:
-  plugin-dist:
-  plugin-node-modules:
 
 # ── Re-usable anchor: MCP-specific env (merged on top of *superset-env) ──────
 x-mcp-env: &mcp-env
@@ -79,28 +77,11 @@ x-keycloak-env: &keycloak-env
 
 services:
 
-  # ── Dynamic-plugin builder ────────────────────────────────────────────────
-  # Builds custom viz plugins into /plugin-dist/<name>/ for auto-discovery.
-  # The reconciler entrypoint scans /plugin-dist/*/, derives env vars from
-  # directory names (kebab-case → UPPER_SNAKE + _PLUGIN_BUNDLE_URL).
-  #
-  # NOTE: This is for PLUGINS only (visualization plugins). For EXTENSIONS
-  # (like dashboard-chatbot), build manually with `superset-extensions` CLI:
-  #   cd superset-extensions/dashboard-chatbot/ && pip install apache-superset-extensions-cli
-  #   superset-extensions build && superset-extensions bundle
-  #   # Copy .supx to extensions/bundles/
-  plugin-builder:
-    image: node:lts-alpine3.22
-    container_name: superset-plugin-builder
-    restart: "no"
-    working_dir: /plugin
-    volumes:
-      - ./superset-plugins/plugin-chart-state-district-pies:/plugin
-      - plugin-node-modules:/plugin/node_modules
-      - plugin-dist:/plugin/dist  # Outputs to /plugin-dist/state-district-pies/
-    command: sh -c "npm install --legacy-peer-deps && npm run build"
-    networks:
-      - superset-net
+  # NOTE: viz plugins (e.g. state_district_pies) are now compiled into the
+  # Superset SPA bundle by the frontend-builder stage of ./Dockerfile, so
+  # there is no runtime plugin-builder service. Source lives in
+  # ``superset-plugins/`` and is statically registered into MainPreset.ts at
+  # image build time — see ``docker/frontend-build/register-plugin.mjs``.
 
   # ── Extension builder (one-shot) ────────────────────────────────────────────
   # Builds the dashboard-chatbot extension into a .supx package for the
@@ -269,8 +250,6 @@ services:
     depends_on:
       superset-init:
         condition: service_completed_successfully
-      plugin-builder:
-        condition: service_completed_successfully
     environment:
       <<: *superset-env
     ports:
@@ -280,7 +259,6 @@ services:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./extensions/bundles:/app/extensions:ro
-      - plugin-dist:/app/superset/static/assets/plugins:ro  # Serves all plugins at /static/assets/plugins/<name>/
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
       interval: 15s
@@ -429,8 +407,6 @@ services:
         condition: service_healthy
       analytics-db:
         condition: service_healthy
-      plugin-builder:
-        condition: service_completed_successfully
       extension-builder:
         condition: service_completed_successfully
     environment:
@@ -441,7 +417,5 @@ services:
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
       - ./assets:/app/assets
       - ./extensions/bundles:/app/extensions:ro
-      - plugin-dist:/plugin-dist:ro  # Auto-discovery scans /plugin-dist/*/
-      #   Reconciler derives env vars: <name> → <NAME>_PLUGIN_BUNDLE_URL
     networks:
       - superset-net
