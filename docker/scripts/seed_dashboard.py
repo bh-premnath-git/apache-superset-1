@@ -806,21 +806,21 @@ class DashboardReconciler(Reconciler):
         log(f"  Dashboard layout updated (id={dashboard_id})")
 
 
-PLUGIN_READ_ENDPOINT = "/dynamic-plugins/api/read"
-PLUGIN_CREATE_ENDPOINT = "/dynamic-plugins/api/create"
-PLUGIN_UPDATE_ENDPOINT = "/dynamic-plugins/api/update"
-
-
 class PluginReconciler(Reconciler):
-    """Reconciles ``kind: Plugin`` assets via Superset's dynamic plugins API.
+    """Reconciles ``kind: Plugin`` assets by writing directly to the metadata DB.
 
-    Requires the ``DYNAMIC_PLUGINS`` feature flag (lifecycle: **testing**)
-    to be enabled in ``superset_config.py``.  Available since Superset 3.x.
-    Plugins are matched by their ``key`` field (dynamic_plugins ``key`` column).
+    Superset's ``DynamicPluginsView`` is a Flask-AppBuilder ``ModelView``: it
+    exposes only HTML CRUD routes (``/dynamic-plugins/{add,edit/<pk>,delete/<pk>,
+    list/}``) — there is no JSON API at ``/api/v1/dynamic-plugins/`` or
+    ``/dynamic-plugins/api/*``. Rather than scrape HTML forms (CSRF tokens,
+    redirects, brittle row parsing), we upsert into the ``dynamic_plugins``
+    table directly using the metadata DB credentials the reconciler container
+    already has via ``METADATA_DB_*`` env vars. This is the same write path
+    the ORM uses, just without bootstrapping the full Superset Flask app.
 
-    Note: dynamic plugins are exposed by ``DynamicPluginsView`` under
-    ``/dynamic-plugins/api/{read,create,update/<id>,delete/<id>}`` — they are
-    **not** part of Superset's ``/api/v1/`` REST surface.
+    The ``DYNAMIC_PLUGINS`` feature flag still controls whether Superset will
+    *load* these plugins at runtime, but seeding the row does not require it.
+    Plugins are matched by their ``key`` field (``dynamic_plugins.key``).
 
     The reconciler **skips** (rather than fails) when the bundle URL is not
     yet configured — this lets template YAML live in the repo without
@@ -853,44 +853,53 @@ class PluginReconciler(Reconciler):
         spec = asset.spec
         viz_type = spec["vizType"]
         bundle_url = _resolve_bundle_url(spec)
-        payload = {"name": asset.name, "key": viz_type, "bundle_url": bundle_url}
 
-        existing: dict[str, Any] | None = None
         try:
-            existing = client.find_by_field(
-                PLUGIN_READ_ENDPOINT, "key", viz_type
+            import psycopg2
+        except ImportError as ex:
+            raise SkipAsset(
+                "psycopg2 not available — cannot seed dynamic_plugins row"
+            ) from ex
+
+        conn_kwargs = {
+            "host": os.getenv("METADATA_DB_HOST"),
+            "port": os.getenv("METADATA_DB_PORT"),
+            "dbname": os.getenv("METADATA_DB_NAME"),
+            "user": os.getenv("METADATA_DB_USER"),
+            "password": os.getenv("METADATA_DB_PASS"),
+        }
+        missing = [k for k, v in conn_kwargs.items() if not v]
+        if missing:
+            raise SkipAsset(
+                f"metadata DB credentials missing: METADATA_DB_{','.join(m.upper() for m in missing)}"
             )
-        except urllib.error.HTTPError as ex:
-            if ex.code == 404:
-                raise SkipAsset(
-                    f"{PLUGIN_READ_ENDPOINT} not available — enable "
-                    "FEATURE_FLAGS['DYNAMIC_PLUGINS'] = True in superset_config.py"
-                ) from ex
-            if ex.code != 405:
-                raise
 
-        if existing:
-            plugin_id = int(existing["id"])
-            client.post(f"{PLUGIN_UPDATE_ENDPOINT}/{plugin_id}", payload)
-            log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
-            return plugin_id
-
-        try:
-            created = client.post(PLUGIN_CREATE_ENDPOINT, payload)
-            plugin_id = int(created["id"])
-            log(f"  Plugin '{asset.name}' created (id={plugin_id})")
-            return plugin_id
-        except urllib.error.HTTPError as ex:
-            if ex.code in (404, 405):
-                raise SkipAsset(
-                    f"{PLUGIN_CREATE_ENDPOINT} write API unavailable in this Superset build"
-                ) from ex
-            # Duplicate key/write race: treat as already present if backend reports it.
-            msg = str(ex).lower()
-            if "already exists" in msg or "duplicate" in msg or "unique" in msg:
-                log(f"  Plugin '{asset.name}' already exists (detected from API response)")
-                return int(hashlib.sha1(viz_type.encode('utf-8')).hexdigest()[:8], 16)
-            raise
+        with psycopg2.connect(**conn_kwargs) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT id FROM dynamic_plugins WHERE "key" = %s',
+                    (viz_type,),
+                )
+                row = cur.fetchone()
+                if row:
+                    plugin_id = int(row[0])
+                    cur.execute(
+                        'UPDATE dynamic_plugins '
+                        'SET name = %s, bundle_url = %s, changed_on = NOW() '
+                        'WHERE id = %s',
+                        (asset.name, bundle_url, plugin_id),
+                    )
+                    log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
+                else:
+                    cur.execute(
+                        'INSERT INTO dynamic_plugins '
+                        '(name, "key", bundle_url, created_on, changed_on) '
+                        'VALUES (%s, %s, %s, NOW(), NOW()) RETURNING id',
+                        (asset.name, viz_type, bundle_url),
+                    )
+                    plugin_id = int(cur.fetchone()[0])
+                    log(f"  Plugin '{asset.name}' created (id={plugin_id})")
+        return plugin_id
 
 
 class ExtensionReconciler(Reconciler):
