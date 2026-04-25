@@ -13,9 +13,14 @@ RUN npm run build
 
 FROM python:3.11-bookworm AS backend-build
 WORKDIR /build
+
+# Install Node.js 20.x with npm 10+ (required by superset-extensions-cli)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nodejs npm \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+
 RUN pip install apache-superset-extensions-cli
 
 # Copy backend source

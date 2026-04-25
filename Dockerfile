@@ -50,7 +50,15 @@ WORKDIR /work/superset/superset-frontend
 # Install and build are separate RUN steps so the failing layer's step number
 # identifies the phase even when buildkit's parallel-target output truncates
 # the actual error text.
-RUN npm install --package-lock-only --no-audit --no-fund --legacy-peer-deps
+RUN npm install \
+    @react-spring/web@^9.7.5 \
+    @fontsource/inter@^5.2.7 \
+    @deck.gl/widgets@~9.2.5 \
+    --package-lock-only \
+    --no-audit \
+    --no-fund \
+    --legacy-peer-deps
+
 RUN npm ci --no-audit --no-fund --legacy-peer-deps
 RUN npm run build
 
