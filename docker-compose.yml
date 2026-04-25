@@ -200,8 +200,14 @@ services:
   # heavy frontend build in parallel — multiplexing buildx output until
   # the bake driver bails with ``read |0: file already closed`` and
   # swallows the real error text.
+  #
+  # ``pull_policy: never`` is required on every consumer of the local tag.
+  # Compose's default ``missing`` policy races the ``superset`` build by
+  # attempting a registry pull for the local-only tag at ``up`` time,
+  # producing ``pull access denied for apache-superset-1-superset``.
   keycloak-bootstrap:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-keycloak-bootstrap
     restart: "no"
     depends_on:
@@ -216,6 +222,7 @@ services:
   # ── Superset web ───────────────────────────────────────────────────────────
   superset-init:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-init
     restart: "no"
     depends_on:
@@ -252,6 +259,7 @@ services:
       args:
         SUPERSET_BASE_IMAGE: ${SUPERSET_BASE_IMAGE:-apache/superset:6.1.0rc2}
     image: apache-superset-1-superset:local
+    pull_policy: build
     container_name: superset-app
     restart: unless-stopped
     depends_on:
@@ -278,6 +286,7 @@ services:
   # ── Celery worker ──────────────────────────────────────────────────────────
   celery-worker:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-celery-worker
     restart: unless-stopped
     depends_on:
@@ -297,6 +306,7 @@ services:
   # ── Celery beat (scheduled tasks) ─────────────────────────────────────────
   celery-beat:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-celery-beat
     restart: unless-stopped
     depends_on:
@@ -353,6 +363,7 @@ services:
   # ${MCP_PORT}.  Auth mode is env-driven (see README §6.4).
   mcp:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-mcp
     restart: unless-stopped
     depends_on:
@@ -391,6 +402,7 @@ services:
   # ── Runtime REST seeding ───────────────────────────────────────────────────
   superset-runtime-seed:
     image: apache-superset-1-superset:local
+    pull_policy: never
     container_name: superset-runtime-seed
     restart: unless-stopped
     depends_on:
