@@ -39,15 +39,15 @@ RUN node /tmp/register-plugin.mjs /work/superset/superset-frontend
 
 WORKDIR /work/superset/superset-frontend
 
-# --legacy-peer-deps because the plugin advertises React 16/17 in its
-# peerDependencies. Superset 6.1 ships React 18; the plugin code itself is
-# compatible (no class-component lifecycle hooks, no legacy refs), but npm
-# refuses to resolve without the override.
+# Install from lockfile so npm also resolves peer dependencies required by
+# Superset 6.1's frontend tree (for example @react-spring/web, @deck.gl/widgets
+# and @fontsource/inter). Using --legacy-peer-deps skips that peer resolution
+# and causes webpack "Module not found" failures during build.
 #
-# Install and build are separate RUN steps so the failing layer's step
-# number identifies the phase even when buildkit's parallel-target output
-# truncates the actual error text.
-RUN npm install --legacy-peer-deps --no-audit --no-fund
+# Install and build are separate RUN steps so the failing layer's step number
+# identifies the phase even when buildkit's parallel-target output truncates
+# the actual error text.
+RUN npm ci --no-audit --no-fund
 RUN npm run build
 
 # ── Stage 2: runtime image with custom drivers, branding, and the rebuilt

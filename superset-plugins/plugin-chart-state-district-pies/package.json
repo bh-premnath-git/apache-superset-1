@@ -21,8 +21,8 @@
   "peerDependencies": {
     "@superset-ui/chart-controls": "^0.18.0 || ^2.0.0",
     "@superset-ui/core": "^0.18.0 || ^2.0.0",
-    "react": "^16.14.0 || ^17.0.0",
-    "react-dom": "^16.14.0 || ^17.0.0"
+    "react": "^16.14.0 || ^17.0.0 || ^18.0.0",
+    "react-dom": "^16.14.0 || ^17.0.0 || ^18.0.0"
   },
   "dependencies": {
     "d3-array": "^3.2.0",
