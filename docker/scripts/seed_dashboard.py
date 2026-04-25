@@ -806,12 +806,21 @@ class DashboardReconciler(Reconciler):
         log(f"  Dashboard layout updated (id={dashboard_id})")
 
 
+PLUGIN_READ_ENDPOINT = "/dynamic-plugins/api/read"
+PLUGIN_CREATE_ENDPOINT = "/dynamic-plugins/api/create"
+PLUGIN_UPDATE_ENDPOINT = "/dynamic-plugins/api/update"
+
+
 class PluginReconciler(Reconciler):
     """Reconciles ``kind: Plugin`` assets via Superset's dynamic plugins API.
 
     Requires the ``DYNAMIC_PLUGINS`` feature flag (lifecycle: **testing**)
     to be enabled in ``superset_config.py``.  Available since Superset 3.x.
     Plugins are matched by their ``key`` field (dynamic_plugins ``key`` column).
+
+    Note: dynamic plugins are exposed by ``DynamicPluginsView`` under
+    ``/dynamic-plugins/api/{read,create,update/<id>,delete/<id>}`` — they are
+    **not** part of Superset's ``/api/v1/`` REST surface.
 
     The reconciler **skips** (rather than fails) when the bundle URL is not
     yet configured — this lets template YAML live in the repo without
@@ -844,18 +853,17 @@ class PluginReconciler(Reconciler):
         spec = asset.spec
         viz_type = spec["vizType"]
         bundle_url = _resolve_bundle_url(spec)
+        payload = {"name": asset.name, "key": viz_type, "bundle_url": bundle_url}
 
-        # Some Superset builds expose POST for dynamic plugins but not GET list.
-        # Try lookup first when available, but do not treat GET 405 as endpoint absence.
         existing: dict[str, Any] | None = None
         try:
             existing = client.find_by_field(
-                "/api/v1/dynamic-plugins/", "key", viz_type
+                PLUGIN_READ_ENDPOINT, "key", viz_type
             )
         except urllib.error.HTTPError as ex:
             if ex.code == 404:
                 raise SkipAsset(
-                    "/api/v1/dynamic-plugins/ not available — enable "
+                    f"{PLUGIN_READ_ENDPOINT} not available — enable "
                     "FEATURE_FLAGS['DYNAMIC_PLUGINS'] = True in superset_config.py"
                 ) from ex
             if ex.code != 405:
@@ -863,25 +871,19 @@ class PluginReconciler(Reconciler):
 
         if existing:
             plugin_id = int(existing["id"])
-            client.put(
-                f"/api/v1/dynamic-plugins/{plugin_id}",
-                {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
-            )
+            client.post(f"{PLUGIN_UPDATE_ENDPOINT}/{plugin_id}", payload)
             log(f"  Plugin '{asset.name}' updated (id={plugin_id})")
             return plugin_id
 
         try:
-            created = client.post(
-                "/api/v1/dynamic-plugins/",
-                {"name": asset.name, "key": viz_type, "bundle_url": bundle_url},
-            )
+            created = client.post(PLUGIN_CREATE_ENDPOINT, payload)
             plugin_id = int(created["id"])
             log(f"  Plugin '{asset.name}' created (id={plugin_id})")
             return plugin_id
         except urllib.error.HTTPError as ex:
             if ex.code in (404, 405):
                 raise SkipAsset(
-                    "/api/v1/dynamic-plugins/ write API unavailable in this Superset build"
+                    f"{PLUGIN_CREATE_ENDPOINT} write API unavailable in this Superset build"
                 ) from ex
             # Duplicate key/write race: treat as already present if backend reports it.
             msg = str(ex).lower()
