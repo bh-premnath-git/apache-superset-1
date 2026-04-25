@@ -163,3 +163,30 @@ if (preset !== originalPreset) {
 } else {
   console.log(`[register-plugin] ${presetPath} already patched`);
 }
+
+// ── 3. Cap webpack thread-loader workers ────────────────────────────────────
+// Superset's webpack.config.js uses ``'thread-loader'`` as a bare string,
+// which defaults to ``os.cpus().length - 1`` worker processes. On hosts
+// with many vCPUs and a Docker Desktop memory cap (commonly 8 GB) the
+// production build OOMs mid-compilation: a worker is killed, the IPC
+// pipe resets, and the parent crashes with ``Error: read ECONNRESET``.
+// Pin workers to 2 — enough parallelism to be useful, low enough to fit
+// alongside the parent's 8 GB heap.
+const webpackConfigPath = path.join(frontendDir, 'webpack.config.js');
+if (fs.existsSync(webpackConfigPath)) {
+  let webpackCfg = fs.readFileSync(webpackConfigPath, 'utf8');
+  const originalCfg = webpackCfg;
+  const objectForm = "{ loader: 'thread-loader', options: { workers: 2 } }";
+  if (
+    !webpackCfg.includes("loader: 'thread-loader'") &&
+    webpackCfg.includes("'thread-loader'")
+  ) {
+    webpackCfg = webpackCfg.replaceAll("'thread-loader'", objectForm);
+  }
+  if (webpackCfg !== originalCfg) {
+    fs.writeFileSync(webpackConfigPath, webpackCfg);
+    console.log(`[register-plugin] capped thread-loader workers in ${webpackConfigPath}`);
+  } else {
+    console.log(`[register-plugin] ${webpackConfigPath} already capped`);
+  }
+}
