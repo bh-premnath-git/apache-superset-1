@@ -11,9 +11,11 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.11-alpine AS backend-build
+FROM python:3.11-bookworm AS backend-build
 WORKDIR /build
-RUN apk add --no-cache nodejs npm
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install apache-superset-extensions-cli
 
 # Copy backend source
