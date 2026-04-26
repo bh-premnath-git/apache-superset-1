@@ -6,6 +6,7 @@ import {
 } from '@superset-ui/chart-controls';
 
 import {
+  DEFAULT_GEOJSON_URL,
   DEFAULT_MAX_PIE_RADIUS,
   DEFAULT_MIN_PIE_RADIUS,
 } from '../constants';
@@ -85,7 +86,7 @@ const config: ControlPanelConfig = {
                   '— no external service calls are made by Superset.',
               ),
               validators: [validateNonEmpty],
-              default: '',
+              default: DEFAULT_GEOJSON_URL,
             },
           },
         ],
@@ -99,7 +100,7 @@ const config: ControlPanelConfig = {
                 'URL serving the district-level FeatureCollection.',
               ),
               validators: [validateNonEmpty],
-              default: '',
+              default: DEFAULT_GEOJSON_URL,
             },
           },
         ],

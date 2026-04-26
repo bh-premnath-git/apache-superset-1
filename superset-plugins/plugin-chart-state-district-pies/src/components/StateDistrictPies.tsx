@@ -96,6 +96,20 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     );
   }
 
+  // Distinguish "no URL configured" from "fetch in flight". Without this,
+  // an empty/missing URL leaves stateGeo as { loading: false, data: undef }
+  // and the chart would render "Loading map…" forever with no network
+  // request — confusing operators chasing a broken chart.
+  if (!stateGeoJsonUrl) {
+    return (
+      <ErrorPanel
+        width={width}
+        height={height}
+        message="State GeoJSON URL is not configured for this chart."
+      />
+    );
+  }
+
   if (stateGeo.loading || districtGeo.loading || !stateGeo.data || !geometry) {
     return <StatusPanel width={width} height={height} message="Loading map…" />;
   }
