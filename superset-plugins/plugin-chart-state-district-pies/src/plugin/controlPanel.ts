@@ -2,7 +2,6 @@ import { validateNonEmpty } from '@superset-ui/core';
 import { t } from '@apache-superset/core/translation';
 import {
   ControlPanelConfig,
-  sections,
   sharedControls,
 } from '@superset-ui/chart-controls';
 
@@ -21,7 +20,6 @@ import {
  */
 const config: ControlPanelConfig = {
   controlPanelSections: [
-    sections.legacyRegularTime,
     {
       label: t('Query'),
       expanded: true,
