@@ -140,21 +140,58 @@ const registrationLine = `        new ${PLUGIN_CLASS}().configure({ key: '${PLUG
 
 if (!preset.includes(`new ${PLUGIN_CLASS}()`)) {
   // Find the ``plugins: [`` array and inject our entry just before its
-  // closing bracket. Uses a non-greedy regex against balanced brackets,
-  // which is sufficient because the plugins array is the last entry in
-  // the ``super({...})`` call and its contents do not nest ``]``.
-  const pluginsRegex = /(plugins:\s*\[)([\s\S]*?)(\n\s*\])/;
-  if (!pluginsRegex.test(preset)) {
+  // closing bracket. The plugins array nests other arrays — most
+  // notably ``CartodiagramPlugin``'s ``defaultLayers: [...]`` — so a
+  // lazy regex against the first ``\n\s*]`` would stop inside that
+  // nested array and silently inject the registration call as a
+  // CartodiagramPlugin layer config. Walk the source with a bracket
+  // depth counter (string-aware) to find the matching outer ``]``.
+  const pluginsKeyMatch = preset.match(/plugins:\s*\[/);
+  if (!pluginsKeyMatch) {
     console.error(
       '[register-plugin] error: could not locate ``plugins: [...]`` array in MainPreset.ts',
     );
     process.exit(1);
   }
-  preset = preset.replace(pluginsRegex, (_, open, body, close) => {
-    const trimmed = body.replace(/\s*$/, '');
-    const sep = trimmed.endsWith(',') ? '' : ',';
-    return `${open}${trimmed}${sep}\n${registrationLine}${close}`;
-  });
+  const openBracketIdx =
+    pluginsKeyMatch.index + pluginsKeyMatch[0].length - 1;
+  let i = openBracketIdx + 1;
+  let depth = 1;
+  let stringChar = null;
+  while (i < preset.length && depth > 0) {
+    const ch = preset[i];
+    if (stringChar) {
+      if (ch === '\\') {
+        i += 2;
+        continue;
+      }
+      if (ch === stringChar) stringChar = null;
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      stringChar = ch;
+    } else if (ch === '[') {
+      depth++;
+    } else if (ch === ']') {
+      depth--;
+      if (depth === 0) break;
+    }
+    i++;
+  }
+  if (depth !== 0) {
+    console.error(
+      '[register-plugin] error: unbalanced brackets in plugins array of MainPreset.ts',
+    );
+    process.exit(1);
+  }
+  // ``i`` is the index of the outer closing ``]``. Preserve the
+  // whitespace that precedes it so the inserted line lines up with
+  // the surrounding entries.
+  const before = preset.slice(0, i);
+  const closingIndent = (before.match(/(\n[\t ]*)$/) ?? [, '\n      '])[1];
+  const trimmedBefore = before.replace(/\s+$/, '');
+  const sep = trimmedBefore.endsWith(',') ? '' : ',';
+  preset =
+    `${trimmedBefore}${sep}\n${registrationLine}${closingIndent}` +
+    preset.slice(i);
 }
 
 if (preset !== originalPreset) {
