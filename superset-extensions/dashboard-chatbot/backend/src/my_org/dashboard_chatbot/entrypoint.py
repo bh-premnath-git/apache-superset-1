@@ -16,6 +16,7 @@ import json
 import os
 import re
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -35,6 +36,9 @@ MCP_RETRIES = int(os.getenv("DASHBOARD_CHATBOT_MCP_RETRIES", "3"))
 MCP_RETRY_BACKOFF_SECONDS = float(
     os.getenv("DASHBOARD_CHATBOT_MCP_RETRY_BACKOFF_SECONDS", "1")
 )
+MCP_PROTOCOL_VERSION = os.getenv(
+    "DASHBOARD_CHATBOT_MCP_PROTOCOL_VERSION", "2025-06-18"
+).strip()
 
 
 def _infer_intent_with_llm(question: str) -> str | None:
@@ -151,58 +155,211 @@ def _extract_search_term(question: str) -> str:
     return q
 
 
-def _mcp_post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    url = f"{MCP_BASE_URL.rstrip('/')}{path}"
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-        },
-        method="POST",
-    )
-    attempts = max(1, MCP_RETRIES)
-    for attempt in range(1, attempts + 1):
-        try:
-            with urllib.request.urlopen(req, timeout=MCP_TIMEOUT_SECONDS) as resp:
-                raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as ex:
-            err_body = ""
+class _MCPHTTPNotFound(Exception):
+    """Raised when an MCP endpoint path returns 404 with no active session."""
+
+
+class _MCPSessionExpired(Exception):
+    """Raised when the server returns 404 for a request bearing a session id.
+
+    Per the MCP Streamable HTTP spec, this is the signal that the session has
+    been terminated and the client must re-initialize.
+    """
+
+
+def _parse_sse_payload(raw: str) -> dict[str, Any] | None:
+    """Extract the first JSON-RPC message from an SSE response body."""
+    buffer: list[str] = []
+    for line in raw.splitlines():
+        if line.startswith("data:"):
+            buffer.append(line[len("data:"):].lstrip())
+        elif not line and buffer:
+            data = "".join(buffer).strip()
+            buffer.clear()
+            if not data:
+                continue
             try:
-                err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
-            except Exception:
-                pass
-            raise urllib.error.HTTPError(
-                ex.url, ex.code, f"{ex.reason} — {err_body}", ex.headers, None
-            ) from None
-        except (TimeoutError, socket.timeout, urllib.error.URLError) as ex:
-            timed_out = isinstance(ex, (TimeoutError, socket.timeout)) or "timed out" in str(ex).lower()
-            if not timed_out or attempt >= attempts:
-                raise RuntimeError("timed out") from ex
-            time.sleep(MCP_RETRY_BACKOFF_SECONDS * attempt)
-    raise RuntimeError("timed out")
+                return json.loads(data)
+            except ValueError:
+                continue
+    if buffer:
+        data = "".join(buffer).strip()
+        if data:
+            try:
+                return json.loads(data)
+            except ValueError:
+                return None
+    return None
+
+
+class _MCPSession:
+    """Cached MCP Streamable HTTP client.
+
+    Implements the official lifecycle (initialize -> notifications/initialized
+    -> operate) once and reuses the resolved endpoint path, the negotiated
+    protocol version, and the ``Mcp-Session-Id`` header on subsequent JSON-RPC
+    calls. The session is rebuilt automatically when the server returns 404
+    for a request bearing a session id, which the spec defines as the signal
+    that the session has expired.
+    """
+
+    CANDIDATE_PATHS: tuple[str, ...] = ("/mcp", "/")
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._lock = threading.Lock()
+        self._endpoint_path: str | None = None
+        self._session_id: str | None = None
+        self._protocol_version: str = MCP_PROTOCOL_VERSION
+        self._request_id = 0
+
+    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        with self._lock:
+            for attempt in (1, 2):
+                if self._endpoint_path is None:
+                    self._initialize()
+                try:
+                    return self._request(method, params)
+                except _MCPSessionExpired:
+                    self._endpoint_path = None
+                    self._session_id = None
+                    if attempt == 2:
+                        raise RuntimeError(
+                            f"MCP call failed for method '{method}': "
+                            "session expired and re-initialize failed"
+                        )
+            raise RuntimeError("unreachable")
+
+    def _next_id(self) -> int:
+        self._request_id += 1
+        return self._request_id
+
+    def _initialize(self) -> None:
+        last_error: Exception | None = None
+        for path in self.CANDIDATE_PATHS:
+            init_payload = {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": self._protocol_version,
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "superset-dashboard-chatbot",
+                        "version": "1.0.0",
+                    },
+                },
+            }
+            try:
+                response, headers, _ = self._post(path, init_payload)
+            except _MCPHTTPNotFound as ex:
+                last_error = ex
+                continue
+            except Exception as ex:
+                last_error = ex
+                continue
+
+            if not response or response.get("error"):
+                last_error = RuntimeError(
+                    str(response.get("error")) if response else "empty initialize response"
+                )
+                continue
+
+            result = response.get("result") or {}
+            negotiated = str(result.get("protocolVersion") or "").strip()
+            if negotiated:
+                self._protocol_version = negotiated
+            self._session_id = headers.get("mcp-session-id")
+            self._endpoint_path = path
+
+            try:
+                self._post(
+                    path,
+                    {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                )
+            except Exception as ex:
+                self._endpoint_path = None
+                self._session_id = None
+                last_error = ex
+                continue
+            return
+
+        raise RuntimeError(f"MCP initialize failed: {last_error}")
+
+    def _request(self, method: str, params: dict[str, Any] | None) -> dict[str, Any]:
+        assert self._endpoint_path is not None
+        payload: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": method,
+        }
+        if params is not None:
+            payload["params"] = params
+        response, _, _ = self._post(self._endpoint_path, payload)
+        if response is None:
+            raise RuntimeError(f"empty response for method '{method}'")
+        if response.get("error"):
+            raise RuntimeError(f"MCP call failed for method '{method}': {response['error']}")
+        return response.get("result", {})
+
+    def _post(
+        self,
+        path: str,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, dict[str, str], int]:
+        url = f"{self._base_url}{path}"
+        is_initialize = payload.get("method") == "initialize"
+        body = json.dumps(payload).encode("utf-8")
+        attempts = max(1, MCP_RETRIES)
+        last_network_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            }
+            if not is_initialize:
+                headers["MCP-Protocol-Version"] = self._protocol_version
+            if self._session_id:
+                headers["Mcp-Session-Id"] = self._session_id
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=MCP_TIMEOUT_SECONDS) as resp:
+                    status = resp.status
+                    response_headers = {k.lower(): v for k, v in resp.headers.items()}
+                    raw = resp.read().decode("utf-8") if status != 202 else ""
+                if status == 202 or not raw:
+                    return None, response_headers, status
+                content_type = response_headers.get("content-type", "")
+                if "text/event-stream" in content_type:
+                    return _parse_sse_payload(raw), response_headers, status
+                return json.loads(raw), response_headers, status
+            except urllib.error.HTTPError as ex:
+                if ex.code == 404:
+                    if self._session_id and not is_initialize:
+                        raise _MCPSessionExpired() from ex
+                    raise _MCPHTTPNotFound(f"{url}: {ex.reason}") from ex
+                err_body = ""
+                try:
+                    err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"MCP HTTP {ex.code} from {url}: {ex.reason} — {err_body}"
+                ) from None
+            except (TimeoutError, socket.timeout, urllib.error.URLError) as ex:
+                timed_out = isinstance(ex, (TimeoutError, socket.timeout)) or "timed out" in str(ex).lower()
+                last_network_error = ex
+                if not timed_out or attempt >= attempts:
+                    raise RuntimeError(f"MCP request to {url} failed: {ex}") from ex
+                time.sleep(MCP_RETRY_BACKOFF_SECONDS * attempt)
+        raise RuntimeError(f"MCP request to {url} failed: {last_network_error}")
+
+
+_mcp_session = _MCPSession(MCP_BASE_URL)
 
 
 def _mcp_rpc(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-    }
-    if params is not None:
-        payload["params"] = params
-    last_error: Exception | None = None
-    for path in ("/mcp", "/"):
-        try:
-            response = _mcp_post_json(path, payload)
-            if response.get("error"):
-                raise RuntimeError(str(response["error"]))
-            return response.get("result", {})
-        except Exception as ex:
-            last_error = ex
-    raise RuntimeError(f"MCP call failed for method '{method}': {last_error}")
+    return _mcp_session.call(method, params)
 
 
 def _mcp_list_tools() -> list[str]:
