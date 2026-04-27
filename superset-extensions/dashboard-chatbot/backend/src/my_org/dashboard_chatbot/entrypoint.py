@@ -432,45 +432,104 @@ def _normalize_mcp_content(result: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[dict[str, Any]]:
-    tool_names = _mcp_list_tools()
-    tool_name = _pick_tool_name(intent, tool_names)
-    if not tool_name:
-        raise RuntimeError(f"no MCP tool found for intent '{intent}'")
+_INTENT_TO_LIST_TOOL: dict[str, str] = {
+    "dashboard": "list_dashboards",
+    "chart": "list_charts",
+    "dataset": "list_datasets",
+    "database": "list_databases",
+}
 
-    candidate_args: list[dict[str, Any]] = [
-        {"page": 1, "page_size": limit, "search": query},
-        {"page": 1, "page_size": limit, "q": query},
-        {"search": query, "limit": limit},
-        {"q": query, "limit": limit},
-        {"query": query, "limit": limit},
-        {"limit": limit},
-        {},
+
+def _filter_rows(rows: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    if not query:
+        return rows
+    needle = query.lower()
+    filtered = [
+        row for row in rows if needle in json.dumps(row, default=str).lower()
     ]
-    for args in candidate_args:
+    return filtered or rows
+
+
+def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[dict[str, Any]]:
+    inner_tool = _INTENT_TO_LIST_TOOL.get(intent)
+    if not inner_tool:
+        raise RuntimeError(f"no MCP tool mapping for intent '{intent}'")
+
+    request_args: dict[str, Any] = {"page": 1, "page_size": limit}
+    if query:
+        request_args["search"] = query
+
+    # The Superset MCP server exposes its listing tools through a single
+    # ``call_tool`` dispatcher whose arguments take the inner tool name and a
+    # ``request`` envelope. We try that shape first (verified by direct curl),
+    # then fall back to invoking the inner tool as a flat MCP tool — which is
+    # the layout the public ``mcp-server-superset`` reference uses — so this
+    # works against either deployment style.
+    attempts: list[tuple[str, dict[str, Any]]] = [
+        (
+            "call_tool",
+            {"name": inner_tool, "arguments": {"request": request_args}},
+        ),
+        (
+            "call_tool",
+            {"name": inner_tool, "arguments": request_args},
+        ),
+        (inner_tool, {"request": request_args}),
+        (inner_tool, request_args),
+    ]
+
+    last_error: Exception | None = None
+    for tool_name, arguments in attempts:
         try:
-            result = _mcp_rpc("tools/call", {"name": tool_name, "arguments": args})
-            rows = _normalize_mcp_content(result)
-            if not rows and args not in ({}, {"limit": limit}):
-                continue
-            if not query:
-                return rows[:limit]
-            filtered = [
-                row
-                for row in rows
-                if query.lower() in json.dumps(row, default=str).lower()
-            ]
-            return (filtered or rows)[:limit]
-        except Exception:
+            result = _mcp_rpc(
+                "tools/call", {"name": tool_name, "arguments": arguments}
+            )
+        except Exception as ex:
+            last_error = ex
             continue
-    raise RuntimeError(f"MCP search failed via tool '{tool_name}'")
+        if result.get("isError"):
+            last_error = RuntimeError(
+                f"tool '{tool_name}' returned isError: "
+                f"{result.get('content') or result}"
+            )
+            continue
+        rows = _normalize_mcp_content(result)
+        if not rows and query:
+            continue
+        return _filter_rows(rows, query)[:limit]
+
+    raise RuntimeError(
+        f"MCP search failed for intent '{intent}' (tool '{inner_tool}'): {last_error}"
+    )
+
+
+_NAME_FIELDS: tuple[str, ...] = (
+    "name",
+    "dashboard_title",
+    "slice_name",
+    "table_name",
+    "database_name",
+    "title",
+    "label",
+)
+
+
+def _result_label(row: dict[str, Any]) -> str:
+    for key in _NAME_FIELDS:
+        value = row.get(key)
+        if value:
+            return str(value)
+    if row.get("id") is not None:
+        return f"#{row['id']}"
+    return ""
 
 
 def _build_answer(intent: str, search_term: str, results: list[dict[str, Any]]) -> str:
     if not results:
         return f"I searched {intent}s for '{search_term}' but found no matches."
 
-    top = ", ".join(str(r.get("name", "")) for r in results[:3])
+    labels = [label for label in (_result_label(r) for r in results[:3]) if label]
+    top = ", ".join(labels)
     if len(results) > 3:
         top = f"{top}, and {len(results) - 3} more"
     return f"I found {len(results)} {intent}(s) for '{search_term}': {top}."
