@@ -524,6 +524,24 @@ def _discover_tool_name_via_wrapper(intent: str) -> str | None:
     return None
 
 
+_INTENT_TO_LIST_TOOL: dict[str, str] = {
+    "dashboard": "list_dashboards",
+    "chart": "list_charts",
+    "dataset": "list_datasets",
+    "database": "list_databases",
+}
+
+
+def _filter_rows(rows: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    if not query:
+        return rows
+    needle = query.lower()
+    filtered = [
+        row for row in rows if needle in json.dumps(row, default=str).lower()
+    ]
+    return filtered or rows
+
+
 def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[dict[str, Any]]:
     tool_names = _mcp_list_tools()
     tool_name = _pick_tool_name(intent, tool_names)
