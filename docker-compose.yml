@@ -296,6 +296,8 @@ services:
       <<: *superset-env
     entrypoint: ["celery", "--app=superset.tasks.celery_app:app", "worker",
                  "--loglevel=info", "--pool=prefork", "--max-tasks-per-child=128"]
+    healthcheck:
+      disable: true
     volumes:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
@@ -316,6 +318,8 @@ services:
       <<: *superset-env
     entrypoint: ["celery", "--app=superset.tasks.celery_app:app", "beat",
                  "--loglevel=info", "--schedule=/app/superset_home/celerybeat-schedule"]
+    healthcheck:
+      disable: true
     volumes:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
@@ -415,6 +419,8 @@ services:
     environment:
       <<: *superset-env
     entrypoint: ["/app/docker/scripts/reconciler_entrypoint.sh"]
+    healthcheck:
+      disable: true
     volumes:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro

@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -29,6 +31,10 @@ SEARCH_LIMIT = int(os.getenv("DASHBOARD_CHATBOT_SEARCH_LIMIT", "5"))
 INTENTS = ("database", "dataset", "chart", "dashboard")
 MCP_BASE_URL = os.getenv("DASHBOARD_CHATBOT_MCP_BASE_URL", "http://mcp:5008").strip()
 MCP_TIMEOUT_SECONDS = int(os.getenv("DASHBOARD_CHATBOT_MCP_TIMEOUT_SECONDS", "15"))
+MCP_RETRIES = int(os.getenv("DASHBOARD_CHATBOT_MCP_RETRIES", "3"))
+MCP_RETRY_BACKOFF_SECONDS = float(
+    os.getenv("DASHBOARD_CHATBOT_MCP_RETRY_BACKOFF_SECONDS", "1")
+)
 
 
 def _infer_intent_with_llm(question: str) -> str | None:
@@ -150,22 +156,45 @@ def _mcp_post_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=MCP_TIMEOUT_SECONDS) as resp:
-        return json.loads(resp.read().decode("utf-8") or "{}")
+    attempts = max(1, MCP_RETRIES)
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=MCP_TIMEOUT_SECONDS) as resp:
+                raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as ex:
+            err_body = ""
+            try:
+                err_body = ex.read().decode("utf-8", errors="ignore")[:1000]
+            except Exception:
+                pass
+            raise urllib.error.HTTPError(
+                ex.url, ex.code, f"{ex.reason} — {err_body}", ex.headers, None
+            ) from None
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as ex:
+            timed_out = isinstance(ex, (TimeoutError, socket.timeout)) or "timed out" in str(ex).lower()
+            if not timed_out or attempt >= attempts:
+                raise RuntimeError("timed out") from ex
+            time.sleep(MCP_RETRY_BACKOFF_SECONDS * attempt)
+    raise RuntimeError("timed out")
 
 
 def _mcp_rpc(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    payload = {
+    payload: dict[str, Any] = {
         "jsonrpc": "2.0",
         "id": 1,
         "method": method,
-        "params": params or {},
     }
+    if params is not None:
+        payload["params"] = params
     last_error: Exception | None = None
-    for path in ("/", "/mcp"):
+    for path in ("/mcp", "/"):
         try:
             response = _mcp_post_json(path, payload)
             if response.get("error"):
