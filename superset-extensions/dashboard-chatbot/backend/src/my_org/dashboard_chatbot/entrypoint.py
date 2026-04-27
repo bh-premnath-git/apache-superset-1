@@ -546,7 +546,7 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
     for args in candidate_args:
         try:
             if wrapper_mode:
-                wrapped_args = {"request": args} if args else {}
+                wrapped_args = {"request": args}
                 result = _mcp_rpc(
                     "tools/call",
                     {
@@ -560,7 +560,7 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
             else:
                 result = _mcp_rpc("tools/call", {"name": tool_name, "arguments": args})
             rows = _normalize_mcp_content(result)
-            if not rows and args not in ({}, {"limit": limit}):
+            if not rows:
                 continue
             if not query:
                 return rows[:limit]
