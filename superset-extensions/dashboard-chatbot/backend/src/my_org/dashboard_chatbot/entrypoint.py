@@ -157,7 +157,7 @@ def _extract_search_term(question: str) -> str:
     words = [w for w in re.findall(r"[a-z0-9_\-]+", q) if w not in stopwords]
     if words:
         return " ".join(words)
-    return q
+    return ""
 
 
 class _MCPHTTPNotFound(Exception):
@@ -173,8 +173,15 @@ class _MCPSessionExpired(Exception):
 
 
 def _parse_sse_payload(raw: str) -> dict[str, Any] | None:
-    """Extract the first JSON-RPC message from an SSE response body."""
+    """Extract the JSON-RPC *response* from an SSE stream.
+
+    MCP Streamable HTTP servers interleave ``notifications/message`` events
+    (server-pushed log lines with no ``id``) before the actual JSON-RPC
+    response (which carries the ``id`` we sent).  We must skip every
+    notification and return only the response frame.
+    """
     buffer: list[str] = []
+    fallback: dict[str, Any] | None = None
     for line in raw.splitlines():
         if line.startswith("data:"):
             buffer.append(line[len("data:"):].lstrip())
@@ -184,17 +191,28 @@ def _parse_sse_payload(raw: str) -> dict[str, Any] | None:
             if not data:
                 continue
             try:
-                return json.loads(data)
+                msg = json.loads(data)
             except ValueError:
                 continue
+            if not isinstance(msg, dict):
+                continue
+            # A JSON-RPC response always has "id"; notifications don't.
+            if "id" in msg:
+                return msg
+            if fallback is None:
+                fallback = msg
     if buffer:
         data = "".join(buffer).strip()
         if data:
             try:
-                return json.loads(data)
+                msg = json.loads(data)
+                if isinstance(msg, dict) and "id" in msg:
+                    return msg
+                if fallback is None:
+                    fallback = msg if isinstance(msg, dict) else None
             except ValueError:
-                return None
-    return None
+                pass
+    return fallback
 
 
 class _MCPSession:
@@ -420,12 +438,19 @@ def _extract_results_from_tool_payload(payload: Any) -> list[dict[str, Any]]:
 
 
 def _normalize_mcp_content(result: dict[str, Any]) -> list[dict[str, Any]]:
+    direct_rows = _extract_results_from_tool_payload(result)
+    if direct_rows:
+        return direct_rows
+
     content = result.get("content") or []
     for block in content:
         if not isinstance(block, dict):
             continue
         if block.get("type") == "json":
-            rows = _extract_results_from_tool_payload(block.get("json"))
+            json_payload = block.get("json")
+            rows = _extract_results_from_tool_payload(json_payload)
+            if not rows and isinstance(json_payload, dict):
+                rows = _normalize_mcp_content(json_payload)
             if rows:
                 return rows
         if block.get("type") == "text":
@@ -437,10 +462,11 @@ def _normalize_mcp_content(result: dict[str, Any]) -> list[dict[str, Any]]:
             except ValueError:
                 continue
             rows = _extract_results_from_tool_payload(parsed)
+            if not rows and isinstance(parsed, dict):
+                rows = _normalize_mcp_content(parsed)
             if rows:
                 return rows
-    rows = _extract_results_from_tool_payload(result)
-    return rows
+    return []
 
 
 def _extract_text_blocks(result: dict[str, Any]) -> list[str]:
@@ -529,14 +555,27 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
     raise RuntimeError(f"MCP search failed via tool '{tool_name}': {last_error}")
 
 
+def _result_display_name(row: dict[str, Any]) -> str:
+    for key in ("dashboard_title", "slice_name", "table_name", "database_name",
+                "name", "title", "verbose_name"):
+        val = row.get(key)
+        if val:
+            return str(val)
+    return str(row.get("id", ""))
+
+
 def _build_answer(intent: str, search_term: str, results: list[dict[str, Any]]) -> str:
     if not results:
-        return f"I searched {intent}s for '{search_term}' but found no matches."
+        if search_term:
+            return f"I searched {intent}s for '{search_term}' but found no matches."
+        return f"No {intent}s found."
 
-    top = ", ".join(str(r.get("name", "")) for r in results[:3])
+    top = ", ".join(_result_display_name(r) for r in results[:3])
     if len(results) > 3:
         top = f"{top}, and {len(results) - 3} more"
-    return f"I found {len(results)} {intent}(s) for '{search_term}': {top}."
+    if search_term:
+        return f"I found {len(results)} {intent}(s) for '{search_term}': {top}."
+    return f"I found {len(results)} {intent}(s): {top}."
 
 
 @api(
