@@ -58,7 +58,14 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const districtCentroids = useMemo(() => {
     if (!geometry || !districtGeo.data) return [];
-    return featureCentroids(districtGeo.data, geometry.path, districtFeatureKeyProp);
+    const centroids = featureCentroids(districtGeo.data, geometry.path, districtFeatureKeyProp);
+    if (centroids.length === 0) {
+      console.warn(
+        '[StateDistrictPies] No centroids produced. Check that districtFeatureKeyProp',
+        `"${districtFeatureKeyProp}" exists on the GeoJSON features.`,
+      );
+    }
+    return centroids;
   }, [geometry, districtGeo.data, districtFeatureKeyProp]);
 
   const radiusScale = useMemo(() => {
@@ -70,7 +77,15 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const districtsByKey = useMemo(() => {
     const map = new Map<string, DistrictRow>();
-    for (const d of districts) map.set(d.districtKey, d);
+    for (const d of districts) map.set(normalizeKey(d.districtKey), d);
+    if (districts.length > 0) {
+      console.info(
+        `[StateDistrictPies] ${districts.length} district data rows.`,
+        'Sample keys:', Array.from(map.keys()).slice(0, 5),
+      );
+    } else {
+      console.warn('[StateDistrictPies] No district data rows from query. Check column config.');
+    }
     return map;
   }, [districts]);
 
@@ -135,7 +150,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
         />
         <g className="sdp-district-layer">
           {districtCentroids.map(centroid => {
-            const row = districtsByKey.get(centroid.key);
+            const row = districtsByKey.get(normalizeKey(centroid.key));
             if (!row) return null;
             return (
               <DistrictPie
@@ -166,6 +181,10 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       {showLegend && <Legend categories={categories} colorFor={colorFor} />}
     </div>
   );
+}
+
+function normalizeKey(s: string): string {
+  return s.toLowerCase().trim();
 }
 
 function uniqueCategories(rows: DistrictRow[]): string[] {

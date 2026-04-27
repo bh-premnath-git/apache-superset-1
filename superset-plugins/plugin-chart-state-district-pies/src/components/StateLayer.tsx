@@ -24,7 +24,7 @@ function StateLayerImpl({
   stateFeatureKeyProp,
   stateTotals,
 }: StateLayerProps) {
-  const totalsByKey = new Map(stateTotals.map(s => [s.stateKey, s.totalWeight]));
+  const totalsByKey = new Map(stateTotals.map(s => [s.stateKey.toLowerCase().trim(), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
   const color = scaleSequential(interpolateBlues).domain([0, max || 1]);
 
@@ -33,7 +33,7 @@ function StateLayerImpl({
       {geo.features.map((feature, i) => {
         const rawKey = feature.properties?.[stateFeatureKeyProp];
         const key = rawKey == null ? `s-${i}` : String(rawKey);
-        const weight = totalsByKey.get(key) ?? 0;
+        const weight = totalsByKey.get(key.toLowerCase().trim()) ?? 0;
         const d = path(feature as unknown as GeoJSON.Feature) ?? '';
         return (
           <path
