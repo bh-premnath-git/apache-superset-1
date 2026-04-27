@@ -455,27 +455,33 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
     if not inner_tool:
         raise RuntimeError(f"no MCP tool mapping for intent '{intent}'")
 
-    request_args: dict[str, Any] = {"page": 1, "page_size": limit}
+    base_request: dict[str, Any] = {"page": 1, "page_size": limit}
+    request_with_search = dict(base_request)
     if query:
-        request_args["search"] = query
+        request_with_search["search"] = query
 
-    # The Superset MCP server exposes its listing tools through a single
+    # The Superset MCP server exposes listing tools (``list_dashboards``,
+    # ``list_charts``, ``list_datasets``, ``list_databases``) through a single
     # ``call_tool`` dispatcher whose arguments take the inner tool name and a
-    # ``request`` envelope. We try that shape first (verified by direct curl),
-    # then fall back to invoking the inner tool as a flat MCP tool — which is
-    # the layout the public ``mcp-server-superset`` reference uses — so this
-    # works against either deployment style.
+    # ``request`` envelope, e.g.
+    #     {"name": "list_charts",
+    #      "arguments": {"request": {"page": 1, "page_size": 10}}}
+    # The ``request`` envelope is required; the ``search`` key inside it is
+    # optional and not part of the canonical example, so we attempt with it
+    # first (cheap server-side filtering) and fall back to a no-search call
+    # plus client-side filtering. Direct flat invocations are kept as a final
+    # fallback for MCP servers that expose the listings without a dispatcher.
     attempts: list[tuple[str, dict[str, Any]]] = [
         (
             "call_tool",
-            {"name": inner_tool, "arguments": {"request": request_args}},
+            {"name": inner_tool, "arguments": {"request": request_with_search}},
         ),
         (
             "call_tool",
-            {"name": inner_tool, "arguments": request_args},
+            {"name": inner_tool, "arguments": {"request": base_request}},
         ),
-        (inner_tool, {"request": request_args}),
-        (inner_tool, request_args),
+        (inner_tool, {"request": request_with_search}),
+        (inner_tool, {"request": base_request}),
     ]
 
     last_error: Exception | None = None
