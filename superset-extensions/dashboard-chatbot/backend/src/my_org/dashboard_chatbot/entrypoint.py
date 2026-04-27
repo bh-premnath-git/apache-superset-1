@@ -39,6 +39,11 @@ MCP_RETRY_BACKOFF_SECONDS = float(
 MCP_PROTOCOL_VERSION = os.getenv(
     "DASHBOARD_CHATBOT_MCP_PROTOCOL_VERSION", "2025-06-18"
 ).strip()
+MCP_PROTOCOL_FALLBACKS: tuple[str, ...] = (
+    MCP_PROTOCOL_VERSION,
+    "2025-03-26",
+    "2024-11-05",
+)
 
 
 def _infer_intent_with_llm(question: str) -> str | None:
@@ -236,53 +241,59 @@ class _MCPSession:
 
     def _initialize(self) -> None:
         last_error: Exception | None = None
-        for path in self.CANDIDATE_PATHS:
-            init_payload = {
-                "jsonrpc": "2.0",
-                "id": self._next_id(),
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": self._protocol_version,
-                    "capabilities": {},
-                    "clientInfo": {
-                        "name": "superset-dashboard-chatbot",
-                        "version": "1.0.0",
+        seen_protocols: list[str] = []
+        for version in MCP_PROTOCOL_FALLBACKS:
+            if not version or version in seen_protocols:
+                continue
+            seen_protocols.append(version)
+            self._protocol_version = version
+            for path in self.CANDIDATE_PATHS:
+                init_payload = {
+                    "jsonrpc": "2.0",
+                    "id": self._next_id(),
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": self._protocol_version,
+                        "capabilities": {},
+                        "clientInfo": {
+                            "name": "superset-dashboard-chatbot",
+                            "version": "1.0.0",
+                        },
                     },
-                },
-            }
-            try:
-                response, headers, _ = self._post(path, init_payload)
-            except _MCPHTTPNotFound as ex:
-                last_error = ex
-                continue
-            except Exception as ex:
-                last_error = ex
-                continue
+                }
+                try:
+                    response, headers, _ = self._post(path, init_payload)
+                except _MCPHTTPNotFound as ex:
+                    last_error = ex
+                    continue
+                except Exception as ex:
+                    last_error = ex
+                    continue
 
-            if not response or response.get("error"):
-                last_error = RuntimeError(
-                    str(response.get("error")) if response else "empty initialize response"
-                )
-                continue
+                if not response or response.get("error"):
+                    last_error = RuntimeError(
+                        str(response.get("error")) if response else "empty initialize response"
+                    )
+                    continue
 
-            result = response.get("result") or {}
-            negotiated = str(result.get("protocolVersion") or "").strip()
-            if negotiated:
-                self._protocol_version = negotiated
-            self._session_id = headers.get("mcp-session-id")
-            self._endpoint_path = path
+                result = response.get("result") or {}
+                negotiated = str(result.get("protocolVersion") or "").strip()
+                if negotiated:
+                    self._protocol_version = negotiated
+                self._session_id = headers.get("mcp-session-id")
+                self._endpoint_path = path
 
-            try:
-                self._post(
-                    path,
-                    {"jsonrpc": "2.0", "method": "notifications/initialized"},
-                )
-            except Exception as ex:
-                self._endpoint_path = None
-                self._session_id = None
-                last_error = ex
-                continue
-            return
+                try:
+                    self._post(
+                        path,
+                        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                    )
+                except Exception as ex:
+                    self._endpoint_path = None
+                    self._session_id = None
+                    last_error = ex
+                    continue
+                return
 
         raise RuntimeError(f"MCP initialize failed: {last_error}")
 
@@ -432,9 +443,46 @@ def _normalize_mcp_content(result: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _extract_text_blocks(result: dict[str, Any]) -> list[str]:
+    content = result.get("content") or []
+    texts: list[str] = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text_payload = str(block.get("text", "")).strip()
+            if text_payload:
+                texts.append(text_payload)
+    return texts
+
+
+def _is_wrapper_mcp(tool_names: list[str]) -> bool:
+    return "search_tools" in tool_names and "call_tool" in tool_names
+
+
+def _discover_tool_name_via_wrapper(intent: str) -> str | None:
+    result = _mcp_rpc("tools/call", {"name": "search_tools", "arguments": {"query": intent}})
+    for text in _extract_text_blocks(result):
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            continue
+        if not isinstance(parsed, list):
+            continue
+        discovered: list[str] = []
+        for row in parsed:
+            if isinstance(row, dict) and row.get("name"):
+                discovered.append(str(row["name"]))
+        candidate = _pick_tool_name(intent, discovered)
+        if candidate:
+            return candidate
+    return None
+
+
 def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[dict[str, Any]]:
     tool_names = _mcp_list_tools()
     tool_name = _pick_tool_name(intent, tool_names)
+    wrapper_mode = _is_wrapper_mcp(tool_names)
+    if not tool_name and wrapper_mode:
+        tool_name = _discover_tool_name_via_wrapper(intent)
     if not tool_name:
         raise RuntimeError(f"no MCP tool found for intent '{intent}'")
 
@@ -447,9 +495,23 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
         {"limit": limit},
         {},
     ]
+    last_error: Exception | None = None
     for args in candidate_args:
         try:
-            result = _mcp_rpc("tools/call", {"name": tool_name, "arguments": args})
+            if wrapper_mode:
+                wrapped_args = {"request": args} if args else {}
+                result = _mcp_rpc(
+                    "tools/call",
+                    {
+                        "name": "call_tool",
+                        "arguments": {
+                            "name": tool_name,
+                            "arguments": wrapped_args,
+                        },
+                    },
+                )
+            else:
+                result = _mcp_rpc("tools/call", {"name": tool_name, "arguments": args})
             rows = _normalize_mcp_content(result)
             if not rows and args not in ({}, {"limit": limit}):
                 continue
@@ -461,9 +523,10 @@ def _search_via_mcp(intent: str, query: str, limit: int = SEARCH_LIMIT) -> list[
                 if query.lower() in json.dumps(row, default=str).lower()
             ]
             return (filtered or rows)[:limit]
-        except Exception:
+        except Exception as ex:
+            last_error = ex
             continue
-    raise RuntimeError(f"MCP search failed via tool '{tool_name}'")
+    raise RuntimeError(f"MCP search failed via tool '{tool_name}': {last_error}")
 
 
 def _build_answer(intent: str, search_term: str, results: list[dict[str, Any]]) -> str:
