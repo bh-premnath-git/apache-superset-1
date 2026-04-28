@@ -10,6 +10,7 @@ export interface StateLayerProps {
   path: GeoPath;
   stateFeatureKeyProp: string;
   stateTotals: StateAggregate[];
+  onFeatureClick?: (featureKey: string) => void;
 }
 
 /**
@@ -23,6 +24,7 @@ function StateLayerImpl({
   path,
   stateFeatureKeyProp,
   stateTotals,
+  onFeatureClick,
 }: StateLayerProps) {
   const totalsByKey = new Map(stateTotals.map(s => [s.stateKey.toLowerCase().trim(), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
@@ -33,19 +35,21 @@ function StateLayerImpl({
     <g className="sdp-state-layer" aria-label="State boundaries">
       {geo.features.map((feature, i) => {
         const rawKey = feature.properties?.[stateFeatureKeyProp];
-        const key = rawKey == null ? `s-${i}` : String(rawKey);
-        const weight = totalsByKey.get(key.toLowerCase().trim()) ?? 0;
+        const lookupKey = rawKey == null ? '' : String(rawKey);
+        const weight = totalsByKey.get(lookupKey.toLowerCase().trim()) ?? 0;
         const d = path(feature as unknown as GeoJSON.Feature) ?? '';
         return (
           <path
-            key={key}
+            key={`f-${i}`}
             d={d}
             fill={weight > 0 ? color(weight) : '#e8e8e8'}
             stroke="#999999"
             strokeWidth={0.3}
-            aria-label={key}
+            style={onFeatureClick ? { cursor: 'pointer' } : undefined}
+            onClick={onFeatureClick && lookupKey ? () => onFeatureClick(lookupKey) : undefined}
+            aria-label={lookupKey || `s-${i}`}
           >
-            <title>{`${key}: ${weight.toLocaleString()}`}</title>
+            <title>{`${lookupKey || `feature-${i}`}: ${weight.toLocaleString()}`}</title>
           </path>
         );
       })}

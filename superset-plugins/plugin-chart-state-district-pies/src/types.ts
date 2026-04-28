@@ -64,6 +64,7 @@ export interface StateDistrictPiesFormData extends QueryFormData {
   max_pie_radius?: number;
   show_legend?: boolean;
   show_tooltip?: boolean;
+  emit_filter?: boolean;
 }
 
 /** GeoJSON FeatureCollection shape we rely on (narrowed — no external types). */
