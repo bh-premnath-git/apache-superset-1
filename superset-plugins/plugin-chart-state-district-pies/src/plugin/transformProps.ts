@@ -63,27 +63,6 @@ export default function transformProps(
     ([stateKey, totalWeight]) => ({ stateKey, totalWeight }),
   );
 
-  if (rows.length > 0) {
-    const sampleStates = Array.from(new Set(rows.map(r => asString(r[fd.state_column]))))
-      .filter(Boolean)
-      .slice(0, 8);
-    const sampleDistricts = Array.from(new Set(rows.map(r => asString(r[fd.district_column]))))
-      .filter(Boolean)
-      .slice(0, 8);
-    console.info('[state_district_pies/transformProps] query diagnostics', {
-      rowCount: rows.length,
-      stateColumn: fd.state_column,
-      districtColumn: fd.district_column,
-      categoryColumn: fd.category_column,
-      metricKey,
-      uniqueStates: stateTotals.length,
-      sampleStates,
-      sampleDistricts,
-      stateFeatureKeyProp: fd.state_feature_key_prop,
-      districtFeatureKeyProp: fd.district_feature_key_prop,
-    });
-  }
-
   return {
     width,
     height,

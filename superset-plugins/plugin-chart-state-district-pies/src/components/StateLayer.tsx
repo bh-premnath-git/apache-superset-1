@@ -11,6 +11,12 @@ export interface StateLayerProps {
   stateFeatureKeyProp: string;
   stateTotals: StateAggregate[];
   onFeatureClick?: (featureKey: string) => void;
+  /** 'default' shows strokes between every feature; 'state-outline' hides
+   *  internal district strokes and draws only state outlines. */
+  strokeMode?: 'default' | 'state-outline';
+  /** Dissolved state geometries (MultiPolygon per state) – rendered as
+   *  outlines when strokeMode is 'state-outline'. */
+  stateOutlineGeo?: GeoFeatureCollection;
 }
 
 /**
@@ -25,15 +31,24 @@ function StateLayerImpl({
   stateFeatureKeyProp,
   stateTotals,
   onFeatureClick,
+  strokeMode = 'default',
+  stateOutlineGeo,
 }: StateLayerProps) {
   const totalsByKey = new Map(stateTotals.map(s => [s.stateKey.toLowerCase().trim(), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
   // Shift domain so data-states start at a clearly visible blue, not near-white.
   const color = scaleSequential(interpolateBlues).domain([-(max || 1) * 0.25, max || 1]);
 
+  // In state-outline mode (India level), render only the dissolved state
+  // MultiPolygons instead of the 594 individual district features. This
+  // completely eliminates internal district boundary artifacts.
+  const renderFeatures = strokeMode === 'state-outline' && stateOutlineGeo
+    ? stateOutlineGeo.features
+    : geo.features;
+
   return (
     <g className="sdp-state-layer" aria-label="State boundaries">
-      {geo.features.map((feature, i) => {
+      {renderFeatures.map((feature, i) => {
         const rawKey = feature.properties?.[stateFeatureKeyProp];
         const lookupKey = rawKey == null ? '' : String(rawKey);
         const weight = totalsByKey.get(lookupKey.toLowerCase().trim()) ?? 0;
@@ -43,9 +58,17 @@ function StateLayerImpl({
             key={`f-${i}`}
             d={d}
             fill={weight > 0 ? color(weight) : '#e8e8e8'}
-            stroke="#999999"
-            strokeWidth={0.3}
-            style={onFeatureClick ? { cursor: 'pointer' } : undefined}
+            stroke={strokeMode === 'state-outline' ? '#555' : '#999999'}
+            strokeWidth={strokeMode === 'state-outline' ? 1.2 : 0.3}
+            style={{
+              ...(onFeatureClick ? { cursor: 'pointer' } : undefined),
+              // paint-order: stroke first, then fill on top. This covers
+              // internal district boundary strokes with fill, leaving only
+              // external state boundary strokes visible.
+              ...(strokeMode === 'state-outline'
+                ? { paintOrder: 'stroke fill' }
+                : undefined),
+            }}
             onClick={onFeatureClick && lookupKey ? () => onFeatureClick(lookupKey) : undefined}
             aria-label={lookupKey || `s-${i}`}
           >

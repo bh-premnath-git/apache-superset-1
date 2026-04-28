@@ -47,17 +47,18 @@ function DistrictPieImpl({
     >
       <circle
         r={radius + 0.75}
-        fill="#ffffff"
-        stroke="rgba(0,0,0,0.15)"
-        strokeWidth={0.5}
+        fill="rgba(255,255,255,0.55)"
+        stroke="rgba(0,0,0,0.10)"
+        strokeWidth={0.35}
       />
       {slices.map(slice => (
         <path
           key={slice.data.category}
           d={arcFn(slice) ?? ''}
           fill={colorFor(slice.data.category)}
-          stroke="#ffffff"
-          strokeWidth={0.4}
+          fillOpacity={0.72}
+          stroke="rgba(255,255,255,0.7)"
+          strokeWidth={0.25}
         />
       ))}
     </g>

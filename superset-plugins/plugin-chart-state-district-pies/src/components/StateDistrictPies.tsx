@@ -17,6 +17,7 @@ import { fitProjection } from '../geo/projection';
 import { useGeoJson } from '../hooks/useGeoJson';
 import type {
   DistrictRow,
+  GeoFeature,
   GeoFeatureCollection,
   StateAggregate,
   StateDistrictPiesProps,
@@ -50,6 +51,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const stateGeo = useGeoJson(stateGeoJsonUrl);
   const districtGeo = useGeoJson(districtGeoJsonUrl);
+  const districtBaseGeo = districtGeo.data ?? stateGeo.data;
 
   const resolvedStateFeatureKeyProp = useMemo(() => {
     if (!stateGeo.data) return stateFeatureKeyProp;
@@ -89,70 +91,73 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       }
     }
 
-    console.info('[StateDistrictPies] state key resolution', {
-      configured: stateFeatureKeyProp,
-      resolved: bestProp,
-      stateTotalsSample: stateTotals.slice(0, 5).map(s => s.stateKey),
-      totalsKeyCount: totalsKeys.size,
-    });
-
     return bestProp;
   }, [stateGeo.data, stateFeatureKeyProp, stateTotals]);
 
   const resolvedDistrictFeatureKeyProp = useMemo(() => {
-    if (!stateGeo.data) return districtFeatureKeyProp;
+    if (!districtBaseGeo) return districtFeatureKeyProp;
     const districtKeys = new Set(districts.map(d => normalizeKey(d.districtKey)));
     const candidates = [
-      districtFeatureKeyProp,
       'NAME_2',
       'DISTRICT',
       'district',
+      districtFeatureKeyProp,
       'DIST_CODE',
       'censuscode',
       'name',
     ];
 
+    const priority = new Map<string, number>([
+      ['NAME_2', 6],
+      ['DISTRICT', 5],
+      ['district', 4],
+      [districtFeatureKeyProp, 3],
+      ['name', 2],
+      ['DIST_CODE', 1],
+      ['censuscode', 0],
+    ]);
+
     let bestProp = districtFeatureKeyProp;
     let bestMatched = -1;
     let bestUnique = -1;
+    let bestPriority = -1;
 
     for (const prop of candidates) {
       if (!prop) continue;
-      const values = stateGeo.data.features
+      const values = districtBaseGeo.features
         .map(f => String(f.properties?.[prop] ?? '').trim())
         .filter(Boolean);
       if (!values.length) continue;
 
       const unique = new Set(values.map(normalizeKey));
       const matched = Array.from(unique).filter(v => districtKeys.has(v)).length;
+      const currentPriority = priority.get(prop) ?? 0;
       if (
         unique.size > 1 &&
-        (matched > bestMatched || (matched === bestMatched && unique.size > bestUnique))
+        (
+          matched > bestMatched ||
+          (matched === bestMatched && unique.size > bestUnique) ||
+          (matched === bestMatched && unique.size === bestUnique && currentPriority > bestPriority)
+        )
       ) {
         bestMatched = matched;
         bestUnique = unique.size;
+        bestPriority = currentPriority;
         bestProp = prop;
       }
     }
 
-    console.info('[StateDistrictPies] district key resolution', {
-      configured: districtFeatureKeyProp,
-      resolved: bestProp,
-      districtDataCount: districtKeys.size,
-      districtDataSample: Array.from(districtKeys).slice(0, 8),
-    });
-
     return bestProp;
-  }, [stateGeo.data, districtFeatureKeyProp, districts]);
+  }, [districtBaseGeo, districtFeatureKeyProp, districts]);
 
   const indiaStateTotals = useMemo<StateAggregate[]>(() => {
     const uniqueStateTotals = new Set(stateTotals.map(s => normalizeKey(s.stateKey)));
     // If incoming state totals are already meaningful, trust them.
     if (uniqueStateTotals.size > 1) return stateTotals;
-    if (!stateGeo.data) return stateTotals;
+    if (!districtBaseGeo) return stateTotals;
 
     const districtToState = new Map<string, string>();
-    for (const f of stateGeo.data.features) {
+    for (const f of districtBaseGeo.features) {
       const district = String(f.properties?.[resolvedDistrictFeatureKeyProp] ?? '').trim();
       const state = String(f.properties?.[resolvedStateFeatureKeyProp] ?? '').trim();
       if (!district || !state) continue;
@@ -172,17 +177,13 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     }));
 
     if (inferred.length > 0) {
-      console.info('[StateDistrictPies] inferred state totals from district mapping', {
-        inferredCount: inferred.length,
-        inferredSample: inferred.slice(0, 5).map(s => s.stateKey),
-      });
       return inferred;
     }
 
     return stateTotals;
   }, [
     stateTotals,
-    stateGeo.data,
+    districtBaseGeo,
     resolvedDistrictFeatureKeyProp,
     resolvedStateFeatureKeyProp,
     districts,
@@ -197,7 +198,15 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   // ---- Filter GeoJSON based on drill level -----------------------------
   const filteredGeo = useMemo((): GeoFeatureCollection | undefined => {
     if (!stateGeo.data) return undefined;
-    const allFeatures = stateGeo.data.features;
+    if (drillLevel === 'india') {
+      // At India level we still pass all district features for fill-coloring
+      // by state; strokes are suppressed via strokeMode='state-outline'.
+      return stateGeo.data;
+    }
+
+    if (!districtBaseGeo) return undefined;
+    const allFeatures = districtBaseGeo.features;
+
     if (drillLevel === 'state' && selectedState) {
       return {
         type: 'FeatureCollection',
@@ -216,9 +225,37 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
         ),
       };
     }
-    return stateGeo.data;
+    return districtBaseGeo;
   }, [stateGeo.data, drillLevel, selectedState, selectedDistrict,
-      resolvedStateFeatureKeyProp, resolvedDistrictFeatureKeyProp]);
+      districtBaseGeo, resolvedStateFeatureKeyProp, resolvedDistrictFeatureKeyProp]);
+
+  // ---- Dissolved state outlines for India level -------------------------
+  // Group district features by state key → one MultiPolygon per state, so
+  // the outline layer draws clean state boundaries without district noise.
+  const dissolvedStateGeo = useMemo((): GeoFeatureCollection | undefined => {
+    if (!stateGeo.data) return undefined;
+    const groups = new Map<string, number[][][][]>();
+    const propKey = resolvedStateFeatureKeyProp;
+    for (const f of stateGeo.data.features) {
+      const key = String(f.properties?.[propKey] ?? '').trim();
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      const geom = f.geometry;
+      if (geom.type === 'Polygon') {
+        groups.get(key)!.push(geom.coordinates as number[][][]);
+      } else if (geom.type === 'MultiPolygon') {
+        groups.get(key)!.push(...(geom.coordinates as number[][][][]));
+      }
+    }
+    const features: GeoFeature[] = Array.from(groups.entries()).map(
+      ([key, coords]) => ({
+        type: 'Feature' as const,
+        properties: { [propKey]: key },
+        geometry: { type: 'MultiPolygon' as const, coordinates: coords },
+      }),
+    );
+    return { type: 'FeatureCollection', features };
+  }, [stateGeo.data, resolvedStateFeatureKeyProp]);
 
   // ---- Totals and key-prop change per level ----------------------------
   const layerKeyProp = drillLevel === 'india'
@@ -296,12 +333,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     if (drillLevel === 'india') return [];
     if (!geometry || !filteredGeo) return [];
     const centroids = featureCentroids(filteredGeo, geometry.path, resolvedDistrictFeatureKeyProp);
-    if (centroids.length === 0) {
-      console.warn(
-        '[StateDistrictPies] No centroids produced. Check that districtFeatureKeyProp',
-        `"${resolvedDistrictFeatureKeyProp}" exists on the GeoJSON features.`,
-      );
-    }
     return centroids;
   }, [drillLevel, geometry, filteredGeo, resolvedDistrictFeatureKeyProp]);
 
@@ -315,14 +346,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   const districtsByKey = useMemo(() => {
     const map = new Map<string, DistrictRow>();
     for (const d of districts) map.set(normalizeKey(d.districtKey), d);
-    if (districts.length > 0) {
-      console.info(
-        `[StateDistrictPies] ${districts.length} district data rows.`,
-        'Sample keys:', Array.from(map.keys()).slice(0, 5),
-      );
-    } else {
-      console.warn('[StateDistrictPies] No district data rows from query. Check column config.');
-    }
     return map;
   }, [districts]);
 
@@ -388,6 +411,8 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           stateFeatureKeyProp={layerKeyProp}
           stateTotals={layerTotals}
           onFeatureClick={drillLevel !== 'district' ? handleFeatureClick : undefined}
+          strokeMode={drillLevel === 'india' ? 'state-outline' : 'default'}
+          stateOutlineGeo={drillLevel === 'india' ? dissolvedStateGeo : undefined}
         />
         {showPies && (
           <g className="sdp-district-layer">
@@ -400,7 +425,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
                   row={row}
                   cx={centroid.cx}
                   cy={centroid.cy}
-                  radius={radiusScale(row.totalWeight)}
+                  radius={radiusScale(row.totalWeight) * 0.72}
                   colorFor={colorFor}
                   onClick={handleDistrictPieClick}
                   onHover={showTooltip ? handleHover : undefined}
