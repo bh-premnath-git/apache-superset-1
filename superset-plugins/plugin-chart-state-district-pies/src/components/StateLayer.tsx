@@ -3,6 +3,7 @@ import { scaleSequential } from 'd3-scale';
 import { interpolateBlues } from 'd3-scale-chromatic';
 import type { GeoPath } from 'd3-geo';
 
+import { normalizeKey } from '../data/normalize';
 import type { GeoFeatureCollection, StateAggregate } from '../types';
 
 export interface StateLayerProps {
@@ -34,7 +35,7 @@ function StateLayerImpl({
   strokeMode = 'default',
   stateOutlineGeo,
 }: StateLayerProps) {
-  const totalsByKey = new Map(stateTotals.map(s => [s.stateKey.toLowerCase().trim(), s.totalWeight]));
+  const totalsByKey = new Map(stateTotals.map(s => [normalizeKey(s.stateKey), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
   // Shift domain so data-states start at a clearly visible blue, not near-white.
   const color = scaleSequential(interpolateBlues).domain([-(max || 1) * 0.25, max || 1]);
@@ -51,7 +52,7 @@ function StateLayerImpl({
       {renderFeatures.map((feature, i) => {
         const rawKey = feature.properties?.[stateFeatureKeyProp];
         const lookupKey = rawKey == null ? '' : String(rawKey);
-        const weight = totalsByKey.get(lookupKey.toLowerCase().trim()) ?? 0;
+        const weight = totalsByKey.get(normalizeKey(lookupKey)) ?? 0;
         const d = path(feature as unknown as GeoJSON.Feature) ?? '';
         return (
           <path

@@ -12,9 +12,9 @@ export interface DistrictRow {
   districtKey: string;
   wedges: Wedge[];
   totalWeight: number;
-  /** Rural segments R1-R4 breakdown for inline comparison view */
+  /** Rural-bucket wedges, derived from `rural_categories` form-data field. */
   ruralWedges?: Wedge[];
-  /** Urban segments U1-U3 breakdown for inline comparison view */
+  /** Urban-bucket wedges, derived from `urban_categories` form-data field. */
   urbanWedges?: Wedge[];
 }
 
@@ -47,6 +47,11 @@ export interface StateDistrictPiesProps {
   showLegend: boolean;
   showTooltip: boolean;
 
+  /** Category codes that compose the "rural" group on the detail page. */
+  ruralCategories: string[];
+  /** Category codes that compose the "urban" group on the detail page. */
+  urbanCategories: string[];
+
   onDistrictClick?: (row: DistrictRow) => void;
   emitCrossFilters?: boolean;
   formData: StateDistrictPiesFormData;
@@ -69,6 +74,11 @@ export interface StateDistrictPiesFormData extends QueryFormData {
   show_legend?: boolean;
   show_tooltip?: boolean;
   emit_filter?: boolean;
+
+  /** Comma-separated category codes to bucket as "rural" on the detail view. */
+  rural_categories?: string;
+  /** Comma-separated category codes to bucket as "urban" on the detail view. */
+  urban_categories?: string;
 }
 
 /** GeoJSON FeatureCollection shape we rely on (narrowed — no external types). */

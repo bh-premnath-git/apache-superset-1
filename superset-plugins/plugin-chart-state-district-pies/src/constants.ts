@@ -18,6 +18,10 @@ export const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   U3: '#2f4a8a',
 };
 
+/** Default rural/urban segment groupings for the LCA Household Survey. */
+export const DEFAULT_RURAL_CATEGORIES = ['R1', 'R2', 'R3', 'R4'];
+export const DEFAULT_URBAN_CATEGORIES = ['U1', 'U2', 'U3'];
+
 export const FALLBACK_PALETTE = [
   '#5AC189',
   '#FF7F44',

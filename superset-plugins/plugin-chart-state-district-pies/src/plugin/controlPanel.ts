@@ -9,6 +9,8 @@ import {
   DEFAULT_GEOJSON_URL,
   DEFAULT_MAX_PIE_RADIUS,
   DEFAULT_MIN_PIE_RADIUS,
+  DEFAULT_RURAL_CATEGORIES,
+  DEFAULT_URBAN_CATEGORIES,
 } from '../constants';
 
 /**
@@ -178,6 +180,40 @@ const config: ControlPanelConfig = {
               type: 'CheckboxControl',
               label: t('Show hover tooltip'),
               default: true,
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Detail page segments'),
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'rural_categories',
+            config: {
+              type: 'TextControl',
+              label: t('Rural categories'),
+              description: t(
+                'Comma-separated category codes that bucket as "rural" in ' +
+                  'the per-district detail comparison view.',
+              ),
+              default: DEFAULT_RURAL_CATEGORIES.join(','),
+            },
+          },
+        ],
+        [
+          {
+            name: 'urban_categories',
+            config: {
+              type: 'TextControl',
+              label: t('Urban categories'),
+              description: t(
+                'Comma-separated category codes that bucket as "urban" in ' +
+                  'the per-district detail comparison view.',
+              ),
+              default: DEFAULT_URBAN_CATEGORIES.join(','),
             },
           },
         ],

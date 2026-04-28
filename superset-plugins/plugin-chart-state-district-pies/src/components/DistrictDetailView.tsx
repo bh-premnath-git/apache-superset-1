@@ -1,76 +1,93 @@
-import React, { memo } from 'react';
-import type { DistrictRow, Wedge } from '../types';
+import React, { memo, useMemo } from 'react';
+
+import { SegmentComparisonTable } from './SegmentComparisonTable';
+import { splitWedges } from '../data/splitWedges';
+import { formatNumber, formatPercent } from '../format';
+import type { DistrictRow } from '../types';
 
 export interface DistrictDetailViewProps {
   row: DistrictRow;
   width: number;
   height: number;
   colorFor: (category: string) => string;
+  ruralCategories: string[];
+  urbanCategories: string[];
   onBack: () => void;
 }
 
+const RURAL_ACCENT = '#1f8f5c';
+const URBAN_ACCENT = '#1565d8';
+
 /**
- * Shows detailed rural (R1-R4) vs urban (U1-U3) comparison for a selected district.
+ * District detail page — opened by clicking a district pie.
  *
- * Layout: Stacked sections with header, rural bar chart, urban bar chart, and legend.
+ * Renders side-by-side rural and urban segment comparison tables so an
+ * analyst can read counts, intra-section share, and share-of-district at
+ * a glance. Mirrors the visual contract of the dashboard "Rural Segments
+ * Comparison" handlebars table while staying schema-agnostic — which
+ * codes count as "rural"/"urban" come from the chart's control panel.
  */
 function DistrictDetailViewImpl({
   row,
   width,
   height,
   colorFor,
+  ruralCategories,
+  urbanCategories,
   onBack,
 }: DistrictDetailViewProps) {
-  const rural = row.ruralWedges ?? [];
-  const urban = row.urbanWedges ?? [];
+  const { rural, urban, otherTotal } = useMemo(
+    () => splitWedges(row, ruralCategories, urbanCategories),
+    [row, ruralCategories, urbanCategories],
+  );
 
   const ruralTotal = rural.reduce((s, w) => s + w.value, 0);
   const urbanTotal = urban.reduce((s, w) => s + w.value, 0);
-  const grandTotal = ruralTotal + urbanTotal;
+  const grandTotal = ruralTotal + urbanTotal + otherTotal;
 
-  // Layout calculations
-  const padding = 16;
-  const availableHeight = height - 40 - padding * 2;
-  const availableWidth = width - padding * 2;
-
-  // Bar dimensions
-  const barHeight = Math.min(40, availableHeight / 3);
-  const barWidth = Math.max(120, availableWidth - 80); // Fit within panel
+  const showSideBySide = width >= 640;
 
   return (
     <div
+      className="sdp-detail"
       style={{
         position: 'relative',
         width,
         height,
-        padding,
+        padding: 16,
+        boxSizing: 'border-box',
+        overflowY: 'auto',
         fontFamily: 'Inter, Arial, sans-serif',
-        fontSize: 12,
         color: '#222',
         background: '#fff',
       }}
     >
-      {/* Header with back button */}
-      <div
+      <header
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
-          marginBottom: 12,
+          marginBottom: 14,
           borderBottom: '1px solid #e2e4e8',
-          paddingBottom: 8,
+          paddingBottom: 10,
+          gap: 12,
         }}
       >
         <div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
-            {row.districtKey}, {row.stateKey}
+          <div style={{ fontSize: 16, fontWeight: 700 }}>
+            {row.districtKey}
+            <span style={{ color: '#888', fontWeight: 500 }}> · {row.stateKey}</span>
           </div>
-          <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-            Total: {formatNumber(grandTotal)} households
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            <strong>{formatNumber(grandTotal)}</strong> households · Rural{' '}
+            {formatPercent(ruralTotal, grandTotal)} · Urban{' '}
+            {formatPercent(urbanTotal, grandTotal)}
           </div>
         </div>
         <button
+          type="button"
           onClick={onBack}
+          aria-label="Back to district map"
           style={{
             padding: '6px 14px',
             fontSize: 12,
@@ -79,143 +96,48 @@ function DistrictDetailViewImpl({
             borderRadius: 4,
             cursor: 'pointer',
             fontWeight: 500,
+            whiteSpace: 'nowrap',
           }}
         >
           ← Back
         </button>
-      </div>
+      </header>
 
-      {/* Rural Section */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#1f8f5c' }}>
-          Rural Segments ({formatNumber(ruralTotal)})
-        </div>
-        {rural.length > 0 ? (
-          <svg width={barWidth + 70} height={barHeight + 20}>
-            {renderStackedBar(rural, ruralTotal, 10, 0, barWidth, barHeight, colorFor)}
-          </svg>
-        ) : (
-          <div style={{ color: '#999', fontStyle: 'italic' }}>No rural data</div>
-        )}
-      </div>
-
-      {/* Urban Section */}
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#1565d8' }}>
-          Urban Segments ({formatNumber(urbanTotal)})
-        </div>
-        {urban.length > 0 ? (
-          <svg width={barWidth + 70} height={barHeight + 20}>
-            {renderStackedBar(urban, urbanTotal, 10, 0, barWidth, barHeight, colorFor)}
-          </svg>
-        ) : (
-          <div style={{ color: '#999', fontStyle: 'italic' }}>No urban data</div>
-        )}
-      </div>
-
-      {/* Legend */}
       <div
         style={{
-          position: 'absolute',
-          bottom: padding,
-          left: padding,
-          right: padding,
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '8px 16px',
-          fontSize: 11,
+          display: 'grid',
+          gridTemplateColumns: showSideBySide ? '1fr 1fr' : '1fr',
+          gap: 16,
         }}
       >
-        {[...rural, ...urban].map(w => (
-          <span key={w.category} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                background: colorFor(w.category),
-                borderRadius: 2,
-              }}
-            />
-            <span>{w.category}</span>
-          </span>
-        ))}
+        <SegmentComparisonTable
+          title="Rural Segments"
+          accentColor={RURAL_ACCENT}
+          wedges={rural}
+          districtTotal={grandTotal}
+          colorFor={colorFor}
+        />
+        <SegmentComparisonTable
+          title="Urban Segments"
+          accentColor={URBAN_ACCENT}
+          wedges={urban}
+          districtTotal={grandTotal}
+          colorFor={colorFor}
+        />
       </div>
+
+      {otherTotal > 0 && (
+        <div
+          role="note"
+          style={{ marginTop: 4, fontSize: 11, color: '#888' }}
+        >
+          {formatNumber(otherTotal)} household
+          {otherTotal === 1 ? '' : 's'} fall outside the configured rural and
+          urban groups.
+        </div>
+      )}
     </div>
   );
-}
-
-function renderStackedBar(
-  wedges: Wedge[],
-  total: number,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  colorFor: (category: string) => string,
-) {
-  let currentX = x;
-  const elements: React.ReactNode[] = [];
-
-  wedges.forEach((w, i) => {
-    const segmentWidth = total > 0 ? (w.value / total) * width : 0;
-
-    // Bar segment
-    elements.push(
-      <rect
-        key={`seg-${i}`}
-        x={currentX}
-        y={y}
-        width={Math.max(0, segmentWidth)}
-        height={height}
-        fill={colorFor(w.category)}
-        stroke="#fff"
-        strokeWidth={1}
-      />,
-    );
-
-    // Label (only if segment is wide enough)
-    if (segmentWidth > 30) {
-      elements.push(
-        <text
-          key={`lbl-${i}`}
-          x={currentX + segmentWidth / 2}
-          y={y + height / 2 + 4}
-          textAnchor="middle"
-          fill="#fff"
-          fontSize={10}
-          fontWeight={600}
-        >
-          {w.category}
-        </text>,
-      );
-    }
-
-    // Total at end of bar
-    if (i === wedges.length - 1) {
-      elements.push(
-        <text
-          key="pct"
-          x={currentX + segmentWidth + 4}
-          y={y + height / 2 + 4}
-          fill="#666"
-          fontSize={11}
-        >
-          {formatNumber(total)}
-        </text>,
-      );
-    }
-
-    currentX += segmentWidth;
-  });
-
-  return elements;
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
-  return n.toLocaleString();
 }
 
 export const DistrictDetailView = memo(DistrictDetailViewImpl);

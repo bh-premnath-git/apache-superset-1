@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { formatPercent } from '../format';
 import type { DistrictRow } from '../types';
 
 export interface TooltipProps {
@@ -24,7 +25,7 @@ export function Tooltip({
 }: TooltipProps) {
   if (!row) return null;
   const flip = x > containerWidth - 160;
-  const total = row.totalWeight || 1;
+  const total = row.totalWeight;
 
   return (
     <div
@@ -62,7 +63,7 @@ export function Tooltip({
             />
             <span>{w.category}</span>
             <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-              {((w.value / total) * 100).toFixed(1)}%
+              {formatPercent(w.value, total)}
             </span>
           </React.Fragment>
         ))}
