@@ -183,8 +183,26 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   );
 }
 
+/**
+ * GADM GeoJSON uses older / Hindi-transliterated names for some districts;
+ * the analytics DB uses current Census names.  This alias map lets both
+ * sides resolve to the same canonical key.
+ */
+const DISTRICT_ALIASES: Record<string, string> = {
+  'purba champaran': 'east champaran',
+  'pashchim champaran': 'west champaran',
+  'bhabua': 'kaimur',
+  'purba singhbhum': 'east singhbhum',
+  'pashchim singhbhum': 'west singhbhum',
+  'hazaribag': 'hazaribagh',
+  'saraikela kharsawan': 'saraikela-kharsawan',
+  'east nimar': 'khandwa',
+  'west nimar': 'khargone',
+};
+
 function normalizeKey(s: string): string {
-  return s.toLowerCase().trim();
+  const key = s.toLowerCase().trim();
+  return DISTRICT_ALIASES[key] ?? key;
 }
 
 function uniqueCategories(rows: DistrictRow[]): string[] {

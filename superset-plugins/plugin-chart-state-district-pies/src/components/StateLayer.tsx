@@ -26,7 +26,8 @@ function StateLayerImpl({
 }: StateLayerProps) {
   const totalsByKey = new Map(stateTotals.map(s => [s.stateKey.toLowerCase().trim(), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
-  const color = scaleSequential(interpolateBlues).domain([0, max || 1]);
+  // Shift domain so data-states start at a clearly visible blue, not near-white.
+  const color = scaleSequential(interpolateBlues).domain([-(max || 1) * 0.25, max || 1]);
 
   return (
     <g className="sdp-state-layer" aria-label="State boundaries">
@@ -39,9 +40,9 @@ function StateLayerImpl({
           <path
             key={key}
             d={d}
-            fill={weight > 0 ? color(weight) : '#f2f2f2'}
-            stroke="#ffffff"
-            strokeWidth={0.5}
+            fill={weight > 0 ? color(weight) : '#e8e8e8'}
+            stroke="#999999"
+            strokeWidth={0.3}
             aria-label={key}
           >
             <title>{`${key}: ${weight.toLocaleString()}`}</title>
