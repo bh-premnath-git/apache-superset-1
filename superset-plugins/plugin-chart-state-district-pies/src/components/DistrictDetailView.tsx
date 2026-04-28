@@ -12,7 +12,6 @@ export interface DistrictDetailViewProps {
   colorFor: (category: string) => string;
   ruralCategories: string[];
   urbanCategories: string[];
-  onBack: () => void;
 }
 
 const RURAL_ACCENT = '#1f8f5c';
@@ -34,7 +33,6 @@ function DistrictDetailViewImpl({
   colorFor,
   ruralCategories,
   urbanCategories,
-  onBack,
 }: DistrictDetailViewProps) {
   const { rural, urban, otherTotal } = useMemo(
     () => splitWedges(row, ruralCategories, urbanCategories),
@@ -84,23 +82,6 @@ function DistrictDetailViewImpl({
             {formatPercent(urbanTotal, grandTotal)}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back to district map"
-          style={{
-            padding: '6px 14px',
-            fontSize: 12,
-            background: '#f5f6f8',
-            border: '1px solid #d1d5db',
-            borderRadius: 4,
-            cursor: 'pointer',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          ← Back
-        </button>
       </header>
 
       <div

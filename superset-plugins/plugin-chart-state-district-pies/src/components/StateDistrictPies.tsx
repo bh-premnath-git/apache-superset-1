@@ -231,7 +231,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           colorFor={colorFor}
           ruralCategories={ruralCategories}
           urbanCategories={urbanCategories}
-          onBack={drill.goToDistrict}
         />
       </div>
     );
