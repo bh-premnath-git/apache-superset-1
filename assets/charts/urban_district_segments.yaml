@@ -1,0 +1,40 @@
+# Urban District Segments — stacked bar showing U1–U3 distribution by district.
+#
+# Mirror of rural_district_segments.yaml but filtered to urban segments.
+# Cross-filters from the map chart filter this to the selected state/district.
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.urban_district_segments
+  name: 'Urban Segments by District'
+spec:
+  datasetRef: dataset.household.state_district_segment_geo
+  vizType: echarts_timeseries_bar
+  params:
+    viz_type: echarts_timeseries_bar
+    row_limit: 500
+    x_axis: district_name
+    x_axis_sort_asc: true
+    groupby:
+      - segment
+    metrics:
+      - label: hh_weight
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: am_urban_district_seg_weight
+        sqlExpression: SUM(hh_weight)
+    adhoc_filters:
+      - expressionType: SQL
+        clause: WHERE
+        sqlExpression: "segment IN ('U1','U2','U3')"
+    stack: Stack
+    show_legend: true
+    legendType: scroll
+    legendOrientation: top
+    show_value: false
+    y_axis_title: Weighted household count (Urban)
+    x_axis_title: District
+    y_axis_format: ".0f"
+    rich_tooltip: true
+    color_scheme: supersetColors
+    order_desc: true

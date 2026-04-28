@@ -1,0 +1,42 @@
+# Rural District Segments — stacked bar showing R1–R4 distribution by district.
+#
+# This chart lives on the same dataset as the map chart
+# (state_district_segment_geo) so cross-filters from a district-pie click
+# automatically filter it to the selected state + district.
+# Without a cross-filter active it shows all-India rural data.
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.rural_district_segments
+  name: 'Rural Segments by District'
+spec:
+  datasetRef: dataset.household.state_district_segment_geo
+  vizType: echarts_timeseries_bar
+  params:
+    viz_type: echarts_timeseries_bar
+    row_limit: 500
+    x_axis: district_name
+    x_axis_sort_asc: true
+    groupby:
+      - segment
+    metrics:
+      - label: hh_weight
+        expressionType: SQL
+        hasCustomLabel: true
+        optionName: am_rural_district_seg_weight
+        sqlExpression: SUM(hh_weight)
+    adhoc_filters:
+      - expressionType: SQL
+        clause: WHERE
+        sqlExpression: "segment IN ('R1','R2','R3','R4')"
+    stack: Stack
+    show_legend: true
+    legendType: scroll
+    legendOrientation: top
+    show_value: false
+    y_axis_title: Weighted household count (Rural)
+    x_axis_title: District
+    y_axis_format: ".0f"
+    rich_tooltip: true
+    color_scheme: supersetColors
+    order_desc: true

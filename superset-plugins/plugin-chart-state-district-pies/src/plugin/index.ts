@@ -29,6 +29,7 @@ export default class StateDistrictPiesChartPlugin extends ChartPlugin<StateDistr
         Behavior.INTERACTIVE_CHART,
         Behavior.DRILL_TO_DETAIL,
         Behavior.DRILL_BY,
+        Behavior.CROSS_FILTER,
       ],
     });
 

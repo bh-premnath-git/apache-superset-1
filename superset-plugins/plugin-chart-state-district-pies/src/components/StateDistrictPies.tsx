@@ -425,7 +425,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
                   row={row}
                   cx={centroid.cx}
                   cy={centroid.cy}
-                  radius={radiusScale(row.totalWeight) * 0.72}
+                  radius={radiusScale(row.totalWeight) * 0.78}
                   colorFor={colorFor}
                   onClick={handleDistrictPieClick}
                   onHover={showTooltip ? handleHover : undefined}
@@ -453,9 +453,9 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 }
 
 /**
- * GADM GeoJSON uses older / Hindi-transliterated names for some districts;
- * the analytics DB uses current Census names.  This alias map lets both
- * sides resolve to the same canonical key.
+ * GeoJSON and analytics DB occasionally use different spellings for
+ * district/state labels. This alias map lets both sides resolve to the
+ * same canonical key.
  */
 const DISTRICT_ALIASES: Record<string, string> = {
   'purba champaran': 'east champaran',
@@ -467,6 +467,14 @@ const DISTRICT_ALIASES: Record<string, string> = {
   'saraikela kharsawan': 'saraikela-kharsawan',
   'east nimar': 'khandwa',
   'west nimar': 'khargone',
+  'tamil nadu': 'tamilnadu',
+  'jammu and kashmir': 'jammu & kashmir',
+  'chhattisgarh': 'chattisgarh',
+  'orissa': 'odisha',
+  'uttar pradesh': 'uttar prdesh',
+  'uttra pradesh': 'uttar prdesh',
+  'uttaranchal': 'uttrakhand',
+  'uttranchel': 'uttrakhand',
 };
 
 function normalizeKey(s: string): string {

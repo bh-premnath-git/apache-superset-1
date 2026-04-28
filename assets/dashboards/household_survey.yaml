@@ -7,22 +7,23 @@ spec:
   slug: household-survey
   chartHeight: 70
   # Layout rules:
-  # - `chartsPerRow: 1` → every chart occupies its own full-width row.
-  #   The LCA views now carry more dimensions (state_label, sector_label)
-  #   so the summary bars/pies render wider labels and legends that do
-  #   not fit comfortably in a half-row; stacking keeps them readable.
-  # - `chartHeight: 70` → slightly taller default so the taller bar
-  #   charts still have vertical breathing room without per-chart
-  #   overrides.
-  # - `chartHeights` → per-chart height overrides for the two
-  #   data-dense charts that need more vertical space than the default.
-  chartsPerRow: 1
-  crossFiltersEnabled: false
+  # - Row 1: District map (full width, tall) — the exploration entry point.
+  #   Click a state to drill into districts; click a district pie to push
+  #   cross-filters (state_label + district_name) to the companion charts.
+  # - Row 2: Rural + Urban segment bars side-by-side (2 per row).
+  #   Both use the same geo dataset as the map, so cross-filters flow
+  #   automatically — no native filter wiring needed.
+  # - `fullWidthFirst: 1` gives the map its own full-width row; the
+  #   remaining charts fall into pairs via `chartsPerRow: 2`.
+  chartsPerRow: 2
+  fullWidthFirst: 1
+  crossFiltersEnabled: true
   chartHeights:
-    chart.household.rural_segment_comparison: 105
-    # District-level Cartodiagram height reduced.
     chart.household.district_pie_unified: 85
+    chart.household.rural_district_segments: 55
+    chart.household.urban_district_segments: 55
   chartRefs:
-    - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
+    - chart.household.rural_district_segments
+    - chart.household.urban_district_segments
   nativeFilters: []

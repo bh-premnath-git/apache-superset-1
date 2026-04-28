@@ -51,3 +51,4 @@ spec:
     max_pie_radius: 18
     show_legend: true
     show_tooltip: true
+    emit_filter: true
