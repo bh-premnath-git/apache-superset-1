@@ -332,17 +332,7 @@ apache-superset-1/
   - `lca_state_district_segment.yaml`
   - `lca_state_district_segment_geo.yaml`
   - `lca_state_segment_distribution.yaml`
-- `assets/charts/`
-  - `district_helper_text.yaml`
-  - `district_pie_unified.yaml`
-  - `district_segment_distribution_bar.yaml`
-  - `household_minor_structure.yaml`
-  - `mpce_by_segment.yaml`
-  - `rural_district_segments.yaml`
-  - `rural_segment_comparison.yaml`
-  - `segment_distribution_pie.yaml`
-  - `state_segment_distribution_bar.yaml`
-  - `urban_district_segments.yaml`
+- `assets/charts/district_pie_unified.yaml` — Unified India state choropleth + district pies
 - `assets/dashboards/household_survey.yaml`
 - `assets/extensions/chatbot_assistant.yaml`
 
