@@ -1,0 +1,23 @@
+# Helper text for district exploration flow
+#
+# Displayed above the rural/urban segment bars to guide users:
+# charts are reactive to cross-filters from the map above.
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.district_helper_text
+  name: 'District Helper Text'
+spec:
+  datasetRef: dataset.household.state_district_segment_geo
+  vizType: markup
+  params:
+    viz_type: markup
+    markup_type: markdown
+    code: |
+      <div style="padding: 12px 16px; background: #f8f9fa; border-left: 4px solid #e8772e; margin-bottom: 8px;">
+        <strong>📍 Explore District Segments</strong><br/>
+        <span style="color: #666;">
+        Click any district pie on the map above to filter these charts. 
+        Rural (R1–R4) and Urban (U1–U3) breakdowns will update automatically.
+        </span>
+      </div>

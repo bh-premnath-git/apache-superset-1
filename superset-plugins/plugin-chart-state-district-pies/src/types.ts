@@ -12,6 +12,10 @@ export interface DistrictRow {
   districtKey: string;
   wedges: Wedge[];
   totalWeight: number;
+  /** Rural segments R1-R4 breakdown for inline comparison view */
+  ruralWedges?: Wedge[];
+  /** Urban segments U1-U3 breakdown for inline comparison view */
+  urbanWedges?: Wedge[];
 }
 
 export interface Wedge {

@@ -6,24 +6,10 @@ metadata:
 spec:
   slug: household-survey
   chartHeight: 70
-  # Layout rules:
-  # - Row 1: District map (full width, tall) — the exploration entry point.
-  #   Click a state to drill into districts; click a district pie to push
-  #   cross-filters (state_label + district_name) to the companion charts.
-  # - Row 2: Rural + Urban segment bars side-by-side (2 per row).
-  #   Both use the same geo dataset as the map, so cross-filters flow
-  #   automatically — no native filter wiring needed.
-  # - `fullWidthFirst: 1` gives the map its own full-width row; the
-  #   remaining charts fall into pairs via `chartsPerRow: 2`.
-  chartsPerRow: 2
-  fullWidthFirst: 1
+  chartsPerRow: 1
   crossFiltersEnabled: true
   chartHeights:
     chart.household.district_pie_unified: 85
-    chart.household.rural_district_segments: 55
-    chart.household.urban_district_segments: 55
   chartRefs:
     - chart.household.district_pie_unified
-    - chart.household.rural_district_segments
-    - chart.household.urban_district_segments
   nativeFilters: []

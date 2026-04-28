@@ -77,6 +77,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
+    "sqlalchemy<2.0,>=1.4" \
     mysqlclient \
     psycopg2-binary \
     snowflake-sqlalchemy \

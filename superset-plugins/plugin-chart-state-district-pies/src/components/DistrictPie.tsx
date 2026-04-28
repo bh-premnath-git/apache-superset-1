@@ -11,6 +11,8 @@ export interface DistrictPieProps {
   colorFor: (category: string) => string;
   onClick?: (row: DistrictRow) => void;
   onHover?: (row: DistrictRow | null, x: number, y: number) => void;
+  /** True when this district is currently selected for detail view */
+  isSelected?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ function DistrictPieImpl({
   colorFor,
   onClick,
   onHover,
+  isSelected,
 }: DistrictPieProps) {
   const slices = d3pie<Wedge>().value(w => w.value).sort(null)(row.wedges);
   const arcFn = d3arc<typeof slices[number]>()
@@ -35,21 +38,31 @@ function DistrictPieImpl({
 
   return (
     <g
-      className="sdp-district-pie"
+      className={`sdp-district-pie${isSelected ? ' selected' : ''}`}
       transform={`translate(${cx},${cy})`}
       role="button"
       tabIndex={0}
       aria-label={`District ${row.districtKey} in ${row.stateKey}`}
+      aria-pressed={isSelected}
       onClick={onClick ? () => onClick(row) : undefined}
       onMouseEnter={onHover ? () => onHover(row, cx, cy) : undefined}
       onMouseLeave={onHover ? () => onHover(null, cx, cy) : undefined}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
     >
+      {/* Selection highlight ring */}
+      {isSelected && (
+        <circle
+          r={radius + 3}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={2}
+        />
+      )}
       <circle
         r={radius + 0.75}
         fill="rgba(255,255,255,0.55)"
-        stroke="rgba(0,0,0,0.10)"
-        strokeWidth={0.35}
+        stroke={isSelected ? 'rgba(37,99,235,0.3)' : 'rgba(0,0,0,0.10)'}
+        strokeWidth={isSelected ? 1.5 : 0.35}
       />
       {slices.map(slice => (
         <path

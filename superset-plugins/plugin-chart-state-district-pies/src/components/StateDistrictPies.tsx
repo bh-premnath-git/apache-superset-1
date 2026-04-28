@@ -4,6 +4,7 @@ import { CategoricalColorNamespace } from '@superset-ui/core';
 
 import { Breadcrumb } from './Breadcrumb';
 import type { BreadcrumbSegment } from './Breadcrumb';
+import { DistrictDetailView } from './DistrictDetailView';
 import { DistrictPie } from './DistrictPie';
 import { Legend } from './Legend';
 import { StateLayer } from './StateLayer';
@@ -22,6 +23,7 @@ import type {
   StateAggregate,
   StateDistrictPiesProps,
 } from '../types';
+import type { FeatureCentroid } from '../geo/centroids';
 
 /**
  * Orchestrates the two async geojson fetches and the SVG composition.
@@ -46,7 +48,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     maxPieRadius,
     showLegend,
     showTooltip,
-    onDistrictClick,
   } = props;
 
   const stateGeo = useGeoJson(stateGeoJsonUrl);
@@ -190,7 +191,8 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   ]);
 
   // ---- Drill-down state ------------------------------------------------
-  type DrillLevel = 'india' | 'state' | 'district';
+  // 4-level drill: india → state → district (map zoom) → detail (rural/urban breakdown)
+  type DrillLevel = 'india' | 'state' | 'district' | 'detail';
   const [drillLevel, setDrillLevel] = useState<DrillLevel>('india');
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
@@ -216,12 +218,16 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
         ),
       };
     }
-    if (drillLevel === 'district' && selectedDistrict) {
+    if (
+      (drillLevel === 'district' || drillLevel === 'detail') &&
+      selectedDistrict
+    ) {
       return {
         type: 'FeatureCollection',
         features: allFeatures.filter(
-          f => normalizeKey(String(f.properties?.[resolvedDistrictFeatureKeyProp] ?? ''))
-               === normalizeKey(selectedDistrict),
+          f =>
+            normalizeKey(String(f.properties?.[resolvedDistrictFeatureKeyProp] ?? '')) ===
+            normalizeKey(selectedDistrict),
         ),
       };
     }
@@ -282,6 +288,10 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     setSelectedDistrict(null);
   }, []);
 
+  const goToDistrict = useCallback(() => {
+    setDrillLevel('district');
+  }, []);
+
   const handleFeatureClick = useCallback((featureKey: string) => {
     if (drillLevel === 'india') {
       setSelectedState(featureKey);
@@ -292,13 +302,22 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     }
   }, [drillLevel]);
 
-  const handleDistrictPieClick = useCallback((row: DistrictRow) => {
-    if (drillLevel === 'state') {
-      setSelectedDistrict(row.districtKey);
-      setDrillLevel('district');
-    }
-    onDistrictClick?.(row);
-  }, [drillLevel, onDistrictClick]);
+  const handleDistrictPieClick = useCallback(
+    (row: DistrictRow) => {
+      if (drillLevel === 'state') {
+        setSelectedDistrict(row.districtKey);
+        setDrillLevel('detail'); // Go to detail page on pie click
+      } else if (drillLevel === 'district' || drillLevel === 'detail') {
+        // Switch to a different district
+        setSelectedDistrict(row.districtKey);
+        setDrillLevel('detail');
+      }
+      // Note: NOT emitting onDistrictClick here because it triggers a
+      // native filter event that reloads the dashboard and resets drill state.
+      // The drill-down stays local to this chart.
+    },
+    [drillLevel],
+  );
 
   // ---- Breadcrumb segments ---------------------------------------------
   const breadcrumbs: BreadcrumbSegment[] = useMemo(() => {
@@ -308,14 +327,20 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     if (selectedState) {
       segs.push({
         label: selectedState,
-        onClick: drillLevel === 'district' ? goToState : undefined,
+        onClick: drillLevel !== 'state' ? goToState : undefined,
       });
     }
     if (selectedDistrict) {
-      segs.push({ label: selectedDistrict });
+      segs.push({
+        label: selectedDistrict,
+        onClick: drillLevel === 'detail' ? goToDistrict : undefined,
+      });
+    }
+    if (drillLevel === 'detail') {
+      segs.push({ label: 'Details' });
     }
     return segs;
-  }, [drillLevel, selectedState, selectedDistrict, goToIndia, goToState]);
+  }, [drillLevel, selectedState, selectedDistrict, goToIndia, goToState, goToDistrict]);
 
   // ---- Derived geometry ------------------------------------------------
   const colorFor = useMemo(
@@ -349,6 +374,15 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     return map;
   }, [districts]);
 
+  const selectedDistrictRow = useMemo(() => {
+    if ((drillLevel !== 'district' && drillLevel !== 'detail') || !selectedDistrict) {
+      return null;
+    }
+    return districts.find(
+      d => normalizeKey(d.districtKey) === normalizeKey(selectedDistrict),
+    ) ?? null;
+  }, [drillLevel, selectedDistrict, districts]);
+
   const [hover, setHover] = useState<{
     row: DistrictRow | null;
     x: number;
@@ -357,7 +391,9 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const handleHover = useCallback(
     (row: DistrictRow | null, x: number, y: number) =>
-      setHover(prev => (prev.row === row ? prev : { row, x, y })),
+      setHover((prev: { row: DistrictRow | null; x: number; y: number }) =>
+        prev.row === row ? prev : { row, x, y }
+      ),
     [],
   );
 
@@ -389,6 +425,25 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     return <StatusPanel width={width} height={height} message="Loading map…" />;
   }
 
+  // Full detail page view (4th level)
+  if (drillLevel === 'detail' && selectedDistrictRow) {
+    return (
+      <div
+        className="sdp-root"
+        style={{ position: 'relative', width, height, color: '#222' }}
+      >
+        <Breadcrumb segments={breadcrumbs} />
+        <DistrictDetailView
+          row={selectedDistrictRow}
+          width={width}
+          height={height}
+          colorFor={colorFor}
+          onBack={goToDistrict}
+        />
+      </div>
+    );
+  }
+
   const categories = uniqueCategories(districts);
   const showPies = drillLevel !== 'india';
 
@@ -416,9 +471,13 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
         />
         {showPies && (
           <g className="sdp-district-layer">
-            {districtCentroids.map(centroid => {
+            {districtCentroids.map((centroid: FeatureCentroid) => {
               const row = districtsByKey.get(normalizeKey(centroid.key));
               if (!row) return null;
+              const isSelected =
+                drillLevel === 'district' &&
+                selectedDistrict !== null &&
+                normalizeKey(row.districtKey) === normalizeKey(selectedDistrict);
               return (
                 <DistrictPie
                   key={centroid.key}
@@ -429,6 +488,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
                   colorFor={colorFor}
                   onClick={handleDistrictPieClick}
                   onHover={showTooltip ? handleHover : undefined}
+                  isSelected={isSelected}
                 />
               );
             })}
@@ -447,7 +507,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       )}
 
       {showLegend && <Legend categories={categories} colorFor={colorFor} />}
-
     </div>
   );
 }

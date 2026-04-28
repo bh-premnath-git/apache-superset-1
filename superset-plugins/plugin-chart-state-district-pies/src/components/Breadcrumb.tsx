@@ -35,7 +35,7 @@ export function Breadcrumb({ segments }: BreadcrumbProps) {
       aria-label="Map navigation"
     >
       {segments.map((seg, i) => (
-        <span key={seg.label} style={{ display: 'flex', alignItems: 'center' }}>
+        <span key={`${i}-${seg.label}`} style={{ display: 'flex', alignItems: 'center' }}>
           {i > 0 && (
             <span style={{ margin: '0 4px', color: '#999' }}>›</span>
           )}
@@ -44,7 +44,7 @@ export function Breadcrumb({ segments }: BreadcrumbProps) {
               role="button"
               tabIndex={0}
               onClick={seg.onClick}
-              onKeyDown={e => e.key === 'Enter' && seg.onClick?.()}
+              onKeyDown={(e: React.KeyboardEvent<HTMLSpanElement>) => e.key === 'Enter' && seg.onClick?.()}
               style={{
                 color: '#1677ff',
                 cursor: 'pointer',

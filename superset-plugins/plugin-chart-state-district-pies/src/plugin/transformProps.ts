@@ -59,6 +59,12 @@ export default function transformProps(
     byState.set(stateKey, (byState.get(stateKey) ?? 0) + value);
   }
 
+  // Compute rural/urban breakdown for inline district detail view
+  for (const d of byDistrict.values()) {
+    d.ruralWedges = d.wedges.filter(w => /^R[1-4]$/i.test(w.category));
+    d.urbanWedges = d.wedges.filter(w => /^U[1-3]$/i.test(w.category));
+  }
+
   const districts = Array.from(byDistrict.values());
   const stateTotals: StateAggregate[] = Array.from(byState.entries()).map(
     ([stateKey, totalWeight]) => ({ stateKey, totalWeight }),

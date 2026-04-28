@@ -34,7 +34,7 @@ spec:
     show_value: false
     y_axis_title: Weighted household count (Urban)
     x_axis_title: District
-    y_axis_format: ".0f"
+    y_axis_format: ".3s"
     rich_tooltip: true
     color_scheme: supersetColors
     order_desc: true
