@@ -17,7 +17,7 @@ spec:
   # - `chartHeights` → per-chart height overrides for the two
   #   data-dense charts that need more vertical space than the default.
   chartsPerRow: 1
-  crossFiltersEnabled: true
+  crossFiltersEnabled: false
   chartHeights:
     chart.household.rural_segment_comparison: 105
     # District-level Cartodiagram height reduced.
@@ -25,93 +25,4 @@ spec:
   chartRefs:
     - chart.household.rural_segment_comparison
     - chart.household.district_pie_unified
-    # Drill-by companion to the Cartodiagram above. Same dataset, same
-    # state-filter coverage, but vizType=echarts_timeseries_bar which
-    # registers Behavior.DRILL_BY — so the state → district → segment
-    # drill-by path the dashboard promises actually works here.
-    - chart.household.district_segment_distribution_bar
-    - chart.household.minor_structure
-    - chart.household.segment_distribution_pie
-    - chart.household.state_segment_distribution_bar
-    - chart.household.mpce_by_segment
-  # ── Data exploration story (see wiki/assets/dashboard.household.survey.md) ─
-  # 1. Native filters narrow the slice (State / Sector / Social Group).
-  # 2. Cross-filters propagate clicks: click a district pie in District
-  #    Segments by State → it pins the district across the other charts.
-  #    Enabled via crossFiltersEnabled.
-  # 3. Right-click any echarts / table / pivot-table cell → "Drill to detail"
-  #    shows the underlying hh_master rows; "Drill by" pivots to a different
-  #    dimension (state → district → segment). FEATURE_FLAGS.DRILL_BY /
-  #    DRILL_TO_DETAIL in superset_config.py enable the context menu at the
-  #    app level, but the menu items only appear on charts whose upstream
-  #    ChartMetadata registers the corresponding Behavior. Upstream
-  #    exceptions on this dashboard:
-  #      - state_district_pies (chart.household.district_pie_unified) is
-  #        our in-house plugin; its ChartMetadata registers
-  #        DRILL_TO_DETAIL + DRILL_BY directly, so the context menu is
-  #        fully wired here.
-  #      - Handlebars (chart.household.rural_segment_comparison) exposes
-  #        no context menu at all; cross-filters remain the interaction
-  #        path there.
-  #
-  # ── Native filters ─────────────────────────────────────────────────────────
-  # State filter controls the District Segments Cartodiagram (single select so
-  # only one state's districts render at a time, keeping pies readable).
-  # defaultToFirstItem=true pins the first alphabetical state (Bihar) on
-  # dashboard load so the chart is readable immediately; the user can
-  # switch to Jharkhand or Madhya Pradesh via the filter bar.
-  #
-  # Filter coverage (documented so there are no surprises):
-  #   State       → hh_master, state_district_segment_geo
-  #   Sector      → hh_master only (other views don't carry Sector_label)
-  #   Social Grp  → hh_master only (other views are pre-aggregated by segment)
-  # The six LCA views (segment_distribution, segment_minor_bucket,
-  # state_segment_distribution, mpce_by_segment) are pre-aggregated and do not
-  # currently carry sector/social_group columns; extending the filters to them
-  # would require rebuilding those views.
-  nativeFilters:
-    - key: filter.household.state
-      name: State
-      filterType: filter_select
-      description: >-
-        Narrow the District Segments map + Rural Segments table to one
-        state. Defaults to Bihar; switch to Jharkhand or Madhya Pradesh via
-        this filter. Does not affect the four summary charts (they're
-        aggregated across all three states).
-      targets:
-        - datasetRef: dataset.household.hh_master
-          column: State_label
-        - datasetRef: dataset.household.state_district_segment_geo
-          column: state_label
-      controlValues:
-        multiSelect: false
-        enableEmptyFilter: false
-        defaultToFirstItem: true
-        inverseSelection: false
-        searchAllOptions: false
-    - key: filter.household.sector
-      name: Sector
-      filterType: filter_select
-      description: Rural vs. urban households.
-      targets:
-        - datasetRef: dataset.household.hh_master
-          column: Sector_label
-      controlValues:
-        multiSelect: false
-        enableEmptyFilter: false
-        defaultToFirstItem: false
-        inverseSelection: false
-        searchAllOptions: false
-    - key: filter.household.social_group
-      name: Social group of HH head
-      filterType: filter_select
-      description: SC / ST / OBC / Others composition of the head of household.
-      targets:
-        - datasetRef: dataset.household.hh_master
-          column: Social_Group_of_HH_Head_label
-      controlValues:
-        multiSelect: true
-        enableEmptyFilter: false
-        defaultToFirstItem: false
-        inverseSelection: false
-        searchAllOptions: false
+  nativeFilters: []
