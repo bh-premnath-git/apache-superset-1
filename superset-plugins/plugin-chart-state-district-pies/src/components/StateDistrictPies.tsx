@@ -447,6 +447,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       )}
 
       {showLegend && <Legend categories={categories} colorFor={colorFor} />}
+
     </div>
   );
 }

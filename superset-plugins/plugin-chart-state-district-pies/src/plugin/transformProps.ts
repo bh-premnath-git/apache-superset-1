@@ -25,8 +25,9 @@ import type {
 export default function transformProps(
   chartProps: ChartProps,
 ): StateDistrictPiesProps {
-  const { width, height, formData, queriesData, hooks } = chartProps;
-  const fd = formData as StateDistrictPiesFormData;
+  const { width, height, queriesData, hooks } = chartProps;
+  // ChartProps.formData is camelCase-converted; rawFormData keeps original snake_case keys
+  const fd = ((chartProps as any).rawFormData ?? chartProps.formData) as StateDistrictPiesFormData;
   const rows = (queriesData?.[0]?.data ?? []) as DataRecord[];
 
   const metricKey = pickMetricKey(rows, fd);
@@ -86,8 +87,8 @@ export default function transformProps(
 function buildCrossFilterHook(
   chartProps: ChartProps,
 ): StateDistrictPiesProps['onDistrictClick'] {
-  const { hooks, formData } = chartProps;
-  const fd = formData as StateDistrictPiesFormData;
+  const { hooks } = chartProps;
+  const fd = ((chartProps as any).rawFormData ?? chartProps.formData) as StateDistrictPiesFormData;
   const setDataMask = hooks?.setDataMask;
   if (!setDataMask) return undefined;
   return (row: DistrictRow) => {
