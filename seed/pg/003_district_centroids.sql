@@ -7,6 +7,9 @@
 -- boundaries; CC BY 2.5 IN) using shoelace area-weighted formula on the
 -- largest polygon ring.
 --
+-- See: wiki/research/geojson-sources.md for complete data source documentation
+--      and official government references (Census of India 2011, Survey of India)
+--
 -- NOTE: `district_code` is only used for per-state ordering in
 -- `vw_state_district_segment_geo` (ROW_NUMBER OVER state ORDER BY district_code).
 -- Legacy Bihar/Jharkhand/Madhya Pradesh rows retain Census 2011 absolute
