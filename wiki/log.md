@@ -5,6 +5,9 @@
 - Initialized wiki content from current repository state.
 - Added architecture, runtime, troubleshooting, research, and asset pages.
 - Documented static plugin registration path and extension lifecycle caveats.
+- Refactored `state_district_pies` plugin: extracted `useDrillDown`, `useResolvedFeatureProps`, `data/normalize`, `data/splitWedges`, and `format.ts` so the orchestrator stays focused on layout. No behaviour change.
+- Redesigned the in-plugin district detail view as side-by-side rural/urban comparison tables with per-segment count, intra-section share, share-of-district, and proportional bar. Replaced hand-rolled stacked SVG bars.
+- Made rural/urban segment groups configurable via `rural_categories` and `urban_categories` control-panel fields (defaults remain `R1–R4` / `U1–U3`). Removed hard-coded regex from `transformProps`.
 
 ## Template for future entries
 

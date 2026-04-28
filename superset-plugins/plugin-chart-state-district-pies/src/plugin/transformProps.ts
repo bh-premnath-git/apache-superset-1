@@ -4,6 +4,8 @@ import {
   DEFAULT_GEOJSON_URL,
   DEFAULT_MAX_PIE_RADIUS,
   DEFAULT_MIN_PIE_RADIUS,
+  DEFAULT_RURAL_CATEGORIES,
+  DEFAULT_URBAN_CATEGORIES,
 } from '../constants';
 import type {
   DistrictRow,
@@ -59,10 +61,20 @@ export default function transformProps(
     byState.set(stateKey, (byState.get(stateKey) ?? 0) + value);
   }
 
-  // Compute rural/urban breakdown for inline district detail view
+  const ruralCategories = parseCategoryList(
+    fd.rural_categories,
+    DEFAULT_RURAL_CATEGORIES,
+  );
+  const urbanCategories = parseCategoryList(
+    fd.urban_categories,
+    DEFAULT_URBAN_CATEGORIES,
+  );
+  const ruralSet = new Set(ruralCategories);
+  const urbanSet = new Set(urbanCategories);
+
   for (const d of byDistrict.values()) {
-    d.ruralWedges = d.wedges.filter(w => /^R[1-4]$/i.test(w.category));
-    d.urbanWedges = d.wedges.filter(w => /^U[1-3]$/i.test(w.category));
+    d.ruralWedges = d.wedges.filter(w => ruralSet.has(w.category));
+    d.urbanWedges = d.wedges.filter(w => urbanSet.has(w.category));
   }
 
   const districts = Array.from(byDistrict.values());
@@ -84,6 +96,8 @@ export default function transformProps(
     maxPieRadius: numberOr(fd.max_pie_radius, DEFAULT_MAX_PIE_RADIUS),
     showLegend: fd.show_legend !== false,
     showTooltip: fd.show_tooltip !== false,
+    ruralCategories,
+    urbanCategories,
     emitCrossFilters: Boolean(fd.emit_filter),
     onDistrictClick: hooks?.setDataMask ? buildCrossFilterHook(chartProps) : undefined,
     formData: fd,
@@ -150,6 +164,24 @@ function asNumber(v: unknown): number {
 function numberOr(v: unknown, fallback: number): number {
   const n = asNumber(v);
   return n > 0 ? n : fallback;
+}
+
+export function parseCategoryList(
+  raw: unknown,
+  fallback: readonly string[],
+): string[] {
+  if (Array.isArray(raw)) {
+    const cleaned = raw.map(v => String(v).trim()).filter(Boolean);
+    return cleaned.length > 0 ? cleaned : [...fallback];
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const cleaned = raw
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    return cleaned.length > 0 ? cleaned : [...fallback];
+  }
+  return [...fallback];
 }
 
 export function wedgesForLegend(districts: DistrictRow[]): Wedge[] {

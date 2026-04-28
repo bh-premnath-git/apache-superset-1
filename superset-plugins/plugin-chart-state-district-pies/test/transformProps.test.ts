@@ -1,4 +1,5 @@
 import transformProps, {
+  parseCategoryList,
   wedgesForLegend,
 } from '../src/plugin/transformProps';
 
@@ -76,6 +77,56 @@ describe('transformProps', () => {
       ]),
     );
     expect(props.districts[0]?.totalWeight).toBe(12.5);
+  });
+
+  it('buckets wedges by configured rural/urban category lists', () => {
+    const props = transformProps(
+      chartProps(
+        [
+          { state_label: 'Bihar', district_code: '101', segment: 'R1', sum_wt: 10 },
+          { state_label: 'Bihar', district_code: '101', segment: 'R2', sum_wt: 20 },
+          { state_label: 'Bihar', district_code: '101', segment: 'U1', sum_wt: 5 },
+          { state_label: 'Bihar', district_code: '101', segment: 'U2', sum_wt: 6 },
+          { state_label: 'Bihar', district_code: '101', segment: 'X1', sum_wt: 7 },
+        ],
+        { rural_categories: 'R1,R2', urban_categories: 'U1,U2' },
+      ),
+    );
+
+    const d = props.districts[0];
+    expect(d.ruralWedges?.map(w => w.category)).toEqual(['R1', 'R2']);
+    expect(d.urbanWedges?.map(w => w.category)).toEqual(['U1', 'U2']);
+    expect(props.ruralCategories).toEqual(['R1', 'R2']);
+    expect(props.urbanCategories).toEqual(['U1', 'U2']);
+  });
+
+  it('falls back to LCA defaults when category controls are blank', () => {
+    const props = transformProps(
+      chartProps([
+        { state_label: 'Bihar', district_code: '101', segment: 'R3', sum_wt: 4 },
+        { state_label: 'Bihar', district_code: '101', segment: 'U3', sum_wt: 8 },
+      ]),
+    );
+    expect(props.ruralCategories).toEqual(['R1', 'R2', 'R3', 'R4']);
+    expect(props.urbanCategories).toEqual(['U1', 'U2', 'U3']);
+    const d = props.districts[0];
+    expect(d.ruralWedges?.map(w => w.category)).toEqual(['R3']);
+    expect(d.urbanWedges?.map(w => w.category)).toEqual(['U3']);
+  });
+});
+
+describe('parseCategoryList', () => {
+  it('splits comma-separated strings and trims whitespace', () => {
+    expect(parseCategoryList('R1, R2 ,R3', ['X'])).toEqual(['R1', 'R2', 'R3']);
+  });
+  it('accepts arrays directly', () => {
+    expect(parseCategoryList(['A', 'B'], ['X'])).toEqual(['A', 'B']);
+  });
+  it('falls back when input is empty/null/undefined', () => {
+    expect(parseCategoryList(undefined, ['X'])).toEqual(['X']);
+    expect(parseCategoryList('', ['X'])).toEqual(['X']);
+    expect(parseCategoryList('  ,  ,', ['X'])).toEqual(['X']);
+    expect(parseCategoryList([], ['X'])).toEqual(['X']);
   });
 });
 

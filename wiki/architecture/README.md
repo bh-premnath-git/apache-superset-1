@@ -41,6 +41,13 @@ Core services (from `docker-compose.yml`):
 - Visualization plugin source lives at `superset-plugins/plugin-chart-state-district-pies/`.
 - Plugin is statically registered into Superset frontend at image build time via `docker/frontend-build/register-plugin.mjs`.
 - `FEATURE_FLAGS["DYNAMIC_PLUGINS"]` is intentionally `False`.
+- Internal module split:
+  - `src/components/` — React UI (orchestrator + leaf components + detail page).
+  - `src/data/` — pure helpers (key normalisation, wedge bucketing) tested without React.
+  - `src/hooks/` — drill state (`useDrillDown`), feature-prop resolution (`useResolvedFeatureProps`), GeoJSON fetch (`useGeoJson`).
+  - `src/plugin/` — Superset glue (`buildQuery`, `controlPanel`, `transformProps`).
+  - `src/geo/`, `src/format.ts`, `src/constants.ts`, `src/types.ts`.
+- Detail page rural/urban grouping is **not** hard-coded — controlled via `rural_categories` / `urban_categories` fields on the chart control panel (defaults: LCA codes `R1–R4` / `U1–U3`).
 
 ## Extension architecture (current)
 

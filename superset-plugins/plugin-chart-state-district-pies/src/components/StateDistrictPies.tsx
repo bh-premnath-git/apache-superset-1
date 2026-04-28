@@ -3,7 +3,6 @@ import { scaleSqrt } from 'd3-scale';
 import { CategoricalColorNamespace } from '@superset-ui/core';
 
 import { Breadcrumb } from './Breadcrumb';
-import type { BreadcrumbSegment } from './Breadcrumb';
 import { DistrictDetailView } from './DistrictDetailView';
 import { DistrictPie } from './DistrictPie';
 import { Legend } from './Legend';
@@ -13,12 +12,14 @@ import {
   DEFAULT_CATEGORY_COLORS,
   FALLBACK_PALETTE,
 } from '../constants';
+import { normalizeKey } from '../data/normalize';
 import { featureCentroids } from '../geo/centroids';
 import { fitProjection } from '../geo/projection';
+import { useDrillDown } from '../hooks/useDrillDown';
 import { useGeoJson } from '../hooks/useGeoJson';
+import { useResolvedFeatureProps } from '../hooks/useResolvedFeatureProps';
 import type {
   DistrictRow,
-  GeoFeature,
   GeoFeatureCollection,
   StateAggregate,
   StateDistrictPiesProps,
@@ -26,12 +27,17 @@ import type {
 import type { FeatureCentroid } from '../geo/centroids';
 
 /**
- * Orchestrates the two async geojson fetches and the SVG composition.
+ * Layout shell for the state choropleth + district pie overlay.
  *
- * We keep this component thin by design: every visual concern lives in a
- * dedicated child component (StateLayer / DistrictPie / Legend / Tooltip),
- * every data concern lives in a hook or helper. The job of this component
- * is layout + hover state only.
+ * Responsibilities are intentionally narrow:
+ *   - Fetch the two GeoJSON files via `useGeoJson`.
+ *   - Resolve join properties + dissolved outlines via
+ *     `useResolvedFeatureProps`.
+ *   - Track the drill level via `useDrillDown`.
+ *   - Compose the children for the current level.
+ *
+ * Anything more domain-specific (key normalisation, segment grouping)
+ * lives outside this file.
  */
 export default function StateDistrictPies(props: StateDistrictPiesProps) {
   const {
@@ -48,301 +54,84 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     maxPieRadius,
     showLegend,
     showTooltip,
+    ruralCategories,
+    urbanCategories,
   } = props;
 
   const stateGeo = useGeoJson(stateGeoJsonUrl);
   const districtGeo = useGeoJson(districtGeoJsonUrl);
   const districtBaseGeo = districtGeo.data ?? stateGeo.data;
 
-  const resolvedStateFeatureKeyProp = useMemo(() => {
-    if (!stateGeo.data) return stateFeatureKeyProp;
-    const totalsKeys = new Set(stateTotals.map(s => normalizeKey(s.stateKey)));
-    const candidates = [
-      stateFeatureKeyProp,
-      'NAME_1',
-      'ST_NM',
-      'state_name',
-      'STATE',
-      'name',
-    ];
-
-    let bestProp = stateFeatureKeyProp;
-    let bestMatched = -1;
-    let bestUnique = -1;
-
-    for (const prop of candidates) {
-      if (!prop) continue;
-      const values = stateGeo.data.features
-        .map(f => String(f.properties?.[prop] ?? '').trim())
-        .filter(Boolean);
-      if (!values.length) continue;
-
-      const unique = new Set(values.map(normalizeKey));
-      const matched = Array.from(unique).filter(v => totalsKeys.has(v)).length;
-
-      // Prefer high match with stateTotals; if nothing matches, still prefer
-      // a property with many unique values (avoids constant keys like ISO=IND).
-      if (
-        unique.size > 1 &&
-        (matched > bestMatched || (matched === bestMatched && unique.size > bestUnique))
-      ) {
-        bestMatched = matched;
-        bestUnique = unique.size;
-        bestProp = prop;
-      }
-    }
-
-    return bestProp;
-  }, [stateGeo.data, stateFeatureKeyProp, stateTotals]);
-
-  const resolvedDistrictFeatureKeyProp = useMemo(() => {
-    if (!districtBaseGeo) return districtFeatureKeyProp;
-    const districtKeys = new Set(districts.map(d => normalizeKey(d.districtKey)));
-    const candidates = [
-      'NAME_2',
-      'DISTRICT',
-      'district',
-      districtFeatureKeyProp,
-      'DIST_CODE',
-      'censuscode',
-      'name',
-    ];
-
-    const priority = new Map<string, number>([
-      ['NAME_2', 6],
-      ['DISTRICT', 5],
-      ['district', 4],
-      [districtFeatureKeyProp, 3],
-      ['name', 2],
-      ['DIST_CODE', 1],
-      ['censuscode', 0],
-    ]);
-
-    let bestProp = districtFeatureKeyProp;
-    let bestMatched = -1;
-    let bestUnique = -1;
-    let bestPriority = -1;
-
-    for (const prop of candidates) {
-      if (!prop) continue;
-      const values = districtBaseGeo.features
-        .map(f => String(f.properties?.[prop] ?? '').trim())
-        .filter(Boolean);
-      if (!values.length) continue;
-
-      const unique = new Set(values.map(normalizeKey));
-      const matched = Array.from(unique).filter(v => districtKeys.has(v)).length;
-      const currentPriority = priority.get(prop) ?? 0;
-      if (
-        unique.size > 1 &&
-        (
-          matched > bestMatched ||
-          (matched === bestMatched && unique.size > bestUnique) ||
-          (matched === bestMatched && unique.size === bestUnique && currentPriority > bestPriority)
-        )
-      ) {
-        bestMatched = matched;
-        bestUnique = unique.size;
-        bestPriority = currentPriority;
-        bestProp = prop;
-      }
-    }
-
-    return bestProp;
-  }, [districtBaseGeo, districtFeatureKeyProp, districts]);
-
-  const indiaStateTotals = useMemo<StateAggregate[]>(() => {
-    const uniqueStateTotals = new Set(stateTotals.map(s => normalizeKey(s.stateKey)));
-    // If incoming state totals are already meaningful, trust them.
-    if (uniqueStateTotals.size > 1) return stateTotals;
-    if (!districtBaseGeo) return stateTotals;
-
-    const districtToState = new Map<string, string>();
-    for (const f of districtBaseGeo.features) {
-      const district = String(f.properties?.[resolvedDistrictFeatureKeyProp] ?? '').trim();
-      const state = String(f.properties?.[resolvedStateFeatureKeyProp] ?? '').trim();
-      if (!district || !state) continue;
-      districtToState.set(normalizeKey(district), state);
-    }
-
-    const byState = new Map<string, number>();
-    for (const d of districts) {
-      const inferredState = districtToState.get(normalizeKey(d.districtKey));
-      if (!inferredState) continue;
-      byState.set(inferredState, (byState.get(inferredState) ?? 0) + d.totalWeight);
-    }
-
-    const inferred = Array.from(byState.entries()).map(([stateKey, totalWeight]) => ({
-      stateKey,
-      totalWeight,
-    }));
-
-    if (inferred.length > 0) {
-      return inferred;
-    }
-
-    return stateTotals;
-  }, [
+  const resolved = useResolvedFeatureProps({
+    stateGeo: stateGeo.data,
+    districtGeo: districtGeo.data,
+    stateFeatureKeyProp,
+    districtFeatureKeyProp,
     stateTotals,
-    districtBaseGeo,
-    resolvedDistrictFeatureKeyProp,
-    resolvedStateFeatureKeyProp,
     districts,
-  ]);
+  });
 
-  // ---- Drill-down state ------------------------------------------------
-  // 4-level drill: india → state → district (map zoom) → detail (rural/urban breakdown)
-  type DrillLevel = 'india' | 'state' | 'district' | 'detail';
-  const [drillLevel, setDrillLevel] = useState<DrillLevel>('india');
-  const [selectedState, setSelectedState] = useState<string | null>(null);
-  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
+  const drill = useDrillDown();
 
-  // ---- Filter GeoJSON based on drill level -----------------------------
   const filteredGeo = useMemo((): GeoFeatureCollection | undefined => {
     if (!stateGeo.data) return undefined;
-    if (drillLevel === 'india') {
-      // At India level we still pass all district features for fill-coloring
-      // by state; strokes are suppressed via strokeMode='state-outline'.
-      return stateGeo.data;
-    }
+    if (drill.level === 'india') return stateGeo.data;
 
     if (!districtBaseGeo) return undefined;
     const allFeatures = districtBaseGeo.features;
 
-    if (drillLevel === 'state' && selectedState) {
+    if (drill.level === 'state' && drill.selectedState) {
       return {
         type: 'FeatureCollection',
         features: allFeatures.filter(
-          f => normalizeKey(String(f.properties?.[resolvedStateFeatureKeyProp] ?? ''))
-               === normalizeKey(selectedState),
+          f =>
+            normalizeKey(String(f.properties?.[resolved.stateFeatureKeyProp] ?? '')) ===
+            normalizeKey(drill.selectedState!),
         ),
       };
     }
     if (
-      (drillLevel === 'district' || drillLevel === 'detail') &&
-      selectedDistrict
+      (drill.level === 'district' || drill.level === 'detail') &&
+      drill.selectedDistrict
     ) {
       return {
         type: 'FeatureCollection',
         features: allFeatures.filter(
           f =>
-            normalizeKey(String(f.properties?.[resolvedDistrictFeatureKeyProp] ?? '')) ===
-            normalizeKey(selectedDistrict),
+            normalizeKey(String(f.properties?.[resolved.districtFeatureKeyProp] ?? '')) ===
+            normalizeKey(drill.selectedDistrict!),
         ),
       };
     }
     return districtBaseGeo;
-  }, [stateGeo.data, drillLevel, selectedState, selectedDistrict,
-      districtBaseGeo, resolvedStateFeatureKeyProp, resolvedDistrictFeatureKeyProp]);
+  }, [
+    stateGeo.data,
+    drill.level,
+    drill.selectedState,
+    drill.selectedDistrict,
+    districtBaseGeo,
+    resolved.stateFeatureKeyProp,
+    resolved.districtFeatureKeyProp,
+  ]);
 
-  // ---- Dissolved state outlines for India level -------------------------
-  // Group district features by state key → one MultiPolygon per state, so
-  // the outline layer draws clean state boundaries without district noise.
-  const dissolvedStateGeo = useMemo((): GeoFeatureCollection | undefined => {
-    if (!stateGeo.data) return undefined;
-    const groups = new Map<string, number[][][][]>();
-    const propKey = resolvedStateFeatureKeyProp;
-    for (const f of stateGeo.data.features) {
-      const key = String(f.properties?.[propKey] ?? '').trim();
-      if (!key) continue;
-      if (!groups.has(key)) groups.set(key, []);
-      const geom = f.geometry;
-      if (geom.type === 'Polygon') {
-        groups.get(key)!.push(geom.coordinates as number[][][]);
-      } else if (geom.type === 'MultiPolygon') {
-        groups.get(key)!.push(...(geom.coordinates as number[][][][]));
-      }
-    }
-    const features: GeoFeature[] = Array.from(groups.entries()).map(
-      ([key, coords]) => ({
-        type: 'Feature' as const,
-        properties: { [propKey]: key },
-        geometry: { type: 'MultiPolygon' as const, coordinates: coords },
-      }),
-    );
-    return { type: 'FeatureCollection', features };
-  }, [stateGeo.data, resolvedStateFeatureKeyProp]);
-
-  // ---- Totals and key-prop change per level ----------------------------
-  const layerKeyProp = drillLevel === 'india'
-    ? resolvedStateFeatureKeyProp
-    : resolvedDistrictFeatureKeyProp;
+  const layerKeyProp =
+    drill.level === 'india'
+      ? resolved.stateFeatureKeyProp
+      : resolved.districtFeatureKeyProp;
 
   const layerTotals: StateAggregate[] = useMemo(() => {
-    if (drillLevel === 'india') return indiaStateTotals;
-    const relevant = selectedState
-      ? districts.filter(d => normalizeKey(d.stateKey) === normalizeKey(selectedState))
+    if (drill.level === 'india') return resolved.stateTotals;
+    const relevant = drill.selectedState
+      ? districts.filter(
+          d => normalizeKey(d.stateKey) === normalizeKey(drill.selectedState!),
+        )
       : districts;
-    return relevant.map(d => ({ stateKey: d.districtKey, totalWeight: d.totalWeight }));
-  }, [drillLevel, selectedState, indiaStateTotals, districts]);
+    return relevant.map(d => ({
+      stateKey: d.districtKey,
+      totalWeight: d.totalWeight,
+    }));
+  }, [drill.level, drill.selectedState, resolved.stateTotals, districts]);
 
-  // ---- Navigation callbacks --------------------------------------------
-  const goToIndia = useCallback(() => {
-    setDrillLevel('india');
-    setSelectedState(null);
-    setSelectedDistrict(null);
-  }, []);
-
-  const goToState = useCallback(() => {
-    setDrillLevel('state');
-    setSelectedDistrict(null);
-  }, []);
-
-  const goToDistrict = useCallback(() => {
-    setDrillLevel('district');
-  }, []);
-
-  const handleFeatureClick = useCallback((featureKey: string) => {
-    if (drillLevel === 'india') {
-      setSelectedState(featureKey);
-      setDrillLevel('state');
-    } else if (drillLevel === 'state') {
-      setSelectedDistrict(featureKey);
-      setDrillLevel('district');
-    }
-  }, [drillLevel]);
-
-  const handleDistrictPieClick = useCallback(
-    (row: DistrictRow) => {
-      if (drillLevel === 'state') {
-        setSelectedDistrict(row.districtKey);
-        setDrillLevel('detail'); // Go to detail page on pie click
-      } else if (drillLevel === 'district' || drillLevel === 'detail') {
-        // Switch to a different district
-        setSelectedDistrict(row.districtKey);
-        setDrillLevel('detail');
-      }
-      // Note: NOT emitting onDistrictClick here because it triggers a
-      // native filter event that reloads the dashboard and resets drill state.
-      // The drill-down stays local to this chart.
-    },
-    [drillLevel],
-  );
-
-  // ---- Breadcrumb segments ---------------------------------------------
-  const breadcrumbs: BreadcrumbSegment[] = useMemo(() => {
-    const segs: BreadcrumbSegment[] = [
-      { label: 'India', onClick: drillLevel !== 'india' ? goToIndia : undefined },
-    ];
-    if (selectedState) {
-      segs.push({
-        label: selectedState,
-        onClick: drillLevel !== 'state' ? goToState : undefined,
-      });
-    }
-    if (selectedDistrict) {
-      segs.push({
-        label: selectedDistrict,
-        onClick: drillLevel === 'detail' ? goToDistrict : undefined,
-      });
-    }
-    if (drillLevel === 'detail') {
-      segs.push({ label: 'Details' });
-    }
-    return segs;
-  }, [drillLevel, selectedState, selectedDistrict, goToIndia, goToState, goToDistrict]);
-
-  // ---- Derived geometry ------------------------------------------------
   const colorFor = useMemo(
     () => buildColorAccessor(districts, colorScheme),
     [districts, colorScheme],
@@ -354,12 +143,14 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   }, [filteredGeo, width, height]);
 
   const districtCentroids = useMemo(() => {
-    // At India level, skip pies — too cluttered on the full map.
-    if (drillLevel === 'india') return [];
+    if (drill.level === 'india') return [];
     if (!geometry || !filteredGeo) return [];
-    const centroids = featureCentroids(filteredGeo, geometry.path, resolvedDistrictFeatureKeyProp);
-    return centroids;
-  }, [drillLevel, geometry, filteredGeo, resolvedDistrictFeatureKeyProp]);
+    return featureCentroids(
+      filteredGeo,
+      geometry.path,
+      resolved.districtFeatureKeyProp,
+    );
+  }, [drill.level, geometry, filteredGeo, resolved.districtFeatureKeyProp]);
 
   const radiusScale = useMemo(() => {
     const maxWeight = districts.reduce((m, r) => Math.max(m, r.totalWeight), 0);
@@ -375,13 +166,18 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   }, [districts]);
 
   const selectedDistrictRow = useMemo(() => {
-    if ((drillLevel !== 'district' && drillLevel !== 'detail') || !selectedDistrict) {
+    if (
+      (drill.level !== 'district' && drill.level !== 'detail') ||
+      !drill.selectedDistrict
+    ) {
       return null;
     }
-    return districts.find(
-      d => normalizeKey(d.districtKey) === normalizeKey(selectedDistrict),
-    ) ?? null;
-  }, [drillLevel, selectedDistrict, districts]);
+    return (
+      districts.find(
+        d => normalizeKey(d.districtKey) === normalizeKey(drill.selectedDistrict!),
+      ) ?? null
+    );
+  }, [drill.level, drill.selectedDistrict, districts]);
 
   const [hover, setHover] = useState<{
     row: DistrictRow | null;
@@ -391,9 +187,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const handleHover = useCallback(
     (row: DistrictRow | null, x: number, y: number) =>
-      setHover((prev: { row: DistrictRow | null; x: number; y: number }) =>
-        prev.row === row ? prev : { row, x, y }
-      ),
+      setHover(prev => (prev.row === row ? prev : { row, x, y })),
     [],
   );
 
@@ -402,15 +196,13 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       <ErrorPanel
         width={width}
         height={height}
-        message={(stateGeo.error ?? districtGeo.error)?.message ?? 'GeoJSON fetch failed'}
+        message={
+          (stateGeo.error ?? districtGeo.error)?.message ?? 'GeoJSON fetch failed'
+        }
       />
     );
   }
 
-  // Distinguish "no URL configured" from "fetch in flight". Without this,
-  // an empty/missing URL leaves stateGeo as { loading: false, data: undef }
-  // and the chart would render "Loading map…" forever with no network
-  // request — confusing operators chasing a broken chart.
   if (!stateGeoJsonUrl) {
     return (
       <ErrorPanel
@@ -425,34 +217,35 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     return <StatusPanel width={width} height={height} message="Loading map…" />;
   }
 
-  // Full detail page view (4th level)
-  if (drillLevel === 'detail' && selectedDistrictRow) {
+  if (drill.level === 'detail' && selectedDistrictRow) {
     return (
       <div
         className="sdp-root"
         style={{ position: 'relative', width, height, color: '#222' }}
       >
-        <Breadcrumb segments={breadcrumbs} />
+        <Breadcrumb segments={drill.breadcrumbs} />
         <DistrictDetailView
           row={selectedDistrictRow}
           width={width}
           height={height}
           colorFor={colorFor}
-          onBack={goToDistrict}
+          ruralCategories={ruralCategories}
+          urbanCategories={urbanCategories}
+          onBack={drill.goToDistrict}
         />
       </div>
     );
   }
 
   const categories = uniqueCategories(districts);
-  const showPies = drillLevel !== 'india';
+  const showPies = drill.level !== 'india';
 
   return (
     <div
       className="sdp-root"
       style={{ position: 'relative', width, height, color: '#222' }}
     >
-      <Breadcrumb segments={breadcrumbs} />
+      <Breadcrumb segments={drill.breadcrumbs} />
 
       <svg
         width={width}
@@ -465,9 +258,13 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           path={geometry.path}
           stateFeatureKeyProp={layerKeyProp}
           stateTotals={layerTotals}
-          onFeatureClick={drillLevel !== 'district' ? handleFeatureClick : undefined}
-          strokeMode={drillLevel === 'india' ? 'state-outline' : 'default'}
-          stateOutlineGeo={drillLevel === 'india' ? dissolvedStateGeo : undefined}
+          onFeatureClick={
+            drill.level !== 'district' ? drill.onFeatureClick : undefined
+          }
+          strokeMode={drill.level === 'india' ? 'state-outline' : 'default'}
+          stateOutlineGeo={
+            drill.level === 'india' ? resolved.dissolvedStateGeo : undefined
+          }
         />
         {showPies && (
           <g className="sdp-district-layer">
@@ -475,9 +272,9 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
               const row = districtsByKey.get(normalizeKey(centroid.key));
               if (!row) return null;
               const isSelected =
-                drillLevel === 'district' &&
-                selectedDistrict !== null &&
-                normalizeKey(row.districtKey) === normalizeKey(selectedDistrict);
+                drill.level === 'district' &&
+                drill.selectedDistrict !== null &&
+                normalizeKey(row.districtKey) === normalizeKey(drill.selectedDistrict);
               return (
                 <DistrictPie
                   key={centroid.key}
@@ -486,7 +283,7 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
                   cy={centroid.cy}
                   radius={radiusScale(row.totalWeight) * 0.78}
                   colorFor={colorFor}
-                  onClick={handleDistrictPieClick}
+                  onClick={drill.onPieClick}
                   onHover={showTooltip ? handleHover : undefined}
                   isSelected={isSelected}
                 />
@@ -509,36 +306,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       {showLegend && <Legend categories={categories} colorFor={colorFor} />}
     </div>
   );
-}
-
-/**
- * GeoJSON and analytics DB occasionally use different spellings for
- * district/state labels. This alias map lets both sides resolve to the
- * same canonical key.
- */
-const DISTRICT_ALIASES: Record<string, string> = {
-  'purba champaran': 'east champaran',
-  'pashchim champaran': 'west champaran',
-  'bhabua': 'kaimur',
-  'purba singhbhum': 'east singhbhum',
-  'pashchim singhbhum': 'west singhbhum',
-  'hazaribag': 'hazaribagh',
-  'saraikela kharsawan': 'saraikela-kharsawan',
-  'east nimar': 'khandwa',
-  'west nimar': 'khargone',
-  'tamil nadu': 'tamilnadu',
-  'jammu and kashmir': 'jammu & kashmir',
-  'chhattisgarh': 'chattisgarh',
-  'orissa': 'odisha',
-  'uttar pradesh': 'uttar prdesh',
-  'uttra pradesh': 'uttar prdesh',
-  'uttaranchal': 'uttrakhand',
-  'uttranchel': 'uttrakhand',
-};
-
-function normalizeKey(s: string): string {
-  const key = s.toLowerCase().trim();
-  return DISTRICT_ALIASES[key] ?? key;
 }
 
 function uniqueCategories(rows: DistrictRow[]): string[] {
