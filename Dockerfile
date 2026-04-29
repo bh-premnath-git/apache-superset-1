@@ -31,6 +31,8 @@ RUN git clone --depth 1 --branch "${SUPERSET_SOURCE_REF}" \
 # like any other in-tree plugin (e.g. @superset-ui/plugin-chart-echarts).
 COPY superset-plugins/plugin-chart-state-district-pies \
      /work/superset/superset-frontend/plugins/plugin-chart-state-district-pies
+COPY superset-plugins/plugin-chart-three-state-comparison \
+     /work/superset/superset-frontend/plugins/plugin-chart-three-state-comparison
 
 # Run the patcher: rewrites the plugin's package.json entry points to point
 # at src (workspace mode) and edits MainPreset.ts to register the plugin.
@@ -98,7 +100,7 @@ RUN UV_CACHE_DIR=/tmp/uv-cache uv pip install --python /app/.venv/bin/python \
     fastmcp
 
 # Replace the prebuilt SPA bundle with our rebuild that has the
-# state_district_pies plugin compiled in.
+# state_district_pies and three_state_comparison plugins compiled in.
 COPY --from=frontend-builder /work/superset/superset/static/assets \
      /app/superset/static/assets
 

@@ -10,6 +10,8 @@ spec:
   crossFiltersEnabled: true
   chartHeights:
     chart.household.district_pie_unified: 85
+    chart.household.three_state_comparison: 70
   chartRefs:
     - chart.household.district_pie_unified
+    - chart.household.three_state_comparison
   nativeFilters: []

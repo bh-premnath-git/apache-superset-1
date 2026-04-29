@@ -1,0 +1,44 @@
+# Three-State Comparison — rendered by the ``three_state_comparison`` viz
+# plugin, statically registered into the Superset SPA bundle alongside
+# ``state_district_pies`` via register-plugin.mjs.
+#
+# Data source: household.vw_state_segment_distribution
+# Target states: Bihar, Madhya Pradesh, Jharkhand (filtered via adhoc_filters)
+# Dashboard placement: Household Survey Overview (id 1)
+apiVersion: analytics/v1
+kind: Chart
+metadata:
+  key: chart.household.three_state_comparison
+  name: 'Three-State Segment Comparison'
+spec:
+  datasetRef: dataset.household.state_segment_distribution
+  vizType: three_state_comparison
+  params:
+    viz_type: three_state_comparison
+    state_column: state_label
+    segment_column: segment
+    metric:
+      label: seg_weight
+      expressionType: SQL
+      hasCustomLabel: true
+      optionName: am_three_state_weight
+      sqlExpression: SUM(seg_weight)
+    row_limit: 500
+    state_order: 'Bihar, Madhya Pradesh, Jharkhand'
+    segment_order: 'R1, R2, R3, R4, U1, U2, U3'
+    show_legend: true
+    show_percentages: true
+    legend_position: bottom
+    percent_decimals: 0
+    label_threshold: 5
+    color_scheme: supersetColors
+    adhoc_filters:
+      - clause: WHERE
+        comparator:
+          - Bihar
+          - Jharkhand
+          - Madhya Pradesh
+        expressionType: SIMPLE
+        operator: IN
+        subject: state_label
+    emit_filter: true

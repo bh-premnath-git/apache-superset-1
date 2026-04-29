@@ -1,0 +1,55 @@
+{
+  "name": "@bh-premnath/plugin-chart-three-state-comparison",
+  "version": "0.1.0",
+  "description": "Superset viz plugin: side-by-side pie + stacked bar for three-state LCA segment comparison.",
+  "sideEffects": false,
+  "main": "lib/index.js",
+  "module": "esm/index.js",
+  "types": "esm/index.d.ts",
+  "files": [
+    "esm",
+    "lib",
+    "src",
+    "images"
+  ],
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
+    "serve": "webpack serve --mode development --port 8081",
+    "test": "jest"
+  },
+  "peerDependencies": {
+    "@apache-superset/core": "*",
+    "@superset-ui/chart-controls": "^0.18.0 || ^2.0.0",
+    "@superset-ui/core": "^0.18.0 || ^2.0.0",
+    "react": "^16.14.0 || ^17.0.0 || ^18.0.0",
+    "react-dom": "^16.14.0 || ^17.0.0 || ^18.0.0"
+  },
+  "dependencies": {
+    "d3-array": "^3.2.0",
+    "d3-scale": "^4.0.2",
+    "d3-selection": "^3.0.0",
+    "d3-shape": "^3.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.22.0",
+    "@babel/preset-env": "^7.22.0",
+    "@babel/preset-react": "^7.22.0",
+    "@babel/preset-typescript": "^7.22.0",
+    "@types/d3-array": "^3.0.0",
+    "@types/d3-scale": "^4.0.0",
+    "@types/d3-shape": "^3.1.0",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^16.14.0",
+    "babel-loader": "^9.1.0",
+    "jest": "^30.3.0",
+    "typescript": "^4.9.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
+}

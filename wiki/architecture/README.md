@@ -61,3 +61,30 @@ Core services (from `docker-compose.yml`):
 - `superset_config.py`: feature flags, security, CSP, branding, MCP env wiring.
 - `custom_sso_security_manager.py`: Keycloak userinfo mapping and role extraction.
 - `.env` / `.env.example`: deployment-specific values.
+
+## Plugin Documentation
+
+### Existing Plugins
+
+| Plugin | Documentation | Purpose |
+|--------|--------------|---------|
+| `plugin-chart-state-district-pies` | [ARCHITECTURE.md](../../superset-plugins/plugin-chart-state-district-pies/ARCHITECTURE.md) | India choropleth with district pie overlays and drill-down detail page |
+
+### Planned Plugins
+
+| Plugin | Documentation | Purpose |
+|--------|--------------|---------|
+| `plugin-chart-three-state-comparison` | [plugin-three-state-comparison.md](./plugin-three-state-comparison.md) | Side-by-side pie + stacked bar for 3-state segment comparison |
+| | [plugin-three-state-comparison-schema.md](./plugin-three-state-comparison-schema.md) | Data schema and transformation flow |
+| | [plugin-three-state-comparison-steps.md](./plugin-three-state-comparison-steps.md) | Step-by-step implementation guide |
+
+### Plugin Design Patterns
+
+All visualization plugins follow consistent architecture:
+
+1. **Static bundling** — Registered at Docker build time, no DYNAMIC_PLUGINS
+2. **Directory structure** — `src/components/`, `src/data/`, `src/plugin/`
+3. **D3 rendering** — Precise SVG control for complex visualizations
+4. **Config-driven** — No hardcoded business logic; defaults in `constants.ts`
+5. **Pure data helpers** — Unit-testable transformations in `src/data/`
+6. **Control panel JSON** — Operator-configurable via Superset chart editor
