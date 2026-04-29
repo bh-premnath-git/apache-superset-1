@@ -69,74 +69,98 @@ export function SegmentModal({
         onClick={e => e.stopPropagation()}
         style={{
           background: '#fff',
-          borderRadius: 14,
-          width: 'min(1120px, 96vw)',
-          maxHeight: '92vh',
+          borderRadius: 10,
+          width: 'min(800px, 94vw)',
+          maxHeight: '90vh',
           overflowY: 'auto',
-          boxShadow: '0 12px 48px rgba(0,0,0,0.25)',
-          fontFamily: 'Inter, Arial, sans-serif',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Arial, sans-serif',
           color: '#1b2234',
         }}
       >
         <header
           style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto',
-            alignItems: 'start',
-            gap: 14,
+            position: 'relative',
             background: accent,
             color: '#233449',
-            borderBottom: '1px solid rgba(0,0,0,0.2)',
-            padding: '12px 16px 10px',
-            borderTopLeftRadius: 14,
-            borderTopRightRadius: 14,
+            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            padding: '10px 14px',
+            borderTopLeftRadius: 10,
+            borderTopRightRadius: 10,
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 2 }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'rgba(32,50,70,0.6)',
+                background: 'rgba(255,255,255,0.35)',
+                padding: '2px 8px',
+                borderRadius: 4,
+              }}
+            >
+              {segmentBand} · {segment}
+            </span>
+          </div>
           <div>
-            <div style={{ fontSize: 31, fontWeight: 500, color: 'rgba(32,50,70,0.55)' }}>
-              {segmentBand} Segment: {segment}
+            <div
+              id={titleId}
+              style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.25, marginTop: 4 }}
+            >
+              {description.title}
             </div>
-            <div>
-              <div
-                id={titleId}
-                style={{ fontSize: 50, fontWeight: 500, lineHeight: 1.02, marginTop: -2 }}
-              >
-                {description.title}
+            {description.subtitle && (
+              <div style={{ fontSize: 14, lineHeight: 1.35, marginTop: 2, color: 'rgba(25,35,55,0.75)' }}>
+                {description.subtitle}
               </div>
-              {description.subtitle && (
-                <div style={{ fontSize: 39, lineHeight: 1, marginTop: 2, color: 'rgba(25,35,55,0.78)' }}>
-                  {description.subtitle}
-                </div>
-              )}
-              {description.headerTagline && (
-                <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(29,44,63,0.85)' }}>
-                  {description.headerTagline}
-                </div>
-              )}
-            </div>
+            )}
+            {description.headerTagline && (
+              <div style={{ marginTop: 4, fontSize: 13, color: 'rgba(29,44,63,0.7)' }}>
+                {description.headerTagline}
+              </div>
+            )}
           </div>
           <button
             ref={closeRef}
             type="button"
             onClick={onClose}
-            aria-label="Close segment description"
+            aria-label="Close"
             style={{
-              padding: '6px 10px',
-              fontSize: 12,
-              background: 'rgba(255,255,255,0.55)',
-              border: '1px solid rgba(0,0,0,0.2)',
-              borderRadius: 6,
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 18,
+              lineHeight: 1,
+              background: 'rgba(255,255,255,0.5)',
+              border: '1px solid rgba(0,0,0,0.15)',
+              borderRadius: '50%',
               cursor: 'pointer',
-              fontWeight: 600,
-              color: '#27364b',
+              color: '#445566',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.85)';
+              e.currentTarget.style.color = '#223344';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.5)';
+              e.currentTarget.style.color = '#445566';
             }}
           >
-            Close
+            ×
           </button>
         </header>
 
-        <div style={{ padding: 12, background: '#f5f6fa' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+        <div style={{ padding: 8, background: '#f6f7f9' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 6 }}>
             <StatCard
               label="Prevalence Overall"
               value={description.prevalenceOverall ?? '—'}
@@ -152,9 +176,11 @@ export function SegmentModal({
           </div>
 
           {overview && (
-            <section style={panelStyle}>
-              <div style={{ fontSize: 27, fontWeight: 700, marginBottom: 4 }}>Overview:</div>
-              <div style={{ fontSize: 15, lineHeight: 1.45 }}>{overview}</div>
+            <section style={{ ...panelStyle, padding: '8px 10px' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#556577', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                Overview
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: '#2a3449', wordBreak: 'break-word' }}>{overview}</div>
             </section>
           )}
 
@@ -162,8 +188,8 @@ export function SegmentModal({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                gap: 12,
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 6,
               }}
             >
               {renderCard('payments', cards.economic, '#1b63c8', 'Economic')}
@@ -202,26 +228,30 @@ function renderCard(
 ) {
   if (!card) return null;
   return (
-    <section style={{ ...panelStyle, marginTop: 0, minHeight: 214 }} key={iconWord}>
-      <div style={{ fontSize: 49, color, lineHeight: 1, fontWeight: 500 }}>{iconWord}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 3 }}>{card.title || fallbackTitle}</div>
-      <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.44, color: '#24324a' }}>{card.body}</div>
+    <section style={{ ...panelStyle, marginTop: 0, padding: '8px 10px' }} key={iconWord}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 8px' }}>
+        <span style={{ fontSize: 18, color, lineHeight: 1, flexShrink: 0 }}>{iconWord}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', lineHeight: 1.3 }}>{card.title || fallbackTitle}</span>
+      </div>
+      <div style={{ marginTop: 5, fontSize: 12, lineHeight: 1.5, color: '#445066', wordBreak: 'break-word' }}>{card.body}</div>
     </section>
   );
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
-  const compact = value.length < 40;
+  const compact = value.length < 50;
   return (
-    <section style={{ ...panelStyle, marginTop: 0, minHeight: 82 }}>
-      <div style={{ fontSize: 18, fontWeight: 500, color: '#5b677a' }}>{label}</div>
+    <section style={{ ...panelStyle, marginTop: 0, padding: '8px 10px' }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: '#667289', textTransform: 'uppercase', letterSpacing: '0.03em', lineHeight: 1.3 }}>
+        {label}
+      </div>
       <div
         style={{
-          marginTop: 4,
-          fontSize: compact ? 40 : 17,
-          lineHeight: compact ? 1 : 1.3,
+          marginTop: 3,
+          fontSize: compact ? 20 : 13,
+          lineHeight: compact ? 1.2 : 1.45,
           fontWeight: compact ? 700 : 500,
-          color: '#1a2335',
+          color: compact ? '#1a2335' : '#3a4559',
           wordBreak: 'break-word',
         }}
       >
@@ -233,20 +263,20 @@ function StatCard({ label, value }: { label: string; value: string }) {
 
 function DescriptionList({ label, items }: { label: string; items: string[] }) {
   return (
-    <section style={{ ...panelStyle, marginTop: 10 }}>
+    <section style={{ ...panelStyle, marginTop: 6, padding: '8px 10px' }}>
       <div
         style={{
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: 600,
-          color: '#4d5a6f',
+          color: '#556577',
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
-          marginBottom: 6,
+          marginBottom: 4,
         }}
       >
         {label}
       </div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.45, color: '#233449' }}>
+      <ul style={{ margin: 0, paddingLeft: 14, fontSize: 12, lineHeight: 1.5, color: '#3a4559' }}>
         {items.map((item, i) => (
           <li key={`${label}-${i}`} style={{ marginBottom: 2 }}>
             {item}
@@ -258,9 +288,10 @@ function DescriptionList({ label, items }: { label: string; items: string[] }) {
 }
 
 const panelStyle: React.CSSProperties = {
-  background: '#eef1f6',
-  border: '1px solid rgba(0,0,0,0.25)',
-  borderRadius: 10,
-  padding: '10px 12px',
-  marginTop: 8,
+  background: '#fff',
+  border: '1px solid rgba(0,0,0,0.06)',
+  borderRadius: 6,
+  padding: '8px 10px',
+  marginTop: 6,
+  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
 };
