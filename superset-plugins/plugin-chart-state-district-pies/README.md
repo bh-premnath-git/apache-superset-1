@@ -34,8 +34,10 @@ src/
 │   └── transformProps.ts             # pure: queryResponse → ChartProps
 ├── components/
 │   ├── StateDistrictPies.tsx         # layout shell (composition + hover)
-│   ├── DistrictDetailView.tsx        # detail page (rural/urban)
+│   ├── DistrictDetailView.tsx        # detail page (rural/urban + rich)
 │   ├── SegmentComparisonTable.tsx    # one section's breakdown table
+│   ├── DetailMetricsTable.tsx        # rich per-segment metrics table
+│   ├── SegmentModal.tsx              # segment description modal
 │   ├── StateLayer.tsx                # base choropleth
 │   ├── DistrictPie.tsx               # single district's pie
 │   ├── Legend.tsx                    # category legend
@@ -43,11 +45,14 @@ src/
 │   └── Breadcrumb.tsx                # drill navigation
 ├── data/
 │   ├── normalize.ts                  # canonical key + alias map (pure)
-│   └── splitWedges.ts                # rural/urban/other bucketing (pure)
+│   ├── splitWedges.ts                # rural/urban/other bucketing (pure)
+│   ├── buildMetricsQuery.ts          # /api/v1/chart/data body builder (pure)
+│   └── segmentDescriptions.ts        # segment description lookup (pure)
 ├── hooks/
 │   ├── useGeoJson.ts                 # async geojson fetch + module cache
 │   ├── useDrillDown.ts               # 4-level drill-down state machine
-│   └── useResolvedFeatureProps.ts    # join-prop auto-detection
+│   ├── useResolvedFeatureProps.ts    # join-prop auto-detection
+│   └── useDetailMetrics.ts           # per-district metrics fetch + cache
 ├── geo/projection.ts                 # d3-geo Mercator fit
 ├── geo/centroids.ts                  # per-feature centroid + area
 ├── format.ts                         # shared number / percent formatting
@@ -105,6 +110,50 @@ per-district detail page:
 Wedges that fall outside both groups are kept in the chart but surfaced
 as an "other" total in the detail page footer rather than silently
 dropped.
+
+### Rich per-segment metrics (opt-in)
+
+When the operator points the chart at a separate dataset that has all the
+underlying columns (e.g. `dataset.household.hh_master`), the detail page
+issues a runtime `POST /api/v1/chart/data` request scoped to the
+selected (state, district) and renders a wide grouped table with per-
+segment values. Disabled silently when `metrics_datasource` is blank.
+
+| Field                      | Default          | Notes                                                                  |
+|----------------------------|------------------|------------------------------------------------------------------------|
+| `metrics_datasource`       | *(empty)*        | Numeric Superset dataset id. Leave blank to disable the rich table.    |
+| `metrics_state_column`     | `State_label`    | Column on the metrics dataset used to filter by state.                 |
+| `metrics_district_column`  | `District`       | Column on the metrics dataset used to filter by district.              |
+| `metrics_segment_column`   | `segment`        | Group-by column on the metrics dataset that returns segment codes.    |
+| `metrics_definitions`      | 13 LCA defaults  | JSON array of `{label, sql, format, group}` objects.                   |
+
+`format` is one of `percent` / `rupee` / `number`. `group` is one of
+`size` / `econ` / `digi` / `cap` / `wel` and drives the coloured column
+header band that mirrors the original handlebars template.
+
+Responses are cached per (datasource, state, district, definitions) at
+module scope so flipping between districts does not refetch.
+
+### Segment descriptions modal
+
+Clicking any segment label (`R1`, `R2`, `U1`, …) on either detail table
+opens a modal with operator-supplied description copy. The text is taken
+from the JSON object in the `segment_descriptions` control:
+
+```json
+{
+  "R1": {
+    "title": "Rural — Tier 1",
+    "summary": "Connected, asset-rich rural households.",
+    "criteria": ["Asset score ≥ 2", "Digital score ≥ 2"],
+    "interventions": ["Premium digital products", "Up-skilling"]
+  }
+}
+```
+
+Missing codes still open the modal — they show a stub note pointing at
+the control-panel field, so the system never breaks if descriptions are
+incomplete.
 
 ## Geometry contract
 

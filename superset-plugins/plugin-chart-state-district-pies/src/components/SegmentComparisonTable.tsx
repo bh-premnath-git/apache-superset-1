@@ -14,6 +14,8 @@ export interface SegmentComparisonTableProps {
   districtTotal: number;
   /** Color resolver shared with the rest of the plugin. */
   colorFor: (category: string) => string;
+  /** Optional click handler for the segment label cell. */
+  onSegmentClick?: (segment: string) => void;
 }
 
 /**
@@ -30,6 +32,7 @@ function SegmentComparisonTableImpl({
   wedges,
   districtTotal,
   colorFor,
+  onSegmentClick,
 }: SegmentComparisonTableProps) {
   const sectionTotal = wedges.reduce((s, w) => s + w.value, 0);
   const sectionShareOfDistrict = formatPercent(sectionTotal, districtTotal);
@@ -105,19 +108,11 @@ function SegmentComparisonTableImpl({
               return (
                 <tr key={w.category} style={{ borderBottom: '1px solid #edeef1' }}>
                   <th scope="row" style={td('left')}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 2,
-                          background: swatch,
-                          boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
-                        }}
-                      />
-                      <span style={{ fontWeight: 600 }}>{w.category}</span>
-                    </span>
+                    <SegmentLabelCell
+                      code={w.category}
+                      swatchColor={swatch}
+                      onClick={onSegmentClick}
+                    />
                   </th>
                   <td style={td('right')}>{formatNumber(w.value)}</td>
                   <td style={td('right')}>{sectionShare}</td>
@@ -154,6 +149,66 @@ function SegmentComparisonTableImpl({
         </table>
       )}
     </section>
+  );
+}
+
+function SegmentLabelCell({
+  code,
+  swatchColor,
+  onClick,
+}: {
+  code: string;
+  swatchColor: string;
+  onClick?: (segment: string) => void;
+}) {
+  const swatch = (
+    <span
+      aria-hidden="true"
+      style={{
+        width: 10,
+        height: 10,
+        borderRadius: 2,
+        background: swatchColor,
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.12)',
+        display: 'inline-block',
+      }}
+    />
+  );
+  if (!onClick) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        {swatch}
+        <span style={{ fontWeight: 600 }}>{code}</span>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(code)}
+      aria-label={`Open ${code} segment description`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '2px 8px',
+        background: 'transparent',
+        border: '1px dashed transparent',
+        borderRadius: 4,
+        cursor: 'pointer',
+        font: 'inherit',
+        color: 'inherit',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = '#c4c8cf';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+      }}
+    >
+      {swatch}
+      <span style={{ fontWeight: 600 }}>{code}</span>
+    </button>
   );
 }
 

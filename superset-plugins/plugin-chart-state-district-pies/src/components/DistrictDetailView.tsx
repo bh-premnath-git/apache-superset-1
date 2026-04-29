@@ -1,8 +1,13 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 
+import { DetailMetricsTable } from './DetailMetricsTable';
 import { SegmentComparisonTable } from './SegmentComparisonTable';
+import { SegmentModal } from './SegmentModal';
+import { lookupSegmentDescription } from '../data/segmentDescriptions';
 import { splitWedges } from '../data/splitWedges';
 import { formatNumber, formatPercent } from '../format';
+import { useDetailMetrics } from '../hooks/useDetailMetrics';
+import type { MetricDefinition, SegmentDescription } from '../constants';
 import type { DistrictRow } from '../types';
 
 export interface DistrictDetailViewProps {
@@ -12,6 +17,13 @@ export interface DistrictDetailViewProps {
   colorFor: (category: string) => string;
   ruralCategories: string[];
   urbanCategories: string[];
+
+  metricsDatasourceId?: number;
+  metricsStateColumn: string;
+  metricsDistrictColumn: string;
+  metricsSegmentColumn: string;
+  metricsDefinitions: MetricDefinition[];
+  segmentDescriptions: Record<string, SegmentDescription>;
 }
 
 const RURAL_ACCENT = '#1f8f5c';
@@ -20,11 +32,15 @@ const URBAN_ACCENT = '#1565d8';
 /**
  * District detail page — opened by clicking a district pie.
  *
- * Renders side-by-side rural and urban segment comparison tables so an
- * analyst can read counts, intra-section share, and share-of-district at
- * a glance. Mirrors the visual contract of the dashboard "Rural Segments
- * Comparison" handlebars table while staying schema-agnostic — which
- * codes count as "rural"/"urban" come from the chart's control panel.
+ * Layout, top to bottom:
+ *   1. Header (district + state + totals).
+ *   2. Rural segment comparison table.
+ *   3. Urban segment comparison table.
+ *   4. Optional rich per-segment metrics table fetched from the configured
+ *      metrics dataset (skipped when `metricsDatasourceId` is undefined).
+ *
+ * Clicking a segment label opens `SegmentModal` with the operator-supplied
+ * description text.
  */
 function DistrictDetailViewImpl({
   row,
@@ -33,6 +49,12 @@ function DistrictDetailViewImpl({
   colorFor,
   ruralCategories,
   urbanCategories,
+  metricsDatasourceId,
+  metricsStateColumn,
+  metricsDistrictColumn,
+  metricsSegmentColumn,
+  metricsDefinitions,
+  segmentDescriptions,
 }: DistrictDetailViewProps) {
   const { rural, urban, otherTotal } = useMemo(
     () => splitWedges(row, ruralCategories, urbanCategories),
@@ -43,7 +65,25 @@ function DistrictDetailViewImpl({
   const urbanTotal = urban.reduce((s, w) => s + w.value, 0);
   const grandTotal = ruralTotal + urbanTotal + otherTotal;
 
-  const showSideBySide = width >= 640;
+  const metrics = useDetailMetrics({
+    datasourceId: metricsDatasourceId,
+    stateColumn: metricsStateColumn,
+    districtColumn: metricsDistrictColumn,
+    segmentColumn: metricsSegmentColumn,
+    state: row.stateKey,
+    district: row.districtKey,
+    definitions: metricsDefinitions,
+  });
+
+  const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
+  const onSegmentClick = useCallback(
+    (code: string) => setSelectedSegment(code),
+    [],
+  );
+  const onCloseModal = useCallback(() => setSelectedSegment(null), []);
+
+  const richEnabled =
+    metricsDatasourceId !== undefined && metricsDefinitions.length > 0;
 
   return (
     <div
@@ -84,19 +124,14 @@ function DistrictDetailViewImpl({
         </div>
       </header>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: showSideBySide ? '1fr 1fr' : '1fr',
-          gap: 16,
-        }}
-      >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <SegmentComparisonTable
           title="Rural Segments"
           accentColor={RURAL_ACCENT}
           wedges={rural}
           districtTotal={grandTotal}
           colorFor={colorFor}
+          onSegmentClick={onSegmentClick}
         />
         <SegmentComparisonTable
           title="Urban Segments"
@@ -104,20 +139,122 @@ function DistrictDetailViewImpl({
           wedges={urban}
           districtTotal={grandTotal}
           colorFor={colorFor}
+          onSegmentClick={onSegmentClick}
         />
+
+        {richEnabled && (
+          <RichMetricsSection
+            state={metrics}
+            definitions={metricsDefinitions}
+            ruralOrder={ruralCategories}
+            urbanOrder={urbanCategories}
+            onSegmentClick={onSegmentClick}
+            colorFor={colorFor}
+          />
+        )}
+
+        {otherTotal > 0 && (
+          <div
+            role="note"
+            style={{ marginTop: -6, fontSize: 11, color: '#888' }}
+          >
+            {formatNumber(otherTotal)} household
+            {otherTotal === 1 ? '' : 's'} fall outside the configured rural and
+            urban groups.
+          </div>
+        )}
       </div>
 
-      {otherTotal > 0 && (
-        <div
-          role="note"
-          style={{ marginTop: 4, fontSize: 11, color: '#888' }}
-        >
-          {formatNumber(otherTotal)} household
-          {otherTotal === 1 ? '' : 's'} fall outside the configured rural and
-          urban groups.
-        </div>
+      {selectedSegment && (
+        <SegmentModal
+          segment={selectedSegment}
+          description={lookupSegmentDescription(segmentDescriptions, selectedSegment)}
+          swatchColor={colorFor(selectedSegment)}
+          onClose={onCloseModal}
+        />
       )}
     </div>
+  );
+}
+
+interface RichMetricsSectionProps {
+  state: ReturnType<typeof useDetailMetrics>;
+  definitions: MetricDefinition[];
+  ruralOrder: string[];
+  urbanOrder: string[];
+  onSegmentClick: (segment: string) => void;
+  colorFor: (category: string) => string;
+}
+
+function RichMetricsSection({
+  state,
+  definitions,
+  ruralOrder,
+  urbanOrder,
+  onSegmentClick,
+  colorFor,
+}: RichMetricsSectionProps) {
+  if (state.loading) {
+    return (
+      <div
+        role="status"
+        style={{
+          padding: 12,
+          fontSize: 12,
+          color: '#666',
+          background: '#f9fafb',
+          borderRadius: 6,
+        }}
+      >
+        Loading per-segment metrics…
+      </div>
+    );
+  }
+  if (state.error) {
+    return (
+      <div
+        role="alert"
+        style={{
+          padding: 12,
+          fontSize: 12,
+          color: '#b00020',
+          background: '#fdecea',
+          borderRadius: 6,
+        }}
+      >
+        Could not load detail metrics: {state.error.message}
+      </div>
+    );
+  }
+  if (state.rows.length === 0) {
+    return (
+      <div
+        role="note"
+        style={{ padding: 12, fontSize: 12, color: '#888', background: '#f9fafb', borderRadius: 6 }}
+      >
+        No detail metrics returned for this district.
+      </div>
+    );
+  }
+  return (
+    <>
+      <DetailMetricsTable
+        title="Rural — All Segments"
+        definitions={definitions}
+        rows={state.rows}
+        segmentOrder={ruralOrder}
+        onSegmentClick={onSegmentClick}
+        colorFor={colorFor}
+      />
+      <DetailMetricsTable
+        title="Urban — All Segments"
+        definitions={definitions}
+        rows={state.rows}
+        segmentOrder={urbanOrder}
+        onSegmentClick={onSegmentClick}
+        colorFor={colorFor}
+      />
+    </>
   );
 }
 

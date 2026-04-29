@@ -3,9 +3,13 @@ import type { ChartProps, DataRecord } from '@superset-ui/core';
 import {
   DEFAULT_GEOJSON_URL,
   DEFAULT_MAX_PIE_RADIUS,
+  DEFAULT_METRIC_DEFINITIONS,
   DEFAULT_MIN_PIE_RADIUS,
   DEFAULT_RURAL_CATEGORIES,
+  DEFAULT_SEGMENT_DESCRIPTIONS,
   DEFAULT_URBAN_CATEGORIES,
+  type MetricDefinition,
+  type SegmentDescription,
 } from '../constants';
 import type {
   DistrictRow,
@@ -98,6 +102,12 @@ export default function transformProps(
     showTooltip: fd.show_tooltip !== false,
     ruralCategories,
     urbanCategories,
+    metricsDatasourceId: parseDatasourceId(fd.metrics_datasource),
+    metricsStateColumn: nonEmptyString(fd.metrics_state_column, 'State_label'),
+    metricsDistrictColumn: nonEmptyString(fd.metrics_district_column, 'District'),
+    metricsSegmentColumn: nonEmptyString(fd.metrics_segment_column, 'segment'),
+    metricsDefinitions: parseMetricDefinitions(fd.metrics_definitions),
+    segmentDescriptions: parseSegmentDescriptions(fd.segment_descriptions),
     emitCrossFilters: Boolean(fd.emit_filter),
     onDistrictClick: hooks?.setDataMask ? buildCrossFilterHook(chartProps) : undefined,
     formData: fd,
@@ -182,6 +192,119 @@ export function parseCategoryList(
     return cleaned.length > 0 ? cleaned : [...fallback];
   }
   return [...fallback];
+}
+
+function nonEmptyString(v: unknown, fallback: string): string {
+  if (typeof v === 'string' && v.trim()) return v.trim();
+  return fallback;
+}
+
+export function parseDatasourceId(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.trunc(v);
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v.trim());
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return undefined;
+}
+
+const VALID_GROUPS = new Set<MetricDefinition['group']>([
+  'size',
+  'econ',
+  'digi',
+  'cap',
+  'wel',
+]);
+const VALID_FORMATS = new Set<MetricDefinition['format']>([
+  'percent',
+  'rupee',
+  'number',
+]);
+
+/**
+ * Parse the operator-supplied JSON for `metrics_definitions`. Falls back to
+ * the bundled defaults on any malformed entry so the chart never breaks
+ * outright when an admin pastes invalid JSON.
+ */
+export function parseMetricDefinitions(raw: unknown): MetricDefinition[] {
+  if (raw == null || raw === '') return DEFAULT_METRIC_DEFINITIONS;
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return DEFAULT_METRIC_DEFINITIONS;
+    }
+  }
+  if (!Array.isArray(value)) return DEFAULT_METRIC_DEFINITIONS;
+  const cleaned = value
+    .map(entry => coerceMetricDefinition(entry))
+    .filter((m): m is MetricDefinition => m !== null);
+  return cleaned.length > 0 ? cleaned : DEFAULT_METRIC_DEFINITIONS;
+}
+
+function coerceMetricDefinition(raw: unknown): MetricDefinition | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const label = typeof r.label === 'string' ? r.label.trim() : '';
+  const sql = typeof r.sql === 'string' ? r.sql.trim() : '';
+  const group = typeof r.group === 'string' ? r.group : '';
+  const format = typeof r.format === 'string' ? r.format : '';
+  if (!label || !sql) return null;
+  return {
+    label,
+    sql,
+    group: VALID_GROUPS.has(group as MetricDefinition['group'])
+      ? (group as MetricDefinition['group'])
+      : 'size',
+    format: VALID_FORMATS.has(format as MetricDefinition['format'])
+      ? (format as MetricDefinition['format'])
+      : 'number',
+  };
+}
+
+/**
+ * Parse the operator-supplied JSON for `segment_descriptions`. Returns the
+ * bundled defaults on parse failure or empty input.
+ */
+export function parseSegmentDescriptions(
+  raw: unknown,
+): Record<string, SegmentDescription> {
+  if (raw == null || raw === '') return DEFAULT_SEGMENT_DESCRIPTIONS;
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return DEFAULT_SEGMENT_DESCRIPTIONS;
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return DEFAULT_SEGMENT_DESCRIPTIONS;
+  }
+  const out: Record<string, SegmentDescription> = {};
+  for (const [code, entry] of Object.entries(value as Record<string, unknown>)) {
+    const desc = coerceSegmentDescription(entry);
+    if (desc) out[code] = desc;
+  }
+  return Object.keys(out).length > 0 ? out : DEFAULT_SEGMENT_DESCRIPTIONS;
+}
+
+function coerceSegmentDescription(raw: unknown): SegmentDescription | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const title = typeof r.title === 'string' ? r.title.trim() : '';
+  if (!title) return null;
+  return {
+    title,
+    summary: typeof r.summary === 'string' ? r.summary : undefined,
+    criteria: Array.isArray(r.criteria)
+      ? r.criteria.filter((s): s is string => typeof s === 'string')
+      : undefined,
+    interventions: Array.isArray(r.interventions)
+      ? r.interventions.filter((s): s is string => typeof s === 'string')
+      : undefined,
+  };
 }
 
 export function wedgesForLegend(districts: DistrictRow[]): Wedge[] {

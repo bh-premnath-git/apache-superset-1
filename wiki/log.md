@@ -1,5 +1,13 @@
 # Wiki Change Log
 
+## 2026-04-29
+
+- `state_district_pies` plugin detail page now stacks Rural and Urban comparison tables vertically rather than rendering them side-by-side at wide widths.
+- Implemented Option B (rich per-segment metrics): when `metrics_datasource` is configured the detail page issues a runtime `POST /api/v1/chart/data` (via `SupersetClient`) scoped to the selected (state, district) and renders a wide grouped per-segment metrics table with colour-banded column headers (size / econ / digi / cap / wel). Defaults reproduce the SQL from the previously-deleted `rural_segment_comparison.yaml` so it works out of the box.
+- Added segment description modal: clicking any segment label (R1/R2/U1/...) on either detail table opens a plain overlay modal with title, summary, classification criteria, and suggested interventions. Content is operator-supplied JSON via the `segment_descriptions` control; missing codes render a stub note instead of breaking.
+- Both metric definitions and segment descriptions parse with safe fallbacks — invalid JSON cannot brick the chart.
+- New module surface: `src/data/buildMetricsQuery.ts`, `src/data/segmentDescriptions.ts`, `src/hooks/useDetailMetrics.ts`, `src/components/DetailMetricsTable.tsx`, `src/components/SegmentModal.tsx`. Updated `controlPanel.ts`, `transformProps.ts`, `types.ts`, `constants.ts`, `DistrictDetailView.tsx`, `SegmentComparisonTable.tsx`.
+
 ## 2026-04-28
 
 - Initialized wiki content from current repository state.
