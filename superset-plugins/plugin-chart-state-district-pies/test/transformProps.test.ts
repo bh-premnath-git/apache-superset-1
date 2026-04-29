@@ -1,7 +1,11 @@
 import transformProps, {
   parseCategoryList,
+  parseDatasourceId,
+  parseMetricDefinitions,
+  parseSegmentDescriptions,
   wedgesForLegend,
 } from '../src/plugin/transformProps';
+import { DEFAULT_METRIC_DEFINITIONS, DEFAULT_SEGMENT_DESCRIPTIONS } from '../src/constants';
 
 function chartProps(rows: Record<string, unknown>[], overrides: Record<string, unknown> = {}) {
   return {
@@ -100,6 +104,32 @@ describe('transformProps', () => {
     expect(props.urbanCategories).toEqual(['U1', 'U2']);
   });
 
+  it('surfaces detail-page metric/segment-description fields with safe fallbacks', () => {
+    const props = transformProps(
+      chartProps(
+        [{ state_label: 'Bihar', district_code: '101', segment: 'R1', sum_wt: 1 }],
+        {
+          metrics_datasource: '99',
+          metrics_state_column: 'Custom_State',
+          metrics_district_column: 'Custom_District',
+          metrics_segment_column: 'seg',
+          metrics_definitions: 'not json',
+          segment_descriptions: JSON.stringify({
+            R1: { title: 'Custom R1', summary: 'overridden' },
+          }),
+        },
+      ),
+    );
+
+    expect(props.metricsDatasourceId).toBe(99);
+    expect(props.metricsStateColumn).toBe('Custom_State');
+    expect(props.metricsDistrictColumn).toBe('Custom_District');
+    expect(props.metricsSegmentColumn).toBe('seg');
+    // metrics_definitions was malformed JSON → fall back to defaults
+    expect(props.metricsDefinitions[0].label).toBe('Size (%)');
+    expect(props.segmentDescriptions.R1.title).toBe('Custom R1');
+  });
+
   it('falls back to LCA defaults when category controls are blank', () => {
     const props = transformProps(
       chartProps([
@@ -112,6 +142,71 @@ describe('transformProps', () => {
     const d = props.districts[0];
     expect(d.ruralWedges?.map(w => w.category)).toEqual(['R3']);
     expect(d.urbanWedges?.map(w => w.category)).toEqual(['U3']);
+  });
+});
+
+describe('parseDatasourceId', () => {
+  it('accepts positive integer strings', () => {
+    expect(parseDatasourceId('42')).toBe(42);
+    expect(parseDatasourceId(42)).toBe(42);
+    expect(parseDatasourceId(' 7 ')).toBe(7);
+  });
+  it('rejects empty / zero / negative / non-numeric values', () => {
+    expect(parseDatasourceId('')).toBeUndefined();
+    expect(parseDatasourceId(undefined)).toBeUndefined();
+    expect(parseDatasourceId(0)).toBeUndefined();
+    expect(parseDatasourceId(-3)).toBeUndefined();
+    expect(parseDatasourceId('abc')).toBeUndefined();
+  });
+});
+
+describe('parseMetricDefinitions', () => {
+  it('returns defaults on empty / missing / malformed JSON', () => {
+    expect(parseMetricDefinitions(undefined)).toEqual(DEFAULT_METRIC_DEFINITIONS);
+    expect(parseMetricDefinitions('')).toEqual(DEFAULT_METRIC_DEFINITIONS);
+    expect(parseMetricDefinitions('{not json')).toEqual(DEFAULT_METRIC_DEFINITIONS);
+    expect(parseMetricDefinitions('"not an array"')).toEqual(DEFAULT_METRIC_DEFINITIONS);
+  });
+
+  it('coerces unknown groups/formats and drops entries without sql or label', () => {
+    const out = parseMetricDefinitions(
+      JSON.stringify([
+        { label: '', sql: 'COUNT(*)' },
+        { label: 'Drop me', sql: '' },
+        { label: 'Keep', sql: 'COUNT(*)', group: 'unknown', format: 'rainbow' },
+      ]),
+    );
+    expect(out).toEqual([
+      { label: 'Keep', sql: 'COUNT(*)', group: 'size', format: 'number' },
+    ]);
+  });
+
+  it('falls back to defaults when no usable entries remain', () => {
+    expect(parseMetricDefinitions(JSON.stringify([{}, {}]))).toEqual(
+      DEFAULT_METRIC_DEFINITIONS,
+    );
+  });
+});
+
+describe('parseSegmentDescriptions', () => {
+  it('returns defaults on empty / malformed JSON', () => {
+    expect(parseSegmentDescriptions(undefined)).toEqual(DEFAULT_SEGMENT_DESCRIPTIONS);
+    expect(parseSegmentDescriptions('not json')).toEqual(DEFAULT_SEGMENT_DESCRIPTIONS);
+    expect(parseSegmentDescriptions(JSON.stringify([1, 2]))).toEqual(
+      DEFAULT_SEGMENT_DESCRIPTIONS,
+    );
+  });
+
+  it('keeps only entries that have a non-empty title', () => {
+    const out = parseSegmentDescriptions(
+      JSON.stringify({
+        Z9: { title: 'Special Tier', summary: 'hi', criteria: ['x'] },
+        BAD: { summary: 'no title' },
+      }),
+    );
+    expect(out).toEqual({
+      Z9: { title: 'Special Tier', summary: 'hi', criteria: ['x'], interventions: undefined },
+    });
   });
 });
 

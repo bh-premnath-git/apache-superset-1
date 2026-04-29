@@ -56,6 +56,12 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
     showTooltip,
     ruralCategories,
     urbanCategories,
+    metricsDatasourceId,
+    metricsStateColumn,
+    metricsDistrictColumn,
+    metricsSegmentColumn,
+    metricsDefinitions,
+    segmentDescriptions,
   } = props;
 
   const stateGeo = useGeoJson(stateGeoJsonUrl);
@@ -231,6 +237,12 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           colorFor={colorFor}
           ruralCategories={ruralCategories}
           urbanCategories={urbanCategories}
+          metricsDatasourceId={metricsDatasourceId}
+          metricsStateColumn={metricsStateColumn}
+          metricsDistrictColumn={metricsDistrictColumn}
+          metricsSegmentColumn={metricsSegmentColumn}
+          metricsDefinitions={metricsDefinitions}
+          segmentDescriptions={segmentDescriptions}
         />
       </div>
     );

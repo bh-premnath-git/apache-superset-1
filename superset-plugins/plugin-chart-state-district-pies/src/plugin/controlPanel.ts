@@ -8,8 +8,10 @@ import {
 import {
   DEFAULT_GEOJSON_URL,
   DEFAULT_MAX_PIE_RADIUS,
+  DEFAULT_METRIC_DEFINITIONS,
   DEFAULT_MIN_PIE_RADIUS,
   DEFAULT_RURAL_CATEGORIES,
+  DEFAULT_SEGMENT_DESCRIPTIONS,
   DEFAULT_URBAN_CATEGORIES,
 } from '../constants';
 
@@ -214,6 +216,109 @@ const config: ControlPanelConfig = {
                   'the per-district detail comparison view.',
               ),
               default: DEFAULT_URBAN_CATEGORIES.join(','),
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Detail metrics'),
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'metrics_datasource',
+            config: {
+              type: 'TextControl',
+              isInt: true,
+              label: t('Metrics dataset id'),
+              description: t(
+                'Numeric Superset dataset id queried per district for the ' +
+                  'rich detail metrics table. Leave blank to disable the ' +
+                  'rich table; the basic Rural/Urban tables still render.',
+              ),
+              default: '',
+            },
+          },
+        ],
+        [
+          {
+            name: 'metrics_state_column',
+            config: {
+              type: 'TextControl',
+              label: t('Metrics state column'),
+              description: t(
+                'Column on the metrics dataset filtered by the selected state.',
+              ),
+              default: 'State_label',
+            },
+          },
+        ],
+        [
+          {
+            name: 'metrics_district_column',
+            config: {
+              type: 'TextControl',
+              label: t('Metrics district column'),
+              description: t(
+                'Column on the metrics dataset filtered by the selected district.',
+              ),
+              default: 'District',
+            },
+          },
+        ],
+        [
+          {
+            name: 'metrics_segment_column',
+            config: {
+              type: 'TextControl',
+              label: t('Metrics segment column'),
+              description: t(
+                'Group-by column on the metrics dataset that returns segment codes.',
+              ),
+              default: 'segment',
+            },
+          },
+        ],
+        [
+          {
+            name: 'metrics_definitions',
+            config: {
+              type: 'TextAreaControl',
+              language: 'json',
+              minLines: 6,
+              maxLines: 16,
+              label: t('Metric definitions (JSON)'),
+              description: t(
+                'JSON array of {label, sql, format, group} entries. ' +
+                  '`format` is one of percent / rupee / number; ' +
+                  '`group` is one of size / econ / digi / cap / wel.',
+              ),
+              default: JSON.stringify(DEFAULT_METRIC_DEFINITIONS, null, 2),
+            },
+          },
+        ],
+      ],
+    },
+    {
+      label: t('Segment descriptions'),
+      expanded: false,
+      controlSetRows: [
+        [
+          {
+            name: 'segment_descriptions',
+            config: {
+              type: 'TextAreaControl',
+              language: 'json',
+              minLines: 6,
+              maxLines: 18,
+              label: t('Segment descriptions (JSON)'),
+              description: t(
+                'Object keyed by segment code (R1, U1, …). Each value is ' +
+                  '{title, summary, criteria[], interventions[]}. Shown in ' +
+                  'the modal opened by clicking a segment label.',
+              ),
+              default: JSON.stringify(DEFAULT_SEGMENT_DESCRIPTIONS, null, 2),
             },
           },
         ],

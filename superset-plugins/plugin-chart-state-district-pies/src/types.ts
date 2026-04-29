@@ -1,5 +1,7 @@
 import type { QueryFormData } from '@superset-ui/core';
 
+import type { MetricDefinition, SegmentDescription } from './constants';
+
 /**
  * Raw row from the Superset query — one per district.
  *
@@ -52,6 +54,23 @@ export interface StateDistrictPiesProps {
   /** Category codes that compose the "urban" group on the detail page. */
   urbanCategories: string[];
 
+  /**
+   * Optional Superset dataset id used by the detail page to fetch rich
+   * per-segment metrics. When undefined the rich detail metrics table is
+   * skipped silently.
+   */
+  metricsDatasourceId?: number;
+  /** Column on the metrics dataset to filter by selected state. */
+  metricsStateColumn: string;
+  /** Column on the metrics dataset to filter by selected district. */
+  metricsDistrictColumn: string;
+  /** Group-by column on the metrics dataset (segment code). */
+  metricsSegmentColumn: string;
+  /** Per-metric SQL definitions that drive the rich detail table. */
+  metricsDefinitions: MetricDefinition[];
+  /** Per-segment description copy shown in the segment-click modal. */
+  segmentDescriptions: Record<string, SegmentDescription>;
+
   onDistrictClick?: (row: DistrictRow) => void;
   emitCrossFilters?: boolean;
   formData: StateDistrictPiesFormData;
@@ -79,6 +98,16 @@ export interface StateDistrictPiesFormData extends QueryFormData {
   rural_categories?: string;
   /** Comma-separated category codes to bucket as "urban" on the detail view. */
   urban_categories?: string;
+
+  /** Numeric Superset dataset id queried for rich detail-page metrics. */
+  metrics_datasource?: string | number;
+  metrics_state_column?: string;
+  metrics_district_column?: string;
+  metrics_segment_column?: string;
+  /** JSON array of `{label, sql, format, group}` overrides. */
+  metrics_definitions?: string;
+  /** JSON object keyed by segment code → `{title, summary, criteria, interventions}`. */
+  segment_descriptions?: string;
 }
 
 /** GeoJSON FeatureCollection shape we rely on (narrowed — no external types). */
