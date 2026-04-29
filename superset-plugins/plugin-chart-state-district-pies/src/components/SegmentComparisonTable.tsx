@@ -14,6 +14,8 @@ export interface SegmentComparisonTableProps {
   districtTotal: number;
   /** Color resolver shared with the rest of the plugin. */
   colorFor: (category: string) => string;
+  /** Optional human-friendly label per segment code. */
+  segmentLabelFor?: (segment: string) => string;
   /** Optional click handler for the segment label cell. */
   onSegmentClick?: (segment: string) => void;
 }
@@ -32,6 +34,7 @@ function SegmentComparisonTableImpl({
   wedges,
   districtTotal,
   colorFor,
+  segmentLabelFor,
   onSegmentClick,
 }: SegmentComparisonTableProps) {
   const sectionTotal = wedges.reduce((s, w) => s + w.value, 0);
@@ -110,6 +113,7 @@ function SegmentComparisonTableImpl({
                   <th scope="row" style={td('left')}>
                     <SegmentLabelCell
                       code={w.category}
+                      label={segmentLabelFor?.(w.category)}
                       swatchColor={swatch}
                       onClick={onSegmentClick}
                     />
@@ -154,13 +158,16 @@ function SegmentComparisonTableImpl({
 
 function SegmentLabelCell({
   code,
+  label,
   swatchColor,
   onClick,
 }: {
   code: string;
+  label?: string;
   swatchColor: string;
   onClick?: (segment: string) => void;
 }) {
+  const showSecondary = Boolean(label && label !== code);
   const swatch = (
     <span
       aria-hidden="true"
@@ -178,7 +185,10 @@ function SegmentLabelCell({
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         {swatch}
-        <span style={{ fontWeight: 600 }}>{code}</span>
+        <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
+          <span style={{ fontWeight: 600 }}>{label ?? code}</span>
+          {showSecondary && <span style={{ fontSize: 11, color: '#7a7a7a' }}>{code}</span>}
+        </span>
       </span>
     );
   }
@@ -186,10 +196,10 @@ function SegmentLabelCell({
     <button
       type="button"
       onClick={() => onClick(code)}
-      aria-label={`Open ${code} segment description`}
+      aria-label={`Open ${(label ?? code)} segment description`}
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 6,
         padding: '2px 8px',
         background: 'transparent',
@@ -207,7 +217,10 @@ function SegmentLabelCell({
       }}
     >
       {swatch}
-      <span style={{ fontWeight: 600 }}>{code}</span>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
+        <span style={{ fontWeight: 600 }}>{label ?? code}</span>
+        {showSecondary && <span style={{ fontSize: 11, color: '#7a7a7a' }}>{code}</span>}
+      </span>
     </button>
   );
 }

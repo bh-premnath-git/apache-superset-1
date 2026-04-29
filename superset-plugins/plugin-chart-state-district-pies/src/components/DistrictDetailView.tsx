@@ -81,9 +81,14 @@ function DistrictDetailViewImpl({
     [],
   );
   const onCloseModal = useCallback(() => setSelectedSegment(null), []);
+  const segmentLabelFor = useCallback(
+    (code: string) => lookupSegmentDescription(segmentDescriptions, code).title,
+    [segmentDescriptions],
+  );
 
   const richEnabled =
     metricsDatasourceId !== undefined && metricsDefinitions.length > 0;
+  const showBasicTables = !richEnabled || Boolean(metrics.error);
 
   return (
     <div
@@ -125,22 +130,28 @@ function DistrictDetailViewImpl({
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <SegmentComparisonTable
-          title="Rural Segments"
-          accentColor={RURAL_ACCENT}
-          wedges={rural}
-          districtTotal={grandTotal}
-          colorFor={colorFor}
-          onSegmentClick={onSegmentClick}
-        />
-        <SegmentComparisonTable
-          title="Urban Segments"
-          accentColor={URBAN_ACCENT}
-          wedges={urban}
-          districtTotal={grandTotal}
-          colorFor={colorFor}
-          onSegmentClick={onSegmentClick}
-        />
+        {showBasicTables && (
+          <>
+            <SegmentComparisonTable
+              title="Rural Segments"
+              accentColor={RURAL_ACCENT}
+              wedges={rural}
+              districtTotal={grandTotal}
+              colorFor={colorFor}
+              segmentLabelFor={segmentLabelFor}
+              onSegmentClick={onSegmentClick}
+            />
+            <SegmentComparisonTable
+              title="Urban Segments"
+              accentColor={URBAN_ACCENT}
+              wedges={urban}
+              districtTotal={grandTotal}
+              colorFor={colorFor}
+              segmentLabelFor={segmentLabelFor}
+              onSegmentClick={onSegmentClick}
+            />
+          </>
+        )}
 
         {richEnabled && (
           <RichMetricsSection
@@ -148,6 +159,7 @@ function DistrictDetailViewImpl({
             definitions={metricsDefinitions}
             ruralOrder={ruralCategories}
             urbanOrder={urbanCategories}
+            segmentLabelFor={segmentLabelFor}
             onSegmentClick={onSegmentClick}
             colorFor={colorFor}
           />
@@ -182,6 +194,7 @@ interface RichMetricsSectionProps {
   definitions: MetricDefinition[];
   ruralOrder: string[];
   urbanOrder: string[];
+  segmentLabelFor: (segment: string) => string;
   onSegmentClick: (segment: string) => void;
   colorFor: (category: string) => string;
 }
@@ -191,6 +204,7 @@ function RichMetricsSection({
   definitions,
   ruralOrder,
   urbanOrder,
+  segmentLabelFor,
   onSegmentClick,
   colorFor,
 }: RichMetricsSectionProps) {
@@ -243,6 +257,7 @@ function RichMetricsSection({
         definitions={definitions}
         rows={state.rows}
         segmentOrder={ruralOrder}
+        segmentLabelFor={segmentLabelFor}
         onSegmentClick={onSegmentClick}
         colorFor={colorFor}
       />
@@ -251,6 +266,7 @@ function RichMetricsSection({
         definitions={definitions}
         rows={state.rows}
         segmentOrder={urbanOrder}
+        segmentLabelFor={segmentLabelFor}
         onSegmentClick={onSegmentClick}
         colorFor={colorFor}
       />

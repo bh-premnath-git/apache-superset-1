@@ -514,6 +514,15 @@ class ChartReconciler(Reconciler):
             **(spec.get("params") or {}),
         }
 
+        metrics_ds_ref = params.pop("metrics_dataset_ref", None)
+        if metrics_ds_ref:
+            metrics_dataset_id = ctx.resolve("Dataset", str(metrics_ds_ref))
+            if metrics_dataset_id is None:
+                raise SkipAsset(
+                    f"metrics_dataset_ref '{metrics_ds_ref}' not available yet"
+                )
+            params["metrics_datasource"] = f"{metrics_dataset_id}__table"
+
         # Cartodiagram references another chart by key; Superset expects
         # form_data.selected_chart to be a doubly JSON-encoded string of the
         # sub-chart's slice record. Resolve the reference to a runtime id,

@@ -42,9 +42,36 @@ const CACHE = new Map<string, Promise<MetricsRow[]>>();
  * the rich detail metrics table can be opt-in via the control panel.
  */
 export function useDetailMetrics(args: FetchArgs): DetailMetricsState {
-  const cacheKey = useMemo(() => buildCacheKey(args), [args]);
-  const enabled =
-    args.datasourceId !== undefined && args.definitions.length > 0;
+  const {
+    datasourceId,
+    stateColumn,
+    districtColumn,
+    segmentColumn,
+    state: stateFilter,
+    district,
+    definitions,
+  } = args;
+
+  const defsFingerprint = useMemo(
+    () => definitions.map((d, i) => `${i}:${d.label}:${d.sql.length}`).join('|'),
+    [definitions],
+  );
+
+  const cacheKey = useMemo(
+    () =>
+      [
+        datasourceId ?? '',
+        stateColumn,
+        districtColumn,
+        segmentColumn,
+        stateFilter,
+        district,
+        defsFingerprint,
+      ].join('::'),
+    [datasourceId, stateColumn, districtColumn, segmentColumn, stateFilter, district, defsFingerprint],
+  );
+
+  const enabled = datasourceId !== undefined && definitions.length > 0;
 
   const [state, setState] = useState<DetailMetricsState>({
     loading: enabled,
@@ -52,7 +79,7 @@ export function useDetailMetrics(args: FetchArgs): DetailMetricsState {
   });
 
   useEffect(() => {
-    if (!enabled || !args.datasourceId) {
+    if (!enabled || !datasourceId) {
       setState({ loading: false, rows: [] });
       return;
     }
@@ -60,13 +87,13 @@ export function useDetailMetrics(args: FetchArgs): DetailMetricsState {
     setState({ loading: true, rows: [] });
 
     const queryArgs: MetricsQueryArgs = {
-      datasourceId: args.datasourceId,
-      stateColumn: args.stateColumn,
-      districtColumn: args.districtColumn,
-      segmentColumn: args.segmentColumn,
-      state: args.state,
-      district: args.district,
-      definitions: args.definitions,
+      datasourceId,
+      stateColumn,
+      districtColumn,
+      segmentColumn,
+      state: stateFilter,
+      district,
+      definitions,
     };
 
     fetchOnce(cacheKey, queryArgs)
@@ -80,7 +107,8 @@ export function useDetailMetrics(args: FetchArgs): DetailMetricsState {
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, enabled, args]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cacheKey, enabled]);
 
   return state;
 }

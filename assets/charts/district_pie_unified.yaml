@@ -51,4 +51,8 @@ spec:
     max_pie_radius: 18
     show_legend: true
     show_tooltip: true
+    metrics_dataset_ref: dataset.household.hh_master_metrics_geo
+    metrics_state_column: State_label
+    metrics_district_column: district_name
+    metrics_segment_column: segment
     emit_filter: true

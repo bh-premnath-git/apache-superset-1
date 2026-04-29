@@ -25,6 +25,17 @@ export const DISTRICT_ALIASES: Record<string, string> = {
   'uttra pradesh': 'uttar prdesh',
   uttaranchal: 'uttrakhand',
   uttranchel: 'uttrakhand',
+  // State-level aliases to bridge GeoJSON/SQL naming mismatches
+  'a and n islands (u.t.)': 'andaman and nicobar',
+  'andaman & nicobar': 'andaman and nicobar',
+  'chandigarh(u.t.)': 'chandigarh',
+  'dadra & nagar haveli and daman & diu': 'daman and diu',
+  'dadra and nagar haveli': 'daman and diu',
+  'puducherry (u.t.)': 'puducherry',
+  'ladakh (u.t.)': 'jammu & kashmir',
+  'lakshadweep (u.t.)': 'lakshadweep',
+  // Telangana districts map to Andhra Pradesh in pre-2014 GeoJSON
+  telangana: 'andhra pradesh',
 };
 
 export function normalizeKey(s: string): string {

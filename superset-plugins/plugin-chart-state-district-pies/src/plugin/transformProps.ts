@@ -201,8 +201,20 @@ function nonEmptyString(v: unknown, fallback: string): string {
 
 export function parseDatasourceId(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.trunc(v);
+  if (v && typeof v === 'object') {
+    const id = (v as { id?: unknown }).id;
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) {
+      return Math.trunc(id);
+    }
+    if (typeof id === 'string' && id.trim()) {
+      const n = Number(id.trim());
+      if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+    }
+  }
   if (typeof v === 'string' && v.trim()) {
-    const n = Number(v.trim());
+    const raw = v.trim();
+    const m = raw.match(/^(\d+)(?:__\w+)?$/);
+    const n = Number(m ? m[1] : raw);
     if (Number.isFinite(n) && n > 0) return Math.trunc(n);
   }
   return undefined;
@@ -295,8 +307,35 @@ function coerceSegmentDescription(raw: unknown): SegmentDescription | null {
   const r = raw as Record<string, unknown>;
   const title = typeof r.title === 'string' ? r.title.trim() : '';
   if (!title) return null;
+
+  const cardsRaw = r.cards;
+  let cards: SegmentDescription['cards'];
+  if (cardsRaw && typeof cardsRaw === 'object' && !Array.isArray(cardsRaw)) {
+    const src = cardsRaw as Record<string, unknown>;
+    const out: NonNullable<SegmentDescription['cards']> = {};
+    for (const key of ['economic', 'welfare', 'digital', 'vulnerability'] as const) {
+      const val = src[key];
+      if (!val || typeof val !== 'object' || Array.isArray(val)) continue;
+      const card = val as Record<string, unknown>;
+      const cTitle = typeof card.title === 'string' ? card.title.trim() : '';
+      const cBody = typeof card.body === 'string' ? card.body.trim() : '';
+      if (!cTitle || !cBody) continue;
+      out[key] = { title: cTitle, body: cBody };
+    }
+    if (Object.keys(out).length > 0) cards = out;
+  }
+
   return {
     title,
+    subtitle: typeof r.subtitle === 'string' ? r.subtitle : undefined,
+    headerTagline: typeof r.headerTagline === 'string' ? r.headerTagline : undefined,
+    prevalenceOverall:
+      typeof r.prevalenceOverall === 'string' ? r.prevalenceOverall : undefined,
+    prevalenceRegional:
+      typeof r.prevalenceRegional === 'string' ? r.prevalenceRegional : undefined,
+    readiness: typeof r.readiness === 'string' ? r.readiness : undefined,
+    overview: typeof r.overview === 'string' ? r.overview : undefined,
+    cards,
     summary: typeof r.summary === 'string' ? r.summary : undefined,
     criteria: Array.isArray(r.criteria)
       ? r.criteria.filter((s): s is string => typeof s === 'string')

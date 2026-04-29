@@ -12,6 +12,8 @@ export interface DetailMetricsTableProps {
   rows: MetricsRow[];
   /** Show only segments matching this list (in this order). Empty = show all. */
   segmentOrder: string[];
+  /** Optional human-friendly label per segment code. */
+  segmentLabelFor?: (segment: string) => string;
   /** Optional click handler for the segment label cell. */
   onSegmentClick?: (segment: string) => void;
   /** Color resolver shared with the rest of the plugin. */
@@ -31,6 +33,7 @@ function DetailMetricsTableImpl({
   definitions,
   rows,
   segmentOrder,
+  segmentLabelFor,
   onSegmentClick,
   colorFor,
 }: DetailMetricsTableProps) {
@@ -140,6 +143,7 @@ function DetailMetricsTableImpl({
                   <th scope="row" style={tdLeft}>
                     <SegmentChip
                       code={row.segment}
+                      label={segmentLabelFor?.(row.segment)}
                       onClick={onSegmentClick}
                       color={colorFor(row.segment)}
                     />
@@ -194,13 +198,16 @@ function orderRowsBy(rows: MetricsRow[], order: string[]): MetricsRow[] {
 
 function SegmentChip({
   code,
+  label,
   color,
   onClick,
 }: {
   code: string;
+  label?: string;
   color: string;
   onClick?: (segment: string) => void;
 }) {
+  const showSecondary = Boolean(label && label !== code);
   const interactive = Boolean(onClick);
   const content = (
     <>
@@ -215,7 +222,10 @@ function SegmentChip({
           display: 'inline-block',
         }}
       />
-      <span style={{ fontWeight: 600 }}>{code}</span>
+      <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.2 }}>
+        <span style={{ fontWeight: 600 }}>{label ?? code}</span>
+        {showSecondary && <span style={{ fontSize: 11, color: '#7a7a7a' }}>{code}</span>}
+      </span>
     </>
   );
   if (!interactive) {
@@ -229,10 +239,10 @@ function SegmentChip({
     <button
       type="button"
       onClick={() => onClick?.(code)}
-      aria-label={`Open ${code} segment description`}
+      aria-label={`Open ${(label ?? code)} segment description`}
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 6,
         padding: '2px 8px',
         background: 'transparent',

@@ -1,0 +1,11 @@
+apiVersion: analytics/v1
+kind: Dataset
+metadata:
+  key: dataset.household.hh_master_metrics_geo
+  name: hh_master_metrics_geo
+spec:
+  databaseRef: db.analytics
+  schema: household
+  table: vw_hh_master_metrics_geo
+  # Household-level rows enriched with `segment` and `district_name` so
+  # DistrictDetailView can query per-segment rich metrics by district label.

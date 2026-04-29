@@ -217,9 +217,21 @@ export const METRIC_GROUP_LABELS: Record<MetricDefinition['group'], string> = {
   wel: 'WELFARE & VULNERABILITY',
 };
 
+export interface SegmentThemeCard {
+  title: string;
+  body: string;
+}
+
 /** Per-segment write-up shown in the segment description modal. */
 export interface SegmentDescription {
   title: string;
+  subtitle?: string;
+  headerTagline?: string;
+  prevalenceOverall?: string;
+  prevalenceRegional?: string;
+  readiness?: string;
+  overview?: string;
+  cards?: Partial<Record<'economic' | 'welfare' | 'digital' | 'vulnerability', SegmentThemeCard>>;
   summary?: string;
   criteria?: string[];
   interventions?: string[];
@@ -231,43 +243,220 @@ export interface SegmentDescription {
  */
 export const DEFAULT_SEGMENT_DESCRIPTIONS: Record<string, SegmentDescription> = {
   R1: {
-    title: 'Rural — Tier 1',
+    title: 'Rural Stable',
+    subtitle: 'dependent',
+    headerTagline: 'Digital connected | Low welfare',
+    prevalenceOverall: '10%',
+    prevalenceRegional: '9% | 3% | 13%',
+    readiness:
+      'High readiness with strong digital habits, better income slack, and lower welfare reliance.',
+    overview:
+      'Economically secure and digitally active rural households with stronger asset ownership and education spend.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Higher spending power with better surplus allocation beyond essentials.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Lower welfare dependence; many households are outside subsidy systems by choice.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'High internet use and strong device penetration; purchases are more digitally mature.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Lower acute stress than other rural segments, but still exposed to health-cost shocks.',
+      },
+    },
     summary: 'Connected, asset-rich rural households.',
     criteria: ['Asset score ≥ 2', 'Digital score ≥ 2', 'Internet access = 1'],
     interventions: ['Premium digital products', 'Up-skilling and continuing education'],
   },
   R2: {
-    title: 'Rural — Tier 2',
+    title: 'Rural Aspirant',
+    subtitle: 'Emerging',
+    headerTagline: 'Welfare connection | Digital',
+    prevalenceOverall: '30%',
+    prevalenceRegional: '27% | 19% | 40%',
+    readiness:
+      'Mid readiness: institutionally connected households with improving digital adoption but tight finances.',
+    overview:
+      'Welfare-connected rural segment using support systems actively while gradually moving into productive spending.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Low income but better asset momentum than constrained segments.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Most scheme-connected rural segment with high operational awareness.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'Digitally present in daily life, but not yet primary for advanced transactions.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Vulnerability persists due to income fragility and out-of-pocket exposure.',
+      },
+    },
     summary: 'Mobile-led but partially connected rural households.',
     criteria: ['Digital score ≥ 2', 'Mobile ownership = 1'],
     interventions: ['Affordable data plans', 'Targeted online services'],
   },
   R3: {
-    title: 'Rural — Tier 3',
+    title: 'Rural Disconnected',
+    headerTagline: 'Welfare disconnected | Digital disconnected',
+    prevalenceOverall: '7%',
+    prevalenceRegional: '11% | 6% | 3%',
+    readiness:
+      'Lower readiness with weak scheme anchoring, low digital depth, and limited financial slack.',
+    overview:
+      'Small but highly disconnected segment with high food burden and weak links to formal support systems.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Consumption is constrained and heavily food-led, leaving little room for mobility spending.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Scheme coverage is low despite high need, creating elevated exclusion risk.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'Low device depth and low online behavior keep digital exposure minimal.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Most vulnerable rural profile with low buffers and high dependence on informal coping.',
+      },
+    },
     summary: 'Limited digital access; mostly offline.',
     criteria: ['Digital score ≤ 1', 'Internet access = 0'],
     interventions: ['Connectivity programmes', 'Digital literacy outreach'],
   },
   R4: {
-    title: 'Rural — Tier 4',
+    title: 'Rural Constrained',
+    headerTagline: 'Welfare connected | Digital disconnected',
+    prevalenceOverall: '35%',
+    prevalenceRegional: '44% | 50% | 16%',
+    readiness:
+      'Mid-lower readiness: strong welfare touchpoints but low digital capability and low income slack.',
+    overview:
+      'Large rural vulnerable segment with high subsidy usage, weak assets, and persistent financial stress.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Low assets and low income with major spending concentrated in essentials.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Covered by government schemes, but service quality and outcome depth remain uneven.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'Digital intensity is low with limited device ownership and transaction usage.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'High stress profile; even modest shocks can materially worsen household conditions.',
+      },
+    },
     summary: 'Most constrained rural households across all signals.',
     interventions: ['Welfare programme enrolment', 'Last-mile inclusion'],
   },
   U1: {
-    title: 'Urban — Tier 1',
-    summary: 'Highly connected, asset-rich urban households.',
+    title: 'Urban Constrained',
+    headerTagline: 'Digital emerging | Partial welfare dependent',
+    prevalenceOverall: '3%',
+    prevalenceRegional: '3% | 5% | 2%',
+    readiness:
+      'Low readiness despite visible digital access; instability and shallow institutional coverage remain key constraints.',
+    overview:
+      'Smallest and most constrained urban profile, often transitional households with fragile income structures.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Income is volatile and mostly consumed by essentials, with little wealth accumulation.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Patchy scheme access and weaker institutional attachment relative to need.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'Connected but passive: usage is present, yet online transactions remain limited.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Exposure to health and livelihood shocks remains high due to low financial buffers.',
+      },
+    },
+    summary: 'Smaller, income-constrained urban households with partial welfare dependence.',
     criteria: ['Asset score ≥ 2', 'Digital score ≥ 2', 'Internet access = 1'],
     interventions: ['Premium services', 'Subscription products'],
   },
   U2: {
-    title: 'Urban — Tier 2',
+    title: 'Urban Aspirant',
+    headerTagline: 'Digital connected | Rising capability',
+    prevalenceOverall: '7%',
+    prevalenceRegional: '6% | 8% | 7%',
+    readiness:
+      'Mid-high readiness with improving digital confidence and moderate institutional links.',
+    overview:
+      'Urban households with growing digital capability and better transition potential than constrained peers.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Moderate consumption resilience with scope to channel surplus toward progression assets.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Partial welfare linkages; uptake varies across schemes and states.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'Strong connectivity and increasing comfort with online channels.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Stress risk remains, but households show better adaptive capacity than U1/U3.',
+      },
+    },
     summary: 'Connected but lower asset profile.',
     criteria: ['Digital score ≥ 2', 'Mobile ownership = 1'],
     interventions: ['Affordable urban services'],
   },
   U3: {
-    title: 'Urban — Tier 3',
-    summary: 'Most constrained urban households.',
+    title: 'Urban Stable',
+    headerTagline: 'Digital strong | Lower vulnerability',
+    prevalenceOverall: '9%',
+    prevalenceRegional: '8% | 10% | 9%',
+    readiness:
+      'Higher readiness with better digital maturity, stronger assets, and lower dependency risk.',
+    overview:
+      'Most stable urban segment with stronger digital behavior and comparatively lower vulnerability indicators.',
+    cards: {
+      economic: {
+        title: 'Economic',
+        body: 'Better spending flexibility and stronger progression capacity.',
+      },
+      welfare: {
+        title: 'Welfare',
+        body: 'Lower welfare dependence with better ability to self-finance shocks.',
+      },
+      digital: {
+        title: 'Digital',
+        body: 'High connectivity and better conversion from digital access to active usage.',
+      },
+      vulnerability: {
+        title: 'Vulnerability',
+        body: 'Lower acute stress profile relative to other urban segments.',
+      },
+    },
+    summary: 'Most stable urban households with stronger digital and economic footing.',
     interventions: ['Welfare programme enrolment'],
   },
 };
