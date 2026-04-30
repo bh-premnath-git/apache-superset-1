@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { scaleSequential } from 'd3-scale';
-import { interpolateBlues } from 'd3-scale-chromatic';
+import { interpolateGreens } from 'd3-scale-chromatic';
 import type { GeoPath } from 'd3-geo';
 
 import { normalizeKey } from '../data/normalize';
@@ -37,8 +37,8 @@ function StateLayerImpl({
 }: StateLayerProps) {
   const totalsByKey = new Map(stateTotals.map(s => [normalizeKey(s.stateKey), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
-  // Shift domain so data-states start at a clearly visible blue, not near-white.
-  const color = scaleSequential(interpolateBlues).domain([-(max || 1) * 0.25, max || 1]);
+  // Shift domain so data-states start at a clearly visible green, not near-white.
+  const color = scaleSequential(interpolateGreens).domain([-(max || 1) * 0.25, max || 1]);
 
   // In state-outline mode (India level), render only the dissolved state
   // MultiPolygons instead of the 594 individual district features. This

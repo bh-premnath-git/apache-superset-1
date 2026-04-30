@@ -241,6 +241,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
       - ./seed:/app/seed:ro
     networks:
       - superset-net
@@ -273,6 +274,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
       - ./extensions/bundles:/app/extensions:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
@@ -302,6 +304,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
     networks:
       - superset-net
 
@@ -324,6 +327,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
     networks:
       - superset-net
 
@@ -389,6 +393,7 @@ services:
       - superset-home:/app/superset_home
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -424,6 +429,7 @@ services:
     volumes:
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
       - ./custom_sso_security_manager.py:/app/pythonpath/custom_sso_security_manager.py:ro
+      - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
       - ./assets:/app/assets
       - ./extensions/bundles:/app/extensions:ro
     networks:

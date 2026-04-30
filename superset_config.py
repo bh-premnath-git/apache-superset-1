@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from celery.schedules import crontab
 from flask_appbuilder.security.manager import AUTH_OAUTH
+from keycloak_oidc_dynamic import dynamic_enabled
 from custom_sso_security_manager import CustomSsoSecurityManager
 
 
@@ -130,6 +131,11 @@ THEME_DARK = {
 # Optional Keycloak OAuth integration.
 # KEYCLOAK_SERVER_URL: browser-facing URL (e.g., http://localhost:8080 for local dev)
 # KEYCLOAK_API_BASE_URL: internal URL for server-to-server calls (e.g., http://keycloak:8080)
+#
+# Multi-realm / multi-tenant (bh-keycloak): ON by default (see keycloak_oidc_dynamic.py).
+# Set KEYCLOAK_DYNAMIC_TENANTS=false for a single fixed realm from KEYCLOAK_REALM only.
+# KEYCLOAK_TENANT_REGISTRY_JSON and/or KEYCLOAK_TENANT_REGISTRY_URL optional.
+# Tenant is resolved per request via KEYCLOAK_TENANT_RESOLVERS (query, header, subdomain, cookie, fallback).
 KEYCLOAK_SERVER_URL = env("KEYCLOAK_SERVER_URL")
 KEYCLOAK_API_BASE_URL = env("KEYCLOAK_API_BASE_URL")
 KEYCLOAK_REALM = env("KEYCLOAK_REALM")
@@ -137,18 +143,27 @@ KEYCLOAK_CLIENT_ID = env("KEYCLOAK_CLIENT_ID")
 KEYCLOAK_CLIENT_SECRET = env("KEYCLOAK_CLIENT_SECRET")
 KEYCLOAK_REDIRECT_URI = env("KEYCLOAK_REDIRECT_URI")
 KEYCLOAK_ROLE_CLAIM = env("KEYCLOAK_ROLE_CLAIM", "role_keys")
+KEYCLOAK_DYNAMIC_TENANTS = dynamic_enabled()
 
-if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
+_keycloak_static_ready = bool(
+    KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID
+)
+_keycloak_dynamic_ready = bool(KEYCLOAK_DYNAMIC_TENANTS and KEYCLOAK_SERVER_URL)
+
+if _keycloak_static_ready or _keycloak_dynamic_ready:
     AUTH_TYPE = AUTH_OAUTH
     CUSTOM_SECURITY_MANAGER = CustomSsoSecurityManager
     AUTH_USER_REGISTRATION = True
     AUTH_USER_REGISTRATION_ROLE = "Admin"
     AUTH_ROLES_SYNC_AT_LOGIN = True
-    AUTH_ROLES_MAPPING = {
-        "superset_admin": ["Admin"],
-        "superset_alpha": ["Alpha"],
-        "superset_gamma": ["Gamma"],
-    }
+    # Ignored for Keycloak: CustomSsoSecurityManager grants Admin on every login.
+    AUTH_ROLES_MAPPING = {}
+
+    _realm = KEYCLOAK_REALM or env(
+        "KEYCLOAK_OIDC_BOOTSTRAP_REALM", "bootstrap-placeholder-realm"
+    )
+    _client_id = KEYCLOAK_CLIENT_ID or "dynamic-tenant-placeholder"
+    _client_secret = KEYCLOAK_CLIENT_SECRET or "unused"
 
     # Use internal URL for server-to-server calls, browser URL for authorize redirect
     internal_base = (KEYCLOAK_API_BASE_URL or KEYCLOAK_SERVER_URL).rstrip("/")
@@ -160,13 +175,13 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
             "token_key": "access_token",
             "icon": "fa-key",
             "remote_app": {
-                "client_id": KEYCLOAK_CLIENT_ID,
-                "client_secret": KEYCLOAK_CLIENT_SECRET,
-                "api_base_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect",
-                "access_token_url": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token",
-                "authorize_url": f"{browser_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/auth",
-                "jwks_uri": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs",
-                "userinfo_endpoint": f"{internal_base}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/userinfo",
+                "client_id": _client_id,
+                "client_secret": _client_secret,
+                "api_base_url": f"{internal_base}/realms/{_realm}/protocol/openid-connect",
+                "access_token_url": f"{internal_base}/realms/{_realm}/protocol/openid-connect/token",
+                "authorize_url": f"{browser_base}/realms/{_realm}/protocol/openid-connect/auth",
+                "jwks_uri": f"{internal_base}/realms/{_realm}/protocol/openid-connect/certs",
+                "userinfo_endpoint": f"{internal_base}/realms/{_realm}/protocol/openid-connect/userinfo",
                 "client_kwargs": {"scope": "openid profile email roles"},
                 # Note: server_metadata_url removed to prevent Keycloak from overriding
                 # our explicit URLs with its advertised hostname
@@ -174,7 +189,8 @@ if KEYCLOAK_SERVER_URL and KEYCLOAK_REALM and KEYCLOAK_CLIENT_ID:
         }
     ]
 
-    OAUTH_PROVIDERS[0]["remote_app"]["redirect_uri"] = KEYCLOAK_REDIRECT_URI
+    if KEYCLOAK_REDIRECT_URI:
+        OAUTH_PROVIDERS[0]["remote_app"]["redirect_uri"] = KEYCLOAK_REDIRECT_URI
     OAUTH_PROVIDERS[0]["remote_app"]["role_keys"] = KEYCLOAK_ROLE_CLAIM
 
 SESSION_COOKIE_HTTPONLY = True
