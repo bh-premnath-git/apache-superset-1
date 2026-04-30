@@ -209,13 +209,26 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
 
   const stateCentroids = useMemo(() => {
     if (drill.level !== 'india') return [];
-    if (!geometry || !filteredGeo) return [];
+    if (!geometry) return [];
+    // Use the dissolved-by-state geometry so we get exactly ONE centroid
+    // per state, not one per district. `filteredGeo` at India level is the
+    // raw collection (often district-granular when both GeoJSON URLs point
+    // to the same file), and would otherwise produce a centroid per
+    // district that all map to the same state donut.
+    const source = resolved.dissolvedStateGeo ?? filteredGeo;
+    if (!source) return [];
     return featureCentroids(
-      filteredGeo,
+      source,
       geometry.path,
       resolved.stateFeatureKeyProp,
     );
-  }, [drill.level, geometry, filteredGeo, resolved.stateFeatureKeyProp]);
+  }, [
+    drill.level,
+    geometry,
+    resolved.dissolvedStateGeo,
+    filteredGeo,
+    resolved.stateFeatureKeyProp,
+  ]);
 
   // District-zoom donut sizing. When a single district fills the canvas we
   // ignore the shared radiusScale (tuned for many districts at once) and
