@@ -83,12 +83,17 @@ function DistrictPieImpl({
           strokeWidth={2}
         />
       )}
-      <circle
-        r={radius + 0.75}
-        fill="rgba(255,255,255,0.55)"
-        stroke={isSelected ? 'rgba(37,99,235,0.3)' : 'rgba(0,0,0,0.10)'}
-        strokeWidth={isSelected ? 1.5 : 0.35}
-      />
+      {/* Soft halo behind the wedges. Skipped when the donut hole is
+          transparent (no center label) so the underlying map shows
+          cleanly through the ring. */}
+      {(innerRadius === 0 || showCenter) && (
+        <circle
+          r={radius + 0.75}
+          fill="rgba(255,255,255,0.55)"
+          stroke={isSelected ? 'rgba(37,99,235,0.3)' : 'rgba(0,0,0,0.10)'}
+          strokeWidth={isSelected ? 1.5 : 0.35}
+        />
+      )}
       {slices.map(slice => (
         <path
           key={slice.data.category}
@@ -99,8 +104,10 @@ function DistrictPieImpl({
           strokeWidth={outerStrokeWidth}
         />
       ))}
-      {/* Donut-hole fill so the center label sits on a clean background. */}
-      {innerRadius > 0 && (
+      {/* Donut-hole fill is only drawn when there's a center label —
+          otherwise the hole stays transparent so the underlying map
+          reads through the ring. */}
+      {innerRadius > 0 && showCenter && (
         <circle
           r={innerRadius - 0.5}
           fill="#ffffff"

@@ -352,7 +352,6 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           strokeMode={isIndia ? 'state-outline' : 'default'}
           stateOutlineGeo={isIndia ? resolved.dissolvedStateGeo : undefined}
           useGreyScale={isIndia && useGreyChoropleth}
-          muted={isIndia}
         />
         {showStatePies && (
           <g className="sdp-state-pie-layer">
@@ -367,12 +366,11 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
                   cx={centroid.cx}
                   cy={centroid.cy}
                   radius={radius}
-                  innerRadius={radius * 0.5}
+                  innerRadius={radius * 0.55}
                   colorFor={colorFor}
                   onClick={() => drill.onFeatureClick(centroid.key)}
                   onHover={showTooltip ? handleHover : undefined}
-                  outerStrokeWidth={1.5}
-                  shadowFilterId={shadowFilterId}
+                  outerStrokeWidth={0.75}
                 />
               );
             })}
