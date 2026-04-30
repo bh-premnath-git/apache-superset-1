@@ -1,6 +1,12 @@
 export const DEFAULT_MIN_PIE_RADIUS = 6;
 export const DEFAULT_MAX_PIE_RADIUS = 22;
 
+// India-level (one donut per state) radius bounds. States are larger and
+// fewer than districts, so they need a bigger range to read the segment
+// composition without overcrowding clustered NE states.
+export const DEFAULT_MIN_STATE_PIE_RADIUS = 18;
+export const DEFAULT_MAX_STATE_PIE_RADIUS = 38;
+
 // Path Superset's runtime image serves india-districts.geojson from
 // (see Dockerfile — the file is COPYed to /app/superset/static/assets/).
 // Plugin code falls back to this when formData omits the URL so the

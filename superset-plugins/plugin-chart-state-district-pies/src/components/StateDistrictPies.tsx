@@ -10,6 +10,8 @@ import { StateLayer } from './StateLayer';
 import { Tooltip } from './Tooltip';
 import {
   DEFAULT_CATEGORY_COLORS,
+  DEFAULT_MAX_STATE_PIE_RADIUS,
+  DEFAULT_MIN_STATE_PIE_RADIUS,
   FALLBACK_PALETTE,
 } from '../constants';
 import { normalizeKey } from '../data/normalize';
@@ -165,6 +167,65 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
       .range([minPieRadius, maxPieRadius]);
   }, [districts, minPieRadius, maxPieRadius]);
 
+  // Separate scale for India-level state donuts: states are larger and
+  // fewer than districts, so they get a bigger radius range.
+  const stateRadiusScale = useMemo(() => {
+    const maxWeight = resolved.stateTotals.reduce(
+      (m, s) => Math.max(m, s.totalWeight),
+      0,
+    );
+    return scaleSqrt()
+      .domain([0, maxWeight || 1])
+      .range([DEFAULT_MIN_STATE_PIE_RADIUS, DEFAULT_MAX_STATE_PIE_RADIUS]);
+  }, [resolved.stateTotals]);
+
+  // Detect whether any active legend colour is close to the green choropleth
+  // hue. When yes, fall back to a neutral grey base map so wedge colours
+  // never compete with the underlying fill.
+  const useGreyChoropleth = useMemo(
+    () => paletteCollidesWithGreens(districts, colorFor),
+    [districts, colorFor],
+  );
+
+  // India-level pies: synthesize a DistrictRow shape from each state's
+  // wedges so the existing DistrictPie component renders them unchanged.
+  const stateRows = useMemo<DistrictRow[]>(() => {
+    if (drill.level !== 'india') return [];
+    return resolved.stateTotals
+      .filter(s => s.wedges && s.wedges.length > 0)
+      .map(s => ({
+        stateKey: s.stateKey,
+        districtKey: s.stateKey,
+        wedges: s.wedges as DistrictRow['wedges'],
+        totalWeight: s.totalWeight,
+      }));
+  }, [drill.level, resolved.stateTotals]);
+
+  const stateRowsByKey = useMemo(() => {
+    const map = new Map<string, DistrictRow>();
+    for (const r of stateRows) map.set(normalizeKey(r.stateKey), r);
+    return map;
+  }, [stateRows]);
+
+  const stateCentroids = useMemo(() => {
+    if (drill.level !== 'india') return [];
+    if (!geometry || !filteredGeo) return [];
+    return featureCentroids(
+      filteredGeo,
+      geometry.path,
+      resolved.stateFeatureKeyProp,
+    );
+  }, [drill.level, geometry, filteredGeo, resolved.stateFeatureKeyProp]);
+
+  // District-zoom donut sizing. When a single district fills the canvas we
+  // ignore the shared radiusScale (tuned for many districts at once) and
+  // size the hero pie from the available canvas instead.
+  const districtZoomRadius = useMemo(() => {
+    if (drill.level !== 'district') return 0;
+    const r = Math.min(width, height) * 0.32;
+    return Math.max(60, Math.min(r, Math.min(width, height) / 3));
+  }, [drill.level, width, height]);
+
   const districtsByKey = useMemo(() => {
     const map = new Map<string, DistrictRow>();
     for (const d of districts) map.set(normalizeKey(d.districtKey), d);
@@ -249,7 +310,11 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
   }
 
   const categories = uniqueCategories(districts);
-  const showPies = drill.level !== 'india';
+  const isIndia = drill.level === 'india';
+  const isDistrictZoom = drill.level === 'district';
+  const showStatePies = isIndia && stateRows.length > 0;
+  const showDistrictPies = !isIndia;
+  const shadowFilterId = 'sdp-pie-shadow';
 
   return (
     <div
@@ -264,6 +329,18 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
         role="img"
         aria-label="India state and district map"
       >
+        <defs>
+          {/* Subtle drop shadow lifts donuts off the choropleth/base map. */}
+          <filter id={shadowFilterId} x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow
+              dx="0"
+              dy="1"
+              stdDeviation="1.2"
+              floodColor="#000"
+              floodOpacity="0.18"
+            />
+          </filter>
+        </defs>
         <StateLayer
           geo={filteredGeo}
           path={geometry.path}
@@ -272,31 +349,68 @@ export default function StateDistrictPies(props: StateDistrictPiesProps) {
           onFeatureClick={
             drill.level !== 'district' ? drill.onFeatureClick : undefined
           }
-          strokeMode={drill.level === 'india' ? 'state-outline' : 'default'}
-          stateOutlineGeo={
-            drill.level === 'india' ? resolved.dissolvedStateGeo : undefined
-          }
+          strokeMode={isIndia ? 'state-outline' : 'default'}
+          stateOutlineGeo={isIndia ? resolved.dissolvedStateGeo : undefined}
+          useGreyScale={isIndia && useGreyChoropleth}
+          muted={isIndia}
         />
-        {showPies && (
+        {showStatePies && (
+          <g className="sdp-state-pie-layer">
+            {stateCentroids.map((centroid: FeatureCentroid) => {
+              const row = stateRowsByKey.get(normalizeKey(centroid.key));
+              if (!row) return null;
+              const radius = stateRadiusScale(row.totalWeight);
+              return (
+                <DistrictPie
+                  key={`state-${centroid.key}`}
+                  row={row}
+                  cx={centroid.cx}
+                  cy={centroid.cy}
+                  radius={radius}
+                  innerRadius={radius * 0.5}
+                  colorFor={colorFor}
+                  onClick={() => drill.onFeatureClick(centroid.key)}
+                  onHover={showTooltip ? handleHover : undefined}
+                  outerStrokeWidth={1.5}
+                  shadowFilterId={shadowFilterId}
+                />
+              );
+            })}
+          </g>
+        )}
+        {showDistrictPies && (
           <g className="sdp-district-layer">
             {districtCentroids.map((centroid: FeatureCentroid) => {
               const row = districtsByKey.get(normalizeKey(centroid.key));
               if (!row) return null;
               const isSelected =
-                drill.level === 'district' &&
+                isDistrictZoom &&
                 drill.selectedDistrict !== null &&
                 normalizeKey(row.districtKey) === normalizeKey(drill.selectedDistrict);
+              const radius = isDistrictZoom
+                ? districtZoomRadius
+                : radiusScale(row.totalWeight) * 0.78;
+              const innerRadius = isDistrictZoom ? radius * 0.55 : 0;
               return (
                 <DistrictPie
                   key={centroid.key}
                   row={row}
                   cx={centroid.cx}
                   cy={centroid.cy}
-                  radius={radiusScale(row.totalWeight) * 0.78}
+                  radius={radius}
+                  innerRadius={innerRadius}
+                  centerLabel={isDistrictZoom ? row.districtKey : undefined}
+                  centerSubLabel={
+                    isDistrictZoom
+                      ? formatTotal(row.totalWeight)
+                      : undefined
+                  }
                   colorFor={colorFor}
                   onClick={drill.onPieClick}
                   onHover={showTooltip ? handleHover : undefined}
                   isSelected={isSelected}
+                  outerStrokeWidth={isDistrictZoom ? 1.5 : 0.25}
+                  shadowFilterId={isDistrictZoom ? shadowFilterId : undefined}
                 />
               );
             })}
@@ -323,6 +437,46 @@ function uniqueCategories(rows: DistrictRow[]): string[] {
   const seen = new Set<string>();
   for (const r of rows) for (const w of r.wedges) seen.add(w.category);
   return Array.from(seen);
+}
+
+/**
+ * Heuristic: returns true when any active legend colour is "green-ish"
+ * (G channel meaningfully larger than R and B). When this happens we
+ * swap the choropleth interpolator from greens to greys so the wedge
+ * fills always read clearly against the base map.
+ */
+function paletteCollidesWithGreens(
+  rows: DistrictRow[],
+  colorFor: (category: string) => string,
+): boolean {
+  const cats = uniqueCategories(rows);
+  for (const cat of cats) {
+    const rgb = parseHexColor(colorFor(cat));
+    if (!rgb) continue;
+    const { r, g, b } = rgb;
+    if (g > r + 25 && g > b + 25 && g > 120) return true;
+  }
+  return false;
+}
+
+function parseHexColor(input: string): { r: number; g: number; b: number } | null {
+  if (!input) return null;
+  const m = input.trim().match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!m) return null;
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  return {
+    r: parseInt(hex.slice(0, 2), 16),
+    g: parseInt(hex.slice(2, 4), 16),
+    b: parseInt(hex.slice(4, 6), 16),
+  };
+}
+
+function formatTotal(value: number): string {
+  if (!Number.isFinite(value)) return '';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
 }
 
 function buildColorAccessor(

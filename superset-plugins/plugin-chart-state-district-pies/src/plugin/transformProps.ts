@@ -40,6 +40,9 @@ export default function transformProps(
 
   const byDistrict = new Map<string, DistrictRow>();
   const byState = new Map<string, number>();
+  // Per-state segment breakdown, keyed by stateKey -> category -> summed value.
+  // Drives the donut-per-state rendering on the India zoom level.
+  const byStateWedges = new Map<string, Map<string, number>>();
 
   for (const row of rows) {
     const stateKey = asString(row[fd.state_column]);
@@ -63,6 +66,13 @@ export default function transformProps(
     district.totalWeight += value;
 
     byState.set(stateKey, (byState.get(stateKey) ?? 0) + value);
+
+    let stateWedges = byStateWedges.get(stateKey);
+    if (!stateWedges) {
+      stateWedges = new Map<string, number>();
+      byStateWedges.set(stateKey, stateWedges);
+    }
+    stateWedges.set(category, (stateWedges.get(category) ?? 0) + value);
   }
 
   const ruralCategories = parseCategoryList(
@@ -83,7 +93,16 @@ export default function transformProps(
 
   const districts = Array.from(byDistrict.values());
   const stateTotals: StateAggregate[] = Array.from(byState.entries()).map(
-    ([stateKey, totalWeight]) => ({ stateKey, totalWeight }),
+    ([stateKey, totalWeight]) => {
+      const wedgesMap = byStateWedges.get(stateKey);
+      const wedges: Wedge[] | undefined = wedgesMap
+        ? Array.from(wedgesMap.entries()).map(([category, value]) => ({
+            category,
+            value,
+          }))
+        : undefined;
+      return { stateKey, totalWeight, wedges };
+    },
   );
 
   return {

@@ -28,6 +28,12 @@ export interface Wedge {
 export interface StateAggregate {
   stateKey: string;
   totalWeight: number;
+  /**
+   * Optional per-state segment breakdown. When present, the India-level
+   * view renders one donut per state using these wedges. Absent when only
+   * total weights are available (e.g. legacy callers).
+   */
+  wedges?: Wedge[];
 }
 
 /** Props accepted by the React chart component. Produced by `transformProps`. */

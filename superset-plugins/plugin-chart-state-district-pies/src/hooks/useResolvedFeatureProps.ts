@@ -6,6 +6,7 @@ import type {
   GeoFeature,
   GeoFeatureCollection,
   StateAggregate,
+  Wedge,
 } from '../types';
 
 export interface ResolvedFeatureProps {
@@ -165,6 +166,7 @@ export function useResolvedFeatureProps({
     }
 
     const byState = new Map<string, number>();
+    const byStateWedges = new Map<string, Map<string, number>>();
     for (const d of districts) {
       const inferredState = districtToState.get(normalizeKey(d.districtKey));
       if (!inferredState) continue;
@@ -172,12 +174,26 @@ export function useResolvedFeatureProps({
         inferredState,
         (byState.get(inferredState) ?? 0) + d.totalWeight,
       );
+      let bucket = byStateWedges.get(inferredState);
+      if (!bucket) {
+        bucket = new Map<string, number>();
+        byStateWedges.set(inferredState, bucket);
+      }
+      for (const w of d.wedges) {
+        bucket.set(w.category, (bucket.get(w.category) ?? 0) + w.value);
+      }
     }
 
-    const inferred = Array.from(byState.entries()).map(([stateKey, totalWeight]) => ({
-      stateKey,
-      totalWeight,
-    }));
+    const inferred = Array.from(byState.entries()).map(([stateKey, totalWeight]) => {
+      const wedgesMap = byStateWedges.get(stateKey);
+      const wedges: Wedge[] | undefined = wedgesMap
+        ? Array.from(wedgesMap.entries()).map(([category, value]) => ({
+            category,
+            value,
+          }))
+        : undefined;
+      return { stateKey, totalWeight, wedges };
+    });
 
     return inferred.length > 0 ? inferred : stateTotals;
   }, [

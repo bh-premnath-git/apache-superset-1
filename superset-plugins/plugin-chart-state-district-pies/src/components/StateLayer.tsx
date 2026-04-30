@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { scaleSequential } from 'd3-scale';
-import { interpolateGreens } from 'd3-scale-chromatic';
+import { interpolateGreens, interpolateGreys } from 'd3-scale-chromatic';
 import type { GeoPath } from 'd3-geo';
 
 import { normalizeKey } from '../data/normalize';
@@ -18,6 +18,17 @@ export interface StateLayerProps {
   /** Dissolved state geometries (MultiPolygon per state) – rendered as
    *  outlines when strokeMode is 'state-outline'. */
   stateOutlineGeo?: GeoFeatureCollection;
+  /**
+   * When true, use a neutral greyscale instead of the green sequential
+   * scale. Used when the active legend palette includes a hue close to
+   * green to avoid colour collision with the donut wedges drawn on top.
+   */
+  useGreyScale?: boolean;
+  /**
+   * When true, the choropleth fill is drawn at reduced opacity so the
+   * donut layer above reads cleanly. Used at the India zoom level.
+   */
+  muted?: boolean;
 }
 
 /**
@@ -34,11 +45,18 @@ function StateLayerImpl({
   onFeatureClick,
   strokeMode = 'default',
   stateOutlineGeo,
+  useGreyScale = false,
+  muted = false,
 }: StateLayerProps) {
   const totalsByKey = new Map(stateTotals.map(s => [normalizeKey(s.stateKey), s.totalWeight]));
   const max = stateTotals.reduce((m, s) => Math.max(m, s.totalWeight), 0);
-  // Shift domain so data-states start at a clearly visible green, not near-white.
-  const color = scaleSequential(interpolateGreens).domain([-(max || 1) * 0.25, max || 1]);
+  // Clamp the top of the interpolator so the deepest greens never scream
+  // over the donut layer. Bottom shift keeps data-states visible from zero.
+  const interpolator = useGreyScale ? interpolateGreys : interpolateGreens;
+  const color = scaleSequential(
+    (t: number) => interpolator(0.15 + t * 0.40),
+  ).domain([-(max || 1) * 0.25, max || 1]);
+  const fillOpacity = muted ? 0.7 : 1;
 
   // In state-outline mode (India level), render only the dissolved state
   // MultiPolygons instead of the 594 individual district features. This
@@ -59,6 +77,7 @@ function StateLayerImpl({
             key={`f-${i}`}
             d={d}
             fill={weight > 0 ? color(weight) : '#e8e8e8'}
+            fillOpacity={fillOpacity}
             stroke={strokeMode === 'state-outline' ? '#555' : '#999999'}
             strokeWidth={strokeMode === 'state-outline' ? 1.2 : 0.3}
             style={{

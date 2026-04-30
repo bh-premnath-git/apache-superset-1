@@ -13,6 +13,20 @@ export interface DistrictPieProps {
   onHover?: (row: DistrictRow | null, x: number, y: number) => void;
   /** True when this district is currently selected for detail view */
   isSelected?: boolean;
+  /**
+   * Inner radius for donut rendering. 0 (default) draws a solid pie.
+   * When > 0 and `centerLabel`/`centerSubLabel` are provided, those are
+   * rendered inside the hole.
+   */
+  innerRadius?: number;
+  /** Primary text drawn inside the donut hole (e.g. district name). */
+  centerLabel?: string;
+  /** Secondary text drawn below `centerLabel` (e.g. formatted total). */
+  centerSubLabel?: string;
+  /** Stroke width on the outer edge of the donut/pie. Default 0.25. */
+  outerStrokeWidth?: number;
+  /** Drop shadow filter ID applied via filter="url(#id)". */
+  shadowFilterId?: string;
 }
 
 /**
@@ -30,11 +44,21 @@ function DistrictPieImpl({
   onClick,
   onHover,
   isSelected,
+  innerRadius = 0,
+  centerLabel,
+  centerSubLabel,
+  outerStrokeWidth = 0.25,
+  shadowFilterId,
 }: DistrictPieProps) {
   const slices = d3pie<Wedge>().value(w => w.value).sort(null)(row.wedges);
   const arcFn = d3arc<typeof slices[number]>()
-    .innerRadius(0)
+    .innerRadius(innerRadius)
     .outerRadius(radius);
+
+  // Scale center text relative to the donut hole so it never overflows.
+  const labelFontSize = Math.max(10, Math.min(innerRadius * 0.42, 22));
+  const subLabelFontSize = Math.max(9, Math.min(innerRadius * 0.28, 14));
+  const showCenter = innerRadius > 0 && (centerLabel || centerSubLabel);
 
   return (
     <g
@@ -48,6 +72,7 @@ function DistrictPieImpl({
       onMouseEnter={onHover ? () => onHover(row, cx, cy) : undefined}
       onMouseLeave={onHover ? () => onHover(null, cx, cy) : undefined}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
+      filter={shadowFilterId ? `url(#${shadowFilterId})` : undefined}
     >
       {/* Selection highlight ring */}
       {isSelected && (
@@ -69,11 +94,48 @@ function DistrictPieImpl({
           key={slice.data.category}
           d={arcFn(slice) ?? ''}
           fill={colorFor(slice.data.category)}
-          fillOpacity={0.72}
-          stroke="rgba(255,255,255,0.7)"
-          strokeWidth={0.25}
+          fillOpacity={0.85}
+          stroke="rgba(255,255,255,0.95)"
+          strokeWidth={outerStrokeWidth}
         />
       ))}
+      {/* Donut-hole fill so the center label sits on a clean background. */}
+      {innerRadius > 0 && (
+        <circle
+          r={innerRadius - 0.5}
+          fill="#ffffff"
+          fillOpacity={0.92}
+          stroke="rgba(0,0,0,0.06)"
+          strokeWidth={0.5}
+        />
+      )}
+      {showCenter && (
+        <g
+          className="sdp-pie-center"
+          textAnchor="middle"
+          style={{ pointerEvents: 'none' }}
+        >
+          {centerLabel && (
+            <text
+              y={centerSubLabel ? -2 : labelFontSize / 3}
+              fontSize={labelFontSize}
+              fontWeight={600}
+              fill="#222"
+            >
+              {centerLabel}
+            </text>
+          )}
+          {centerSubLabel && (
+            <text
+              y={centerLabel ? labelFontSize - 2 : subLabelFontSize / 3}
+              fontSize={subLabelFontSize}
+              fill="#666"
+            >
+              {centerSubLabel}
+            </text>
+          )}
+        </g>
+      )}
     </g>
   );
 }
