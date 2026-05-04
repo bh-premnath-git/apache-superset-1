@@ -1,0 +1,14 @@
+{
+  "publisher": "my-org",
+  "name": "home-shell",
+  "version": "0.1.0",
+  "displayName": "India Segmentation Home Shell",
+  "description": "Replaces the Superset welcome page with a Pathways-style left-sidebar shell (Overview / Comparison tool / Prevalence map) wired to India segmentation data.",
+  "permissions": ["can_read"],
+  "frontend": {
+    "module": "./frontend/dist/remoteEntry.js"
+  },
+  "backend": {
+    "module": "my_org.home_shell.entrypoint"
+  }
+}

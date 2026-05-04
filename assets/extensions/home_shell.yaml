@@ -1,0 +1,28 @@
+# India Segmentation Home Shell extension registration.
+#
+# Replaces the Superset Welcome page with a Pathways-style left-sidebar shell
+# (Overview / Comparison tool / Prevalence map) wired to dummy data today and
+# to the existing India-segmentation datasets later.
+#
+# ⚠️  ENABLE_EXTENSIONS is lifecycle:development as of Superset 6.x.
+# The /api/v1/extensions/ endpoint and .supx runtime loader may be
+# unavailable in released builds. Treat this as scaffolding until upstream
+# matures. See: wiki/research/dashboard-chatbot-extension.md for the same
+# caveat applied to the chatbot extension.
+#
+# The .supx bundle is produced by the ``extension-builder-home-shell`` Compose
+# service (one-shot). The reconciler entrypoint auto-discovers it from
+# ``/app/extensions/`` at runtime and exports ``HOME_SHELL_SUPX_PATH``.
+apiVersion: analytics/v1
+kind: Extension
+metadata:
+  key: ext.my_org.home_shell
+  name: India Segmentation Home Shell
+spec:
+  publisher: my-org
+  extensionName: home-shell
+  version: "0.1.0"
+  supxPathFromEnv: HOME_SHELL_SUPX_PATH
+  featureFlag: ENABLE_EXTENSIONS
+  permissions:
+    - can_read

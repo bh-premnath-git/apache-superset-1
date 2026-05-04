@@ -1,0 +1,18 @@
+[project]
+name = "my-org-home-shell"
+version = "0.1.0"
+description = "Backend stub for India Segmentation Home Shell Superset extension"
+requires-python = ">=3.10"
+dependencies = [
+  "flask>=2.3",
+  "flask-appbuilder>=4.3",
+  "apache-superset-core>=0.1.0rc2",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.apache_superset_extensions.build]
+include = ["src/**/*.py"]
+exclude = ["tests/**/*", "**/*.pyc"]
