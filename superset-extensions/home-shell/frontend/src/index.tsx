@@ -73,12 +73,38 @@ function hashShare(name: string): number {
 }
 
 // ── Navigation ───────────────────────────────────────────────────────────────
-type ViewKey = 'overview' | 'comparison' | 'prevalence';
+type ViewKey =
+  | 'overview'
+  | 'comparison'
+  | 'prevalence'
+  | 'coverage'
+  | 'entry-points'
+  | 'navigation'
+  | 'compare-curate'
+  | 'viz-roadmap';
 
-const NAV: { key: ViewKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'overview',   label: 'Overview',         icon: <OverviewIcon /> },
-  { key: 'comparison', label: 'Comparison tool',  icon: <CompareIcon /> },
-  { key: 'prevalence', label: 'Prevalence map',   icon: <MapIcon /> },
+type NavItem = { key: ViewKey; label: string; icon: React.ReactNode };
+type NavSection = { heading: string; items: NavItem[] };
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    heading: 'Dashboard',
+    items: [
+      { key: 'overview',   label: 'Overview',         icon: <OverviewIcon /> },
+      { key: 'comparison', label: 'Comparison tool',  icon: <CompareIcon /> },
+      { key: 'prevalence', label: 'Prevalence map',   icon: <MapIcon /> },
+    ],
+  },
+  {
+    heading: 'Roadmap & context',
+    items: [
+      { key: 'coverage',       label: 'Coverage & status',     icon: <StatusIcon /> },
+      { key: 'entry-points',   label: 'Entry points',          icon: <DoorIcon /> },
+      { key: 'navigation',     label: 'Navigation pathways',   icon: <PathIcon /> },
+      { key: 'compare-curate', label: 'Compare & curate',      icon: <LayersIcon /> },
+      { key: 'viz-roadmap',    label: 'Visualization roadmap', icon: <ChartIcon /> },
+    ],
+  },
 ];
 
 // ── Icons ────────────────────────────────────────────────────────────────────
@@ -113,6 +139,55 @@ function MapIcon() {
     </svg>
   );
 }
+function StatusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+function DoorIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />
+      <path d="M4 21h16" />
+      <circle cx="14" cy="13" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+function PathIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="2" />
+      <circle cx="18" cy="18" r="2" />
+      <path d="M8 6h6a4 4 0 0 1 4 4v6" />
+    </svg>
+  );
+}
+function LayersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 3 9 5-9 5-9-5 9-5z" />
+      <path d="m3 13 9 5 9-5" />
+    </svg>
+  );
+}
+function ChartIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 20V10" />
+      <path d="M10 20V4" />
+      <path d="M16 20v-7" />
+      <path d="M22 20H2" />
+    </svg>
+  );
+}
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ active, onSelect }: {
@@ -133,36 +208,51 @@ function Sidebar({ active, onSelect }: {
         India Segmentation
       </div>
       <nav style={{ display: 'flex', flexDirection: 'column' }}>
-        {NAV.map((item) => {
-          const isActive = item.key === active;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onSelect(item.key)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 20px',
-                background: isActive ? ui.color.sidebarActive : 'transparent',
-                color: ui.color.sidebarText,
-                border: 'none',
-                borderLeft: `3px solid ${isActive ? ui.color.accent : 'transparent'}`,
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontFamily: ui.font,
-                fontSize: 14,
-                fontWeight: isActive ? 600 : 400,
-              }}
-            >
-              <span style={{ display: 'inline-flex', opacity: isActive ? 1 : 0.7 }}>
-                {item.icon}
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
+        {NAV_SECTIONS.map((section, sIdx) => (
+          <div key={section.heading} style={{ marginTop: sIdx === 0 ? 0 : 14 }}>
+            <div style={{
+              padding: '6px 20px',
+              fontSize: 10,
+              letterSpacing: 1.2,
+              textTransform: 'uppercase',
+              color: ui.color.sidebarTextMuted,
+              opacity: 0.7,
+            }}>
+              {section.heading}
+            </div>
+            {section.items.map((item) => {
+              const isActive = item.key === active;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => onSelect(item.key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 20px',
+                    background: isActive ? ui.color.sidebarActive : 'transparent',
+                    color: ui.color.sidebarText,
+                    border: 'none',
+                    borderLeft: `3px solid ${isActive ? ui.color.accent : 'transparent'}`,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontFamily: ui.font,
+                    fontSize: 14,
+                    fontWeight: isActive ? 600 : 400,
+                    width: '100%',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', opacity: isActive ? 1 : 0.7 }}>
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div style={{ marginTop: 'auto', padding: '16px 20px', fontSize: 11, color: ui.color.sidebarTextMuted, borderTop: `1px solid rgba(255,255,255,0.06)` }}>
@@ -511,6 +601,247 @@ function MapPlaceholder({ granularity, segment }: { granularity: Granularity; se
   );
 }
 
+// ── Roadmap primitives ───────────────────────────────────────────────────────
+type StatusKind = 'live' | 'in-progress' | 'planned' | 'caveat';
+
+const STATUS_STYLE: Record<StatusKind, { bg: string; fg: string; label: string }> = {
+  live:          { bg: '#dcfce7', fg: '#166534', label: 'Live' },
+  'in-progress': { bg: '#fef3c7', fg: '#92400e', label: 'In progress' },
+  planned:       { bg: '#e0e7ff', fg: '#3730a3', label: 'Planned' },
+  caveat:        { bg: '#fee2e2', fg: '#991b1b', label: 'Caveat' },
+};
+
+function StatusPill({ kind }: { kind: StatusKind }) {
+  const s = STATUS_STYLE[kind];
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: 999,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      background: s.bg,
+      color: s.fg,
+    }}>
+      {s.label}
+    </span>
+  );
+}
+
+function PageHeader({ title, lede }: { title: string; lede: string }) {
+  return (
+    <div>
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: ui.color.text }}>
+        {title}
+      </h1>
+      <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13 }}>{lede}</p>
+    </div>
+  );
+}
+
+function NoteList({
+  items,
+}: { items: { kind: StatusKind; title: string; body: string }[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {items.map((it, i) => (
+        <div key={i} style={{
+          display: 'grid',
+          gridTemplateColumns: '90px 1fr',
+          gap: 14,
+          padding: '12px 14px',
+          background: ui.color.surface,
+          border: `1px solid ${ui.color.border}`,
+          borderRadius: 8,
+        }}>
+          <div><StatusPill kind={it.kind} /></div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: ui.color.text }}>{it.title}</div>
+            <div style={{ fontSize: 12, color: ui.color.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+              {it.body}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Coverage & status ────────────────────────────────────────────────────────
+function CoverageView() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Coverage & status"
+        lede="Where the dashboard stands today: scope of validated analysis, data caveats, and active fixes."
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+        <Kpi label="Validated states" value="3" hint="Bihar · Jharkhand · Madhya Pradesh" />
+        <Kpi label="Underlying coverage" value="All-India" hint="Methodology not yet validated outside the 3 states" />
+        <Kpi label="Segmentation type" value="Composite" hint="Across the 3 states, not per-state" />
+      </div>
+
+      <Card title="Validated scope" subtitle="What the current segmentation actually covers">
+        <NoteList items={[
+          { kind: 'live',    title: 'Three-state composite segmentation',
+            body: 'Bihar, Jharkhand and Madhya Pradesh are the only states whose segmentation has been methodologically validated.' },
+          { kind: 'caveat',  title: 'Underlying data exists for all of India',
+            body: 'Raw inputs cover every state, but applying the current model outside the validated three is not supported yet.' },
+          { kind: 'caveat',  title: 'Composite, not state-level',
+            body: 'Segments are derived across the three states together; the dashboard does not yet expose a per-state model.' },
+        ]} />
+      </Card>
+
+      <Card title="Active fixes" subtitle="Visualization issues being corrected">
+        <NoteList items={[
+          { kind: 'in-progress', title: 'Pie chart sizing',
+            body: 'Pies render too small; resizing pass underway so segment slices are legible without zooming.' },
+          { kind: 'in-progress', title: 'Icon and literal display',
+            body: 'A few icons and string literals are rendering incorrectly; cleanup in progress.' },
+          { kind: 'in-progress', title: 'Larger circle visualizations',
+            body: 'Bumping circle/marker sizes so the prevalence layer is readable at typical screen widths.' },
+          { kind: 'in-progress', title: 'Interactive features',
+            body: 'Drill, hover, and selection behaviours are being wired up across the existing charts.' },
+        ]} />
+      </Card>
+    </div>
+  );
+}
+
+// ── Entry points ─────────────────────────────────────────────────────────────
+function EntryPointsView() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Entry points"
+        lede="Set context before showing insights. First-time users should land on facts, not conclusions."
+      />
+
+      <Card title="What a first-time user should see first">
+        <NoteList items={[
+          { kind: 'planned', title: 'Base data sources',
+            body: 'Name the underlying surveys/datasets that feed the model so users know what they are looking at.' },
+          { kind: 'planned', title: 'Collection timeline',
+            body: 'When the data was collected and over what period — required to read prevalence numbers correctly.' },
+          { kind: 'planned', title: 'Methodology summary',
+            body: 'How segments are derived (latent-class on consumption) in plain language, before any chart appears.' },
+          { kind: 'planned', title: 'Facts before insights',
+            body: 'Lead with descriptive numbers (households, districts, segments). Save interpretation for later screens.' },
+        ]} />
+      </Card>
+
+      <Card title="Why this matters" subtitle="Avoiding misreads">
+        <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
+          Users currently land on a map without knowing what is being measured, when, or for which states the model is
+          validated. The entry-point work fixes that by treating the first screen as orientation, not analytics.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+// ── Navigation pathways ──────────────────────────────────────────────────────
+function NavigationView() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Navigation pathways"
+        lede="Multiple ways into the data, so users can start from the question they actually have."
+      />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+        <Card title="Geography-first">
+          <StatusPill kind="live" />
+          <p style={{ margin: '10px 0 0', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
+            The current map view. Pick a place, then see its segment composition.
+          </p>
+        </Card>
+        <Card title="Segment-first">
+          <StatusPill kind="planned" />
+          <p style={{ margin: '10px 0 0', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
+            Pick a segment (e.g. Aspirers), then see where it's most prevalent across districts.
+          </p>
+        </Card>
+        <Card title="Urban / rural toggle">
+          <StatusPill kind="planned" />
+          <p style={{ margin: '10px 0 0', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
+            A single switch that re-scopes every chart between urban-only, rural-only, and combined.
+          </p>
+        </Card>
+      </div>
+
+      <Card title="Design intent">
+        <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
+          A policy researcher asks "what's happening in this district". A program designer asks "where do my target
+          households live". The dashboard should support both reading directions without forcing one to detour through
+          the other.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+// ── Compare & curate ─────────────────────────────────────────────────────────
+function CompareCurateView() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Compare & curate"
+        lede="Move beyond single-place views: compare multiple districts and let users assemble their own dashboard."
+      />
+
+      <Card title="Multi-district comparison">
+        <NoteList items={[
+          { kind: 'planned', title: 'Multi-select districts',
+            body: 'Pick more than two districts and hold them in a comparison set across pages.' },
+          { kind: 'planned', title: 'Side-by-side bar / line graphs',
+            body: 'Prevalence shown on the same axes for the chosen districts, so differences read at a glance.' },
+        ]} />
+      </Card>
+
+      <Card title="User-curated dashboards">
+        <NoteList items={[
+          { kind: 'planned', title: 'Save a personal view',
+            body: 'Let users assemble the charts they care about into their own dashboard, instead of scrolling the default one every time.' },
+          { kind: 'planned', title: 'Filter scopes',
+            body: 'Per-view filters for all-segments, rural-only, and urban-only — applied consistently across every chart in the curated dashboard.' },
+        ]} />
+      </Card>
+    </div>
+  );
+}
+
+// ── Visualization roadmap ────────────────────────────────────────────────────
+function VizRoadmapView() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        title="Visualization roadmap"
+        lede="Layout and disclosure changes that reduce cognitive load on every screen."
+      />
+
+      <Card title="Layout">
+        <NoteList items={[
+          { kind: 'planned', title: 'Horizontal segment layout',
+            body: 'Lay segments out left-to-right rather than stacked vertically — easier to scan share-of-population at a glance.' },
+        ]} />
+      </Card>
+
+      <Card title="Multi-level viewing">
+        <NoteList items={[
+          { kind: 'planned', title: 'Three-state → state → district',
+            body: 'A consistent drill path so users always know which level they are at and how to step up or down.' },
+          { kind: 'planned', title: 'Progressive disclosure',
+            body: 'Show summary first, detail on demand. Avoid putting every breakdown on one screen.' },
+        ]} />
+      </Card>
+    </div>
+  );
+}
+
 // ── Shell ────────────────────────────────────────────────────────────────────
 function HomeShell() {
   const [view, setView] = useState<ViewKey>('overview');
@@ -532,6 +863,11 @@ function HomeShell() {
         {view === 'overview' && <OverviewView />}
         {view === 'comparison' && <ComparisonView />}
         {view === 'prevalence' && <PrevalenceMapView />}
+        {view === 'coverage' && <CoverageView />}
+        {view === 'entry-points' && <EntryPointsView />}
+        {view === 'navigation' && <NavigationView />}
+        {view === 'compare-curate' && <CompareCurateView />}
+        {view === 'viz-roadmap' && <VizRoadmapView />}
       </main>
     </div>
   );
