@@ -102,6 +102,22 @@ services:
     # NOTE: This is a one-shot builder; it builds the .supx bundle and exits.
     # The reconciler auto-discovers the bundle from extensions/bundles/.
 
+  # ── Extension builder: home-shell (one-shot) ───────────────────────────────
+  # Builds the India Segmentation Home Shell extension (Pathways-style left
+  # sidebar that replaces the Welcome page, keeping the top nav). Outputs the
+  # .supx to extensions/bundles/, where the reconciler auto-discovers it and
+  # exports HOME_SHELL_SUPX_PATH for the runtime seeder.
+  extension-builder-home-shell:
+    build:
+      context: ./superset-extensions/home-shell
+      dockerfile: Dockerfile.builder
+    container_name: superset-extension-builder-home-shell
+    restart: "no"
+    volumes:
+      - ./extensions/bundles:/output
+    networks:
+      - superset-net
+
   # ── Superset metadata DB ───────────────────────────────────────────────────
   metadata-db:
     image: ${POSTGRES_IMAGE:-postgres:18-alpine}
@@ -420,6 +436,8 @@ services:
       analytics-db:
         condition: service_healthy
       extension-builder:
+        condition: service_completed_successfully
+      extension-builder-home-shell:
         condition: service_completed_successfully
     environment:
       <<: *superset-env

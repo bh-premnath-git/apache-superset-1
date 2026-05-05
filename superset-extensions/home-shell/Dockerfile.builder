@@ -1,0 +1,40 @@
+# Builder for the home-shell extension.
+# Produces a .supx package ready for the Superset Extensions framework.
+
+FROM node:lts-alpine3.22 AS frontend-build
+WORKDIR /build/frontend
+
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.11-bookworm AS backend-build
+WORKDIR /build
+
+# Install Node.js 20.x with npm 10+ (required by superset-extensions-cli)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install apache-superset-extensions-cli
+
+# Copy backend source
+COPY backend/ ./backend/
+COPY extension.json ./
+
+# Copy frontend sources (CLI expects convention frontend/src/index.tsx)
+COPY frontend/ ./frontend/
+# Also copy built frontend artifacts from previous stage
+COPY --from=frontend-build /build/frontend/dist ./frontend/dist/
+
+# Build the extension package
+RUN mkdir -p /output && superset-extensions bundle --output /output/my-org.home-shell-0.1.0.supx
+
+# Final stage - copy .supx to volume-mounted /output at runtime
+FROM alpine:latest
+COPY --from=backend-build /output/ /built/
+CMD ["sh", "-c", "cp /built/*.supx /output/ && ls -la /output/"]
