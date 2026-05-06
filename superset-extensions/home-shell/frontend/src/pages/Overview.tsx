@@ -1,20 +1,14 @@
 import * as React from 'react';
+import { useMemo } from 'react';
 import { ui } from '../theme';
 import { Card } from '../components/Card';
 import { Kpi } from '../components/Kpi';
+import { api, useFetch } from '../api';
 
 // Living Conditions Approach (LCA) segmentation as defined in
 // seed/pg/002_lca_segment_views.sql. Rural and urban households are
 // classified separately from digital, asset and connectivity signals
-// recorded on household.hh_master:
-//
-//   digital_score   = (any_internet ? 2) + (Possess_Mobile ? 1) + (Online_Groceries ? 1)
-//   asset_score     = (Possess_Car ? 2) + (Possess_Mobile ? 1)
-//   internet_access = any_internet
-//   mobile_ownership = Possess_Mobile
-//
-// Anything missing all signals falls into the most-constrained bucket
-// (R4 / U3).
+// recorded on household.hh_master.
 
 type Band = 'Rural' | 'Urban';
 
@@ -26,116 +20,77 @@ interface SegmentDef {
   color: string;
 }
 
-const SEGMENT_DEFS: SegmentDef[] = [
-  {
+const SEGMENT_DEFS: Record<string, SegmentDef> = {
+  R1: {
     code: 'R1',
     band: 'Rural',
     label: 'Connected, asset-rich rural',
     rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
     color: '#1d4ed8',
   },
-  {
+  R2: {
     code: 'R2',
     band: 'Rural',
     label: 'Digitally engaged rural',
     rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not R1)',
     color: '#2563eb',
   },
-  {
+  R3: {
     code: 'R3',
     band: 'Rural',
     label: 'Low-connectivity rural',
     rule: 'digital_score ≤ 1 AND internet_access = 0',
     color: '#60a5fa',
   },
-  {
+  R4: {
     code: 'R4',
     band: 'Rural',
     label: 'Most constrained rural',
     rule: 'fallback — none of R1/R2/R3 apply',
     color: '#93c5fd',
   },
-  {
+  U1: {
     code: 'U1',
     band: 'Urban',
     label: 'Connected, asset-rich urban',
     rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
     color: '#9333ea',
   },
-  {
+  U2: {
     code: 'U2',
     band: 'Urban',
     label: 'Digitally engaged urban',
     rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not U1)',
     color: '#a855f7',
   },
-  {
+  U3: {
     code: 'U3',
     band: 'Urban',
     label: 'Most constrained urban',
     rule: 'fallback — neither U1 nor U2 applies',
     color: '#c4b5fd',
   },
-];
+};
 
-interface DatasetEntry {
-  key: string;
-  view: string;
-  purpose: string;
+const SEGMENT_ORDER = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
+
+function fmtInt(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return Math.round(n).toLocaleString('en-IN');
 }
 
-// Sourced from /apache-superset-1/assets/datasets/*.yaml
-const DATASETS: DatasetEntry[] = [
-  {
-    key: 'hh_master',
-    view: 'household.hh_master',
-    purpose: 'Base household survey table (NSSO HCES-style); inputs to LCA scoring',
-  },
-  {
-    key: 'lca_segment_distribution',
-    view: 'household.vw_segment_distribution',
-    purpose: 'All-India weighted households per (state, sector, segment)',
-  },
-  {
-    key: 'lca_state_segment_distribution',
-    view: 'household.vw_state_segment_distribution',
-    purpose: 'Per-state stacked bars — Bihar / Jharkhand / Madhya Pradesh',
-  },
-  {
-    key: 'lca_state_district_segment',
-    view: 'household.vw_state_district_segment',
-    purpose: 'Long-form (state, district, segment) feeding state_district_pies',
-  },
-  {
-    key: 'lca_state_district_segment_geo',
-    view: 'household.vw_state_district_segment_geo',
-    purpose: 'District-grain segment mix with GeoJSON Point geometry',
-  },
-  {
-    key: 'lca_district_segment_pie',
-    view: 'household.vw_district_segment_pie',
-    purpose: 'Pre-computed segment % + cumulative endpoints for conic-gradient pies',
-  },
-  {
-    key: 'lca_segment_minor_bucket',
-    view: 'household.vw_segment_minor_bucket',
-    purpose: 'Weighted households by U15-minor bucket × segment × state × sector',
-  },
-  {
-    key: 'lca_mpce_by_segment',
-    view: 'household.vw_mpce_by_segment',
-    purpose: 'Monthly per-capita expenditure aggregated to (segment, sector)',
-  },
-  {
-    key: 'hh_master_metrics_geo',
-    view: 'household.vw_hh_master_metrics_geo',
-    purpose: 'Per-household enrichment with segment + district_name for detail drill',
-  },
-];
+function fmtPct(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return `${n.toFixed(1)}%`;
+}
 
-const FOCUS_STATES = ['Bihar', 'Jharkhand', 'Madhya Pradesh'];
-
-function SegmentCard({ s }: { s: SegmentDef }) {
+function SegmentCard({
+  s,
+  share,
+}: {
+  s: SegmentDef;
+  share?: number;
+}) {
   return (
     <div
       style={{
@@ -154,14 +109,39 @@ function SegmentCard({ s }: { s: SegmentDef }) {
         <span style={{ fontSize: 11, color: ui.color.textMuted }}>{s.band}</span>
       </div>
       <div style={{ fontSize: 13, color: ui.color.text }}>{s.label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+        <span style={{ fontWeight: 700, color: ui.color.text }}>{fmtPct(share)}</span>
+        <div style={{ flex: 1, background: ui.color.surfaceMuted, borderRadius: 4, height: 6 }}>
+          <div
+            style={{
+              width: `${Math.min(100, share ?? 0)}%`,
+              height: '100%',
+              background: s.color,
+              borderRadius: 4,
+            }}
+          />
+        </div>
+      </div>
       <code style={{ fontSize: 11, color: ui.color.textMuted, lineHeight: 1.5 }}>{s.rule}</code>
     </div>
   );
 }
 
 export function OverviewView() {
-  const rural = SEGMENT_DEFS.filter((s) => s.band === 'Rural');
-  const urban = SEGMENT_DEFS.filter((s) => s.band === 'Urban');
+  const summary = useFetch(() => api.summary(), []);
+  const segments = useFetch(() => api.segments(), []);
+  const mpce = useFetch(() => api.mpce(), []);
+
+  const sharesByCode = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const row of segments.data?.segments ?? []) map[row.segment] = row.share_pct;
+    return map;
+  }, [segments.data]);
+
+  const rural = SEGMENT_ORDER.filter((c) => SEGMENT_DEFS[c].band === 'Rural').map((c) => SEGMENT_DEFS[c]);
+  const urban = SEGMENT_ORDER.filter((c) => SEGMENT_DEFS[c].band === 'Urban').map((c) => SEGMENT_DEFS[c]);
+
+  const fetchError = summary.error ?? segments.error ?? mpce.error;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -173,21 +153,44 @@ export function OverviewView() {
           Living Conditions Approach (LCA) segmentation of Indian households using digital,
           asset and connectivity signals from <code>household.hh_master</code> (NSSO HCES-style
           survey schema). Rural households are classified into <strong>R1–R4</strong> (best to most
-          constrained) and urban households into <strong>U1–U3</strong>. Weighted by survey weight
-          <code> wt</code> on every aggregate. Focus states: Bihar, Jharkhand, Madhya Pradesh.
+          constrained) and urban households into <strong>U1–U3</strong>. All counts on this page
+          are weighted by the survey weight <code>wt</code>. Focus states:{' '}
+          {(summary.data?.states_focus ?? ['Bihar', 'Jharkhand', 'Madhya Pradesh']).join(', ')}.
         </p>
       </div>
 
+      {fetchError && (
+        <div style={{ padding: 12, border: `1px solid ${ui.color.border}`, borderRadius: 8, color: '#b00020', fontSize: 12 }}>
+          Could not load live segmentation data: {fetchError.message}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14 }}>
-        <Kpi label="Focus states" value="3" hint={FOCUS_STATES.join(', ')} />
-        <Kpi label="Segments" value="7" hint="R1–R4 rural · U1–U3 urban" />
-        <Kpi label="Analytic views" value={String(DATASETS.length - 1)} hint="Built on household.hh_master" />
-        <Kpi label="Source schema" value="household" hint="PostgreSQL · db.analytics" />
+        <Kpi
+          label="Weighted households"
+          value={summary.loading ? '…' : fmtInt(summary.data?.weighted_households)}
+          hint={`SUM(wt) over ${(summary.data?.states_focus ?? []).length || 3} focus states`}
+        />
+        <Kpi
+          label="Districts covered"
+          value={summary.loading ? '…' : fmtInt(summary.data?.districts_covered)}
+          hint="Distinct district_name in vw_state_district_segment_geo"
+        />
+        <Kpi
+          label="Segments observed"
+          value={summary.loading ? '…' : fmtInt(summary.data?.segments_observed)}
+          hint="R1–R4 rural · U1–U3 urban"
+        />
+        <Kpi
+          label="States in focus"
+          value={summary.loading ? '…' : fmtInt(summary.data?.states_covered)}
+          hint={(summary.data?.states_focus ?? []).join(', ')}
+        />
       </div>
 
       <Card
-        title="LCA segments"
-        subtitle="Definitions sourced from seed/pg/002_lca_segment_views.sql"
+        title="LCA segments — weighted share"
+        subtitle="Definitions from seed/pg/002_lca_segment_views.sql · shares from vw_state_segment_distribution"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
@@ -195,7 +198,9 @@ export function OverviewView() {
               Rural band — classified when <code>sector_label</code> is not Urban
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-              {rural.map((s) => <SegmentCard key={s.code} s={s} />)}
+              {rural.map((s) => (
+                <SegmentCard key={s.code} s={s} share={sharesByCode[s.code]} />
+              ))}
             </div>
           </div>
           <div>
@@ -203,13 +208,54 @@ export function OverviewView() {
               Urban band — classified when <code>sector_label ILIKE 'Urban'</code>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-              {urban.map((s) => <SegmentCard key={s.code} s={s} />)}
+              {urban.map((s) => (
+                <SegmentCard key={s.code} s={s} share={sharesByCode[s.code]} />
+              ))}
             </div>
           </div>
         </div>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <Card title="Weighted MPCE per segment" subtitle="₹ / month — vw_mpce_by_segment (focus states)">
+          {mpce.loading ? (
+            <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>
+          ) : (mpce.data?.segments?.length ?? 0) === 0 ? (
+            <div style={{ fontSize: 12, color: ui.color.textMuted }}>No data available.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+              {(mpce.data?.segments ?? []).map((row) => {
+                const def = SEGMENT_DEFS[row.segment];
+                const max = Math.max(...(mpce.data?.segments ?? []).map((r) => r.mean_mpce || 0), 1);
+                return (
+                  <div
+                    key={row.segment}
+                    style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px 70px', alignItems: 'center', gap: 8 }}
+                  >
+                    <strong style={{ color: ui.color.text }}>{row.segment}</strong>
+                    <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 8 }}>
+                      <div
+                        style={{
+                          width: `${(row.mean_mpce / max) * 100}%`,
+                          height: '100%',
+                          background: def?.color ?? '#1d4ed8',
+                          borderRadius: 4,
+                        }}
+                      />
+                    </div>
+                    <span style={{ textAlign: 'right', color: ui.color.text }}>
+                      ₹{fmtInt(row.mean_mpce)}
+                    </span>
+                    <span style={{ textAlign: 'right', color: ui.color.textMuted, fontSize: 11 }}>
+                      ±{fmtInt(row.stddev_mpce)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
         <Card title="Classification signals" subtitle="Computed per household from hh_master columns">
           <div style={{ fontSize: 13, color: ui.color.text, lineHeight: 1.7 }}>
             <div>
@@ -235,71 +281,45 @@ export function OverviewView() {
             </div>
           </div>
         </Card>
-
-        <Card title="Aggregates carried per row" subtitle="Why grain matters for drill-by">
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: ui.color.text, lineHeight: 1.7 }}>
-            <li>
-              <code>seg_weight</code> = SUM(wt) — weighted household count per segment
-            </li>
-            <li>
-              <code>hh_weight</code> on <code>vw_state_district_segment*</code> — same SUM(wt),
-              renamed for the <code>state_district_pies</code> plugin
-            </li>
-            <li>
-              <code>weighted_mean_mpce</code> = SUM(mean_mpce·weighted_count) / SUM(weighted_count)
-              on <code>vw_mpce_by_segment</code>
-            </li>
-            <li>
-              Dimensions <code>state_label</code> and <code>sector_label</code> are kept on every
-              view so Superset's drill-by has pivot targets
-            </li>
-          </ul>
-        </Card>
       </div>
 
       <Card
-        title="Data sources"
-        subtitle="Datasets registered under assets/datasets/*.yaml against db.analytics"
+        title="Weighted households per state"
+        subtitle="vw_state_segment_distribution · SUM(wt) per state_label"
       >
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: ui.color.textMuted }}>
-                <th style={{ padding: '6px 10px 6px 0', fontWeight: 600 }}>Asset key</th>
-                <th style={{ padding: '6px 10px', fontWeight: 600 }}>Schema.view</th>
-                <th style={{ padding: '6px 10px', fontWeight: 600 }}>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DATASETS.map((d) => (
-                <tr key={d.key} style={{ borderTop: `1px solid ${ui.color.border}` }}>
-                  <td style={{ padding: '8px 10px 8px 0', color: ui.color.text }}>{d.key}</td>
-                  <td style={{ padding: '8px 10px', color: ui.color.text }}>
-                    <code>{d.view}</code>
-                  </td>
-                  <td style={{ padding: '8px 10px', color: ui.color.textMuted }}>{d.purpose}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card title="Charts wired against this segmentation" subtitle="assets/charts/*.yaml">
-        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: ui.color.text, lineHeight: 1.7 }}>
-          <li>
-            <strong>chart.household.district_pie_unified</strong> —{' '}
-            <code>state_district_pies</code> plugin over{' '}
-            <code>vw_state_district_segment_geo</code>; state choropleth + per-district pies, drill
-            into rural/urban detail tables
-          </li>
-          <li>
-            <strong>chart.household.three_state_comparison</strong> —{' '}
-            <code>three_state_comparison</code> plugin over{' '}
-            <code>vw_state_segment_distribution</code> filtered to Bihar / Jharkhand / Madhya
-            Pradesh, segment order <code>R1, R2, R3, R4, U1, U2, U3</code>
-          </li>
-        </ul>
+        {summary.loading ? (
+          <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
+            {(summary.data?.per_state ?? []).map((row) => {
+              const max = Math.max(
+                ...((summary.data?.per_state ?? []).map((r) => r.weighted_households) || [1]),
+                1,
+              );
+              return (
+                <div
+                  key={row.state}
+                  style={{ display: 'grid', gridTemplateColumns: '180px 1fr 120px', alignItems: 'center', gap: 10 }}
+                >
+                  <span style={{ color: ui.color.text }}>{row.state}</span>
+                  <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 8 }}>
+                    <div
+                      style={{
+                        width: `${(row.weighted_households / max) * 100}%`,
+                        height: '100%',
+                        background: '#1d4ed8',
+                        borderRadius: 4,
+                      }}
+                    />
+                  </div>
+                  <span style={{ textAlign: 'right', color: ui.color.textMuted }}>
+                    {fmtInt(row.weighted_households)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
     </div>
   );

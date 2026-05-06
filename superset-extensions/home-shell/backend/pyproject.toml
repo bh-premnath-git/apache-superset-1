@@ -1,12 +1,13 @@
 [project]
 name = "my-org-home-shell"
 version = "0.1.0"
-description = "Backend stub for India Segmentation Home Shell Superset extension"
+description = "Backend for India Segmentation Home Shell Superset extension — serves LCA segmentation aggregates"
 requires-python = ">=3.10"
 dependencies = [
   "flask>=2.3",
   "flask-appbuilder>=4.3",
   "apache-superset-core>=0.1.0rc2",
+  "sqlalchemy>=1.4",
 ]
 
 [build-system]

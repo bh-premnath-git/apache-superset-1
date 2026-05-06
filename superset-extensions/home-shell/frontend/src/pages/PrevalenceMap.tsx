@@ -2,8 +2,8 @@ import * as React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { geoMercator, geoPath } from 'd3-geo';
 import { ui } from '../theme';
-import { SEGMENTS, hashShare } from '../data';
 import { Card } from '../components/Card';
+import { api, useFetch } from '../api';
 
 // India-districts GeoJSON is served by Superset alongside the
 // state_district_pies plugin (see assets/charts/district_pie_unified.yaml).
@@ -12,6 +12,9 @@ const GEOJSON_URL = '/static/assets/india-districts.geojson';
 
 const TARGET_STATES = ['Bihar', 'Madhya Pradesh', 'Jharkhand'] as const;
 type StateName = (typeof TARGET_STATES)[number];
+
+const SEGMENT_CODES = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
+type SegmentCode = (typeof SEGMENT_CODES)[number];
 
 interface GeoFeature {
   type: 'Feature';
@@ -70,8 +73,6 @@ interface DrillState {
   onDistrictClick: (d: string) => void;
 }
 
-// Mirrors useDrillDown from plugin-chart-state-district-pies, scoped to the
-// three-state cohort.
 function useDrillDown(): DrillState {
   const [level, setLevel] = useState<DrillLevel>('states');
   const [selectedState, setSelectedState] = useState<StateName | null>(null);
@@ -106,8 +107,8 @@ function useDrillDown(): DrillState {
   };
 }
 
-function fillForShare(share: number) {
-  const intensity = Math.min(1, Math.max(0.1, share / 45));
+function fillForShare(share: number, max: number): string {
+  const intensity = Math.min(1, Math.max(0.08, share / Math.max(max, 1)));
   return `rgba(29, 78, 216, ${intensity})`;
 }
 
@@ -115,17 +116,23 @@ function StateMap({
   features,
   state,
   segment,
+  shareByDistrict,
   width,
   height,
   onClick,
 }: {
   features: GeoFeature[];
   state: StateName;
-  segment: string;
+  segment: SegmentCode;
+  shareByDistrict: Record<string, number>;
   width: number;
   height: number;
   onClick?: () => void;
 }) {
+  const max = useMemo(
+    () => Math.max(0, ...Object.values(shareByDistrict)),
+    [shareByDistrict],
+  );
   const { paths, outline } = useMemo(() => {
     const fc: GeoFC = { type: 'FeatureCollection', features };
     const projection = geoMercator().fitExtent(
@@ -150,20 +157,22 @@ function StateMap({
       width={width}
       height={height}
       role="img"
-      aria-label={`${state} districts`}
+      aria-label={`${state} ${segment} share`}
       onClick={onClick}
       style={{ cursor: onClick ? 'pointer' : 'default', display: 'block' }}
     >
       {paths.map((p, i) => {
-        const share = (hashShare(`${state}-${p.name}-${segment}`) % 35) + 10;
+        const share = shareByDistrict[p.name] ?? 0;
         return (
           <path
             key={i}
             d={p.d}
-            fill={fillForShare(share)}
+            fill={fillForShare(share, max)}
             stroke="#fff"
             strokeWidth={0.4}
-          />
+          >
+            <title>{`${p.name} — ${segment}: ${share.toFixed(1)}%`}</title>
+          </path>
         );
       })}
       <path d={outline} fill="none" stroke="#1f2937" strokeWidth={1} pointerEvents="none" />
@@ -175,6 +184,7 @@ function DistrictMap({
   features,
   state,
   segment,
+  shareByDistrict,
   width,
   height,
   selectedDistrict,
@@ -182,14 +192,18 @@ function DistrictMap({
 }: {
   features: GeoFeature[];
   state: StateName;
-  segment: string;
+  segment: SegmentCode;
+  shareByDistrict: Record<string, number>;
   width: number;
   height: number;
   selectedDistrict: string | null;
   onDistrictClick: (d: string) => void;
 }) {
   const [hover, setHover] = useState<string | null>(null);
-
+  const max = useMemo(
+    () => Math.max(0, ...Object.values(shareByDistrict)),
+    [shareByDistrict],
+  );
   const paths = useMemo(() => {
     const fc: GeoFC = { type: 'FeatureCollection', features };
     const projection = geoMercator().fitExtent(
@@ -209,14 +223,14 @@ function DistrictMap({
   return (
     <svg width={width} height={height} role="img" aria-label={`${state} district map`} style={{ display: 'block' }}>
       {paths.map((p, i) => {
-        const share = (hashShare(`${state}-${p.name}-${segment}`) % 35) + 10;
+        const share = shareByDistrict[p.name] ?? 0;
         const isSelected = selectedDistrict === p.name;
         const isHover = hover === p.name;
         return (
           <path
             key={i}
             d={p.d}
-            fill={fillForShare(share)}
+            fill={fillForShare(share, max)}
             stroke={isSelected ? '#0f172a' : '#fff'}
             strokeWidth={isSelected ? 2 : isHover ? 1.2 : 0.5}
             style={{ cursor: 'pointer' }}
@@ -224,7 +238,7 @@ function DistrictMap({
             onMouseEnter={() => setHover(p.name)}
             onMouseLeave={() => setHover((h) => (h === p.name ? null : h))}
           >
-            <title>{`${p.name} — ${share}% ${segment}`}</title>
+            <title>{`${p.name} — ${segment}: ${share.toFixed(1)}%`}</title>
           </path>
         );
       })}
@@ -286,14 +300,17 @@ function StateCard({
   state,
   segment,
   features,
+  shareByDistrict,
+  stateShare,
   onClick,
 }: {
   state: StateName;
-  segment: string;
+  segment: SegmentCode;
   features: GeoFeature[];
+  shareByDistrict: Record<string, number>;
+  stateShare: number | undefined;
   onClick: () => void;
 }) {
-  const share = (hashShare(state + segment) % 35) + 10;
   return (
     <div
       role="button"
@@ -316,18 +333,48 @@ function StateCard({
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: ui.color.text }}>{state}</span>
-        <span style={{ fontSize: 12, color: ui.color.textMuted }}>{share}% {segment}</span>
+        <span style={{ fontSize: 12, color: ui.color.textMuted }}>
+          {stateShare == null ? '—' : `${stateShare.toFixed(1)}% ${segment}`}
+        </span>
       </div>
-      <StateMap features={features} state={state} segment={segment} width={260} height={220} />
+      <StateMap
+        features={features}
+        state={state}
+        segment={segment}
+        shareByDistrict={shareByDistrict}
+        width={260}
+        height={220}
+      />
       <span style={{ fontSize: 11, color: ui.color.textMuted }}>Click to drill into districts →</span>
     </div>
   );
 }
 
 export function PrevalenceMapView() {
-  const [segment, setSegment] = useState('Aspirers');
+  const [segment, setSegment] = useState<SegmentCode>('R1');
   const drill = useDrillDown();
   const geo = useGeo();
+  const stateSegments = useFetch(() => api.statesSegments([...TARGET_STATES]), []);
+
+  // Fetch districts for the focus states up front so the state cards on the
+  // first level can shade by real district shares for the chosen segment.
+  // Three small queries in parallel; results are stable across segment toggles.
+  const districtsBihar = useFetch(() => api.stateDistricts('Bihar'), []);
+  const districtsMP = useFetch(() => api.stateDistricts('Madhya Pradesh'), []);
+  const districtsJharkhand = useFetch(() => api.stateDistricts('Jharkhand'), []);
+  const districtsByState: Record<StateName, Awaited<ReturnType<typeof api.stateDistricts>> | undefined> = {
+    Bihar: districtsBihar.data,
+    'Madhya Pradesh': districtsMP.data,
+    Jharkhand: districtsJharkhand.data,
+  };
+
+  const districtDetail = useFetch(
+    () =>
+      drill.selectedState && drill.selectedDistrict
+        ? api.districtDetail(drill.selectedState, drill.selectedDistrict)
+        : Promise.resolve(undefined as never),
+    [drill.selectedState, drill.selectedDistrict],
+  );
 
   const featuresByState = useMemo(() => {
     const map: Record<string, GeoFeature[]> = {};
@@ -341,12 +388,29 @@ export function PrevalenceMapView() {
     return map;
   }, [geo.data]);
 
-  const districtNames = useMemo(() => {
-    if (!drill.selectedState) return [];
-    return (featuresByState[drill.selectedState] ?? [])
-      .map((f) => String(f.properties.NAME_2 ?? ''))
-      .filter(Boolean);
-  }, [featuresByState, drill.selectedState]);
+  const stateShareByCode = useMemo(() => {
+    const out: Record<string, Record<string, number>> = {};
+    for (const row of stateSegments.data?.states ?? []) {
+      const inner: Record<string, number> = {};
+      for (const seg of row.segments) inner[seg.segment] = seg.share_pct;
+      out[row.state] = inner;
+    }
+    return out;
+  }, [stateSegments.data]);
+
+  function shareMapForState(state: StateName, seg: SegmentCode): Record<string, number> {
+    const payload = districtsByState[state];
+    if (!payload) return {};
+    const out: Record<string, number> = {};
+    for (const d of payload.districts) {
+      const match = d.segments.find((s) => s.segment === seg);
+      out[d.district] = match ? match.share_pct : 0;
+    }
+    return out;
+  }
+
+  const fetchError =
+    geo.error ?? stateSegments.error ?? districtsBihar.error ?? districtsMP.error ?? districtsJharkhand.error;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -355,7 +419,9 @@ export function PrevalenceMapView() {
           Prevalence map
         </h1>
         <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13 }}>
-          Segment share across Bihar, Madhya Pradesh and Jharkhand. Click a state to drill into its districts.
+          LCA segment share across Bihar, Madhya Pradesh and Jharkhand. Districts shaded by
+          weighted household share for the selected segment (vw_state_district_segment_geo).
+          Click a state to drill into its districts.
         </p>
       </div>
 
@@ -365,7 +431,7 @@ export function PrevalenceMapView() {
           Segment
           <select
             value={segment}
-            onChange={(e) => setSegment(e.target.value)}
+            onChange={(e) => setSegment(e.target.value as SegmentCode)}
             style={{
               padding: '6px 10px',
               fontSize: 13,
@@ -375,20 +441,23 @@ export function PrevalenceMapView() {
               color: ui.color.text,
             }}
           >
-            {SEGMENTS.map((s) => (
-              <option key={s.segment} value={s.segment}>{s.segment}</option>
+            {SEGMENT_CODES.map((s) => (
+              <option key={s} value={s}>
+                {s} {s.startsWith('R') ? '(Rural)' : '(Urban)'}
+              </option>
             ))}
           </select>
         </label>
       </div>
 
+      {fetchError && (
+        <div style={{ padding: 12, border: `1px solid ${ui.color.border}`, borderRadius: 8, color: '#b00020', fontSize: 12 }}>
+          Could not load segmentation data: {fetchError.message}
+        </div>
+      )}
+
       {geo.loading && (
         <div style={{ padding: 24, color: ui.color.textMuted, fontSize: 13 }}>Loading map…</div>
-      )}
-      {geo.error && (
-        <div style={{ padding: 16, color: '#b00020', fontSize: 13 }}>
-          Failed to load map data: {geo.error.message}
-        </div>
       )}
 
       {!geo.loading && !geo.error && drill.level === 'states' && (
@@ -399,6 +468,8 @@ export function PrevalenceMapView() {
               state={s}
               segment={segment}
               features={featuresByState[s] ?? []}
+              shareByDistrict={shareMapForState(s, segment)}
+              stateShare={stateShareByCode[s]?.[segment]}
               onClick={() => drill.onStateClick(s)}
             />
           ))}
@@ -412,6 +483,7 @@ export function PrevalenceMapView() {
               features={featuresByState[drill.selectedState] ?? []}
               state={drill.selectedState}
               segment={segment}
+              shareByDistrict={shareMapForState(drill.selectedState, segment)}
               width={620}
               height={460}
               selectedDistrict={null}
@@ -422,8 +494,11 @@ export function PrevalenceMapView() {
 
           <Card title="Top districts" subtitle={`Highest ${segment} share`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, maxHeight: 460, overflowY: 'auto' }}>
-              {districtNames
-                .map((name) => ({ name, score: (hashShare(name + segment) % 35) + 10 }))
+              {(districtsByState[drill.selectedState]?.districts ?? [])
+                .map((d) => ({
+                  name: d.district,
+                  score: d.segments.find((s) => s.segment === segment)?.share_pct ?? 0,
+                }))
                 .sort((a, b) => b.score - a.score)
                 .map(({ name, score }) => (
                   <button
@@ -445,9 +520,11 @@ export function PrevalenceMapView() {
                   >
                     <span>{name}</span>
                     <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 6 }}>
-                      <div style={{ width: `${(score / 45) * 100}%`, height: '100%', background: '#1d4ed8', borderRadius: 4 }} />
+                      <div style={{ width: `${Math.min(100, score)}%`, height: '100%', background: '#1d4ed8', borderRadius: 4 }} />
                     </div>
-                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>{score}%</span>
+                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>
+                      {score.toFixed(1)}%
+                    </span>
                   </button>
                 ))}
             </div>
@@ -464,36 +541,54 @@ export function PrevalenceMapView() {
               )}
               state={drill.selectedState}
               segment={segment}
+              shareByDistrict={shareMapForState(drill.selectedState, segment)}
               width={420}
               height={320}
               selectedDistrict={drill.selectedDistrict}
               onDistrictClick={() => undefined}
             />
             <div style={{ marginTop: 10, fontSize: 36, fontWeight: 700, color: ui.color.text }}>
-              {(hashShare(drill.selectedDistrict + segment) % 35) + 10}%
+              {(() => {
+                const seg = districtDetail.data?.segments?.find((s) => s.segment === segment);
+                return seg ? `${seg.share_pct.toFixed(1)}%` : '—';
+              })()}
             </div>
             <p style={{ marginTop: 6, fontSize: 12, color: ui.color.textMuted }}>
-              Detail metrics will be sourced from the same dataset the
-              {' '}<code>state_district_pies</code> plugin reads
-              (<code>household.vw_state_segment_distribution</code>).
+              Sourced live from <code>household.vw_state_district_segment_geo</code> via the
+              home-shell backend (<code>/extensions/my-org/home-shell/states/{drill.selectedState}/districts/{drill.selectedDistrict}</code>).
             </p>
           </Card>
 
-          <Card title="Segment mix" subtitle={`${drill.selectedDistrict} households`}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-              {SEGMENTS.map((s) => {
-                const share = (hashShare(drill.selectedDistrict + s.segment) % 30) + 5;
-                return (
-                  <div key={s.segment} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 40px', alignItems: 'center', gap: 8 }}>
-                    <span>{s.segment}</span>
+          <Card title="Segment mix" subtitle={`${drill.selectedDistrict} households (weighted)`}>
+            {districtDetail.loading ? (
+              <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>
+            ) : districtDetail.error ? (
+              <div style={{ fontSize: 12, color: '#b00020' }}>{districtDetail.error.message}</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+                {(districtDetail.data?.segments ?? []).map((s) => (
+                  <div
+                    key={s.segment}
+                    style={{ display: 'grid', gridTemplateColumns: '40px 1fr 60px', alignItems: 'center', gap: 8 }}
+                  >
+                    <strong>{s.segment}</strong>
                     <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 6 }}>
-                      <div style={{ width: `${(share / 35) * 100}%`, height: '100%', background: '#1d4ed8', borderRadius: 4 }} />
+                      <div
+                        style={{
+                          width: `${Math.min(100, s.share_pct)}%`,
+                          height: '100%',
+                          background: '#1d4ed8',
+                          borderRadius: 4,
+                        }}
+                      />
                     </div>
-                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>{share}%</span>
+                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>
+                      {s.share_pct.toFixed(1)}%
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       )}
