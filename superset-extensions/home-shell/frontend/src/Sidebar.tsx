@@ -22,16 +22,6 @@ export function Sidebar({ active, onSelect }: {
       <nav style={{ display: 'flex', flexDirection: 'column' }}>
         {NAV_SECTIONS.map((section, sIdx) => (
           <div key={section.heading} style={{ marginTop: sIdx === 0 ? 0 : 14 }}>
-            <div style={{
-              padding: '6px 20px',
-              fontSize: 10,
-              letterSpacing: 1.2,
-              textTransform: 'uppercase',
-              color: ui.color.sidebarTextMuted,
-              opacity: 0.7,
-            }}>
-              {section.heading}
-            </div>
             {section.items.map((item) => {
               const isActive = item.key === active;
               return (

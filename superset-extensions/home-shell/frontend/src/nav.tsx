@@ -1,28 +1,17 @@
 import * as React from 'react';
 import {
   OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
-  StatusIcon, DoorIcon, PathIcon, LayersIcon, ChartIcon,
 } from './icons';
 import { OverviewView } from './pages/Overview';
 import { ComparisonView } from './pages/Comparison';
 import { DataBrowserView } from './pages/DataBrowser';
 import { PrevalenceMapView } from './pages/PrevalenceMap';
-import { CoverageView } from './pages/Coverage';
-import { EntryPointsView } from './pages/EntryPoints';
-import { NavigationView } from './pages/Navigation';
-import { CompareCurateView } from './pages/CompareCurate';
-import { VizRoadmapView } from './pages/VizRoadmap';
 
 export type ViewKey =
   | 'overview'
   | 'comparison'
   | 'data-browser'
-  | 'prevalence'
-  | 'coverage'
-  | 'entry-points'
-  | 'navigation'
-  | 'compare-curate'
-  | 'viz-roadmap';
+  | 'prevalence';
 
 export type NavContext = { onNavigate: (k: ViewKey) => void };
 
@@ -43,16 +32,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />,  render: () => <ComparisonView /> },
       { key: 'data-browser', label: 'Data browser',  icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
       { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
-    ],
-  },
-  {
-    heading: 'Roadmap & context',
-    items: [
-      { key: 'coverage',       label: 'Coverage & status',     icon: <StatusIcon />, render: () => <CoverageView /> },
-      { key: 'entry-points',   label: 'Entry points',          icon: <DoorIcon />,   render: () => <EntryPointsView /> },
-      { key: 'navigation',     label: 'Navigation pathways',   icon: <PathIcon />,   render: () => <NavigationView /> },
-      { key: 'compare-curate', label: 'Compare & curate',      icon: <LayersIcon />, render: () => <CompareCurateView /> },
-      { key: 'viz-roadmap',    label: 'Visualization roadmap', icon: <ChartIcon />,  render: () => <VizRoadmapView /> },
     ],
   },
 ];
