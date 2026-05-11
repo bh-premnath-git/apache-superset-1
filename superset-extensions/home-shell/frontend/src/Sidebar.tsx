@@ -66,10 +66,6 @@ export function Sidebar({ active, onSelect }: {
           </div>
         ))}
       </nav>
-
-      <div style={{ marginTop: 'auto', padding: '16px 20px', fontSize: 11, color: ui.color.sidebarTextMuted, borderTop: `1px solid rgba(255,255,255,0.06)` }}>
-        Dummy data preview · v0.1.0
-      </div>
     </aside>
   );
 }
