@@ -2,7 +2,7 @@ import * as React from 'react';
 import { ui } from '../theme';
 import { api, useFetch } from '../api';
 import { ViewKey } from '../nav';
-import { TIER_META, TIER_ORDER } from '../crm';
+import { useCrmState } from '../crm';
 
 // Screen 0 — Landing / Buy-in.
 //
@@ -76,10 +76,14 @@ function HeroStat({ value, label }: { value: string; label: string }) {
 
 export function LandingView({ onNavigate }: { onNavigate?: (k: ViewKey) => void } = {}) {
   const summary = useFetch(() => api.summary(), []);
+  const crmState = useCrmState();
+  const crm = crmState.data;
 
   const totalHh = summary.data?.weighted_households;
   const districts = summary.data?.districts_covered;
-  const states = summary.data?.states_focus ?? ['Bihar', 'Madhya Pradesh', 'Jharkhand'];
+  const states = summary.data?.states_focus ?? [];
+  const tiers = crm?.tiers ?? [];
+  const segmentCount = crm?.segments.length ?? 0;
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 36 }}>
@@ -109,7 +113,8 @@ export function LandingView({ onNavigate }: { onNavigate?: (k: ViewKey) => void 
             lineHeight: 1.2,
           }}
         >
-          {fmtInt(totalHh)} underserved households in {states.join(', ')} —
+          {fmtInt(totalHh)} underserved households
+          {states.length ? ` in ${states.join(', ')} —` : ' —'}{' '}
           segmented by financial readiness.
         </h1>
         <p
@@ -179,8 +184,8 @@ export function LandingView({ onNavigate }: { onNavigate?: (k: ViewKey) => void 
         }}
       >
         <HeroStat value={fmtInt(totalHh)} label="Weighted households" />
-        <HeroStat value="7" label="Population segments" />
-        <HeroStat value="4" label="Readiness tiers" />
+        <HeroStat value={segmentCount ? String(segmentCount) : '—'} label="Population segments" />
+        <HeroStat value={tiers.length ? String(tiers.length) : '—'} label="Readiness tiers" />
         <HeroStat value={`${fmtInt(districts)}`} label="Districts covered" />
       </section>
 
@@ -241,9 +246,26 @@ export function LandingView({ onNavigate }: { onNavigate?: (k: ViewKey) => void 
         <p style={{ margin: '8px 0 16px', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
           Segments cluster into four readiness tiers based on FSP entry strategy, not just vulnerability.
         </p>
+        {crmState.loading && (
+          <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading tiers…</div>
+        )}
+        {crmState.error && (
+          <div
+            style={{
+              padding: 12,
+              border: `1px solid ${ui.color.border}`,
+              borderRadius: 8,
+              color: '#b00020',
+              fontSize: 12,
+              background: '#fff5f5',
+            }}
+          >
+            Could not load CRM tiers: {crmState.error.message}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {TIER_ORDER.map((t) => {
-            const meta = TIER_META[t];
+          {tiers.map((meta) => {
+            const t = meta.tier;
             return (
               <div
                 key={t}
@@ -264,8 +286,8 @@ export function LandingView({ onNavigate }: { onNavigate?: (k: ViewKey) => void 
                     fontWeight: 700,
                     padding: '4px 10px',
                     borderRadius: 6,
-                    background: meta.badgeBg,
-                    color: meta.badgeColor,
+                    background: meta.badge_bg,
+                    color: meta.badge_color,
                     width: 'fit-content',
                   }}
                 >

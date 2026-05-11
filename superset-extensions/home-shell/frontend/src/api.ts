@@ -117,6 +117,59 @@ export interface MpceRow {
   overall_sector_mean: number;
 }
 
+// ── CRM content (seeded by seed/pg/006_crm_segment_brief.sql) ────────────
+
+export interface CrmTier {
+  tier: number;
+  label: string;
+  tagline: string;
+  badge_color: string;
+  badge_bg: string;
+  chip_color: string;
+  members: string[];
+}
+
+export interface CrmTiersResponse {
+  tiers: CrmTier[];
+}
+
+export interface CrmSegmentBrief {
+  segment: string;
+  sort_order: number;
+  name: string;
+  persona: string;
+  overview: string;
+  tier: number;
+  tier_label: string;
+  tier_tagline: string;
+  tier_badge_color: string;
+  tier_badge_bg: string;
+  tier_chip_color: string;
+  product: { headline: string; body: string };
+  channel: { headline: string; body: string };
+  readiness: {
+    need?: { rating: 'High' | 'Med' | 'Low'; note: string };
+    access?: { rating: 'High' | 'Med' | 'Low'; note: string };
+    slack?: { rating: 'High' | 'Med' | 'Low'; note: string };
+  };
+  channel_ladder: string[];
+}
+
+export interface CrmSegmentsResponse {
+  segments: CrmSegmentBrief[];
+}
+
+export interface CrmDimension {
+  key: string;
+  label: string;
+  blurb: string;
+  metrics: string[];
+}
+
+export interface CrmDimensionsResponse {
+  dimensions: CrmDimension[];
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'same-origin',
@@ -164,6 +217,9 @@ export const api = {
     if (states && states.length) params.set('states', states.join(','));
     return getJson<MetricsValuesResponse>(`/metrics/values?${params.toString()}`);
   },
+  crmTiers: () => getJson<CrmTiersResponse>('/crm/tiers'),
+  crmSegments: () => getJson<CrmSegmentsResponse>('/crm/segments'),
+  crmDimensions: () => getJson<CrmDimensionsResponse>('/crm/dimensions'),
 };
 
 export function useFetch<T>(loader: () => Promise<T>, deps: unknown[]):

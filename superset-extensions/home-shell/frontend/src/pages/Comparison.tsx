@@ -12,7 +12,7 @@ import {
   CategoricalMetricValues,
 } from '../api';
 import { SegmentCode, SEGMENT_CODES } from '../nav';
-import { SEGMENT_BRIEF, TIER_META, RATING_STYLE } from '../crm';
+import { useCrmState, RATING_STYLE, SegmentBrief } from '../crm';
 
 // Screen 4 — Comparison tool.
 //
@@ -364,12 +364,19 @@ function AddRemoveModal({
 
 // ── PDF / CSV download ─────────────────────────────────────────────────────
 
-function downloadPdfStub(rows: { label: string; values: { segment: string; value: string }[] }[], segments: SegmentCode[], stateFilter: StateFilter) {
+function downloadPdfStub(
+  rows: { label: string; values: { segment: string; value: string }[] }[],
+  segments: SegmentCode[],
+  stateFilter: StateFilter,
+  briefOf: (code: SegmentCode) => SegmentBrief | undefined,
+) {
   // Lightweight printable HTML — opens in a new tab where the user can use the
   // browser's "Save as PDF" print flow. Avoids a heavy PDF dependency.
   const win = window.open('', '_blank', 'noopener,noreferrer');
   if (!win) return;
-  const segHeader = segments.map((s) => `<th>${s} · ${SEGMENT_BRIEF[s].name}</th>`).join('');
+  const segHeader = segments
+    .map((s) => `<th>${s} · ${briefOf(s)?.name ?? ''}</th>`)
+    .join('');
   const body = rows
     .map(
       (r) =>
@@ -428,6 +435,10 @@ function ReadinessPill({ rating, note }: { rating: 'High' | 'Med' | 'Low'; note:
 
 export function ComparisonView() {
   const catalog = useFetch(() => api.metricsCatalog(), []);
+  const crmState = useCrmState();
+  const crm = crmState.data;
+  const briefOf = (c: SegmentCode): SegmentBrief | undefined =>
+    crm?.segmentByCode.get(c);
 
   const [segments, setSegments] = useState<SegmentCode[]>(() => {
     const draft = readArr(COMPARE_KEY);
@@ -539,20 +550,20 @@ export function ComparisonView() {
         label: `Readiness · ${pillar.charAt(0).toUpperCase() + pillar.slice(1)}`,
         values: segments.map((c) => ({
           segment: c,
-          value: SEGMENT_BRIEF[c].readiness[pillar].rating,
+          value: briefOf(c)?.readiness?.[pillar]?.rating ?? '—',
         })),
       });
     }
     rows.push({
       label: 'Lead product',
-      values: segments.map((c) => ({ segment: c, value: SEGMENT_BRIEF[c].product.headline })),
+      values: segments.map((c) => ({ segment: c, value: briefOf(c)?.product.headline ?? '—' })),
     });
     rows.push({
       label: 'Channel',
-      values: segments.map((c) => ({ segment: c, value: SEGMENT_BRIEF[c].channel.headline })),
+      values: segments.map((c) => ({ segment: c, value: briefOf(c)?.channel.headline ?? '—' })),
     });
     return rows;
-  }, [orderedMetrics, segments]);
+  }, [orderedMetrics, segments, crm]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -571,7 +582,7 @@ export function ComparisonView() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
-            onClick={() => downloadPdfStub(exportRows, segments, stateFilter)}
+            onClick={() => downloadPdfStub(exportRows, segments, stateFilter, briefOf)}
             style={{
               padding: '8px 14px',
               border: `1px solid ${ui.color.border}`,
@@ -619,7 +630,9 @@ export function ComparisonView() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {SEGMENT_CODES.map((c) => {
             const on = segments.includes(c);
-            const meta = TIER_META[SEGMENT_BRIEF[c].tier];
+            const brief = briefOf(c);
+            const badgeBg = brief?.tier_badge_bg ?? ui.color.surfaceMuted;
+            const badgeColor = brief?.tier_badge_color ?? ui.color.text;
             return (
               <button
                 key={c}
@@ -630,10 +643,10 @@ export function ComparisonView() {
                   alignItems: 'center',
                   gap: 6,
                   padding: '6px 12px',
-                  border: `1px solid ${on ? meta.badgeColor : ui.color.border}`,
+                  border: `1px solid ${on ? badgeColor : ui.color.border}`,
                   borderRadius: 999,
-                  background: on ? meta.badgeBg : ui.color.surface,
-                  color: on ? meta.badgeColor : ui.color.text,
+                  background: on ? badgeBg : ui.color.surface,
+                  color: on ? badgeColor : ui.color.text,
                   cursor: 'pointer',
                   fontSize: 12,
                   fontWeight: on ? 700 : 500,
@@ -641,7 +654,7 @@ export function ComparisonView() {
                 }}
               >
                 {on ? '✓ ' : ''}
-                {c} · {SEGMENT_BRIEF[c].name}
+                {c}{brief?.name ? ` · ${brief.name}` : ''}
               </button>
             );
           })}
@@ -772,7 +785,7 @@ export function ComparisonView() {
                   Indicator
                 </th>
                 {segments.map((c) => {
-                  const meta = TIER_META[SEGMENT_BRIEF[c].tier];
+                  const brief = briefOf(c);
                   return (
                     <th
                       key={c}
@@ -793,13 +806,13 @@ export function ComparisonView() {
                             fontWeight: 700,
                             padding: '2px 8px',
                             borderRadius: 6,
-                            background: meta.badgeBg,
-                            color: meta.badgeColor,
+                            background: brief?.tier_badge_bg ?? ui.color.surfaceMuted,
+                            color: brief?.tier_badge_color ?? ui.color.text,
                           }}
                         >
                           {c}
                         </span>
-                        <span style={{ fontSize: 12 }}>{SEGMENT_BRIEF[c].name}</span>
+                        <span style={{ fontSize: 12 }}>{brief?.name ?? ''}</span>
                       </div>
                     </th>
                   );
@@ -904,7 +917,7 @@ export function ComparisonView() {
                     {pillar}
                   </td>
                   {segments.map((c) => {
-                    const r = SEGMENT_BRIEF[c].readiness[pillar];
+                    const r = briefOf(c)?.readiness?.[pillar];
                     return (
                       <td
                         key={c}
@@ -914,7 +927,10 @@ export function ComparisonView() {
                           verticalAlign: 'top',
                         }}
                       >
-                        <ReadinessPill rating={r.rating} note={r.note} />
+                        <ReadinessPill
+                          rating={(r?.rating as 'High' | 'Med' | 'Low') ?? 'Med'}
+                          note={r?.note ?? (crmState.loading ? 'Loading…' : '—')}
+                        />
                       </td>
                     );
                   })}
@@ -956,24 +972,29 @@ export function ComparisonView() {
                 >
                   Lead product
                 </td>
-                {segments.map((c) => (
-                  <td
-                    key={c}
-                    style={{
-                      padding: '14px 16px',
-                      borderBottom: `1px solid ${ui.color.border}`,
-                      verticalAlign: 'top',
-                      fontSize: 12,
-                      color: ui.color.text,
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <strong style={{ display: 'block', marginBottom: 4 }}>
-                      {SEGMENT_BRIEF[c].product.headline}
-                    </strong>
-                    <span style={{ color: ui.color.textMuted }}>{SEGMENT_BRIEF[c].product.body}</span>
-                  </td>
-                ))}
+                {segments.map((c) => {
+                  const brief = briefOf(c);
+                  return (
+                    <td
+                      key={c}
+                      style={{
+                        padding: '14px 16px',
+                        borderBottom: `1px solid ${ui.color.border}`,
+                        verticalAlign: 'top',
+                        fontSize: 12,
+                        color: ui.color.text,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <strong style={{ display: 'block', marginBottom: 4 }}>
+                        {brief?.product.headline ?? (crmState.loading ? 'Loading…' : '—')}
+                      </strong>
+                      <span style={{ color: ui.color.textMuted }}>
+                        {brief?.product.body ?? ''}
+                      </span>
+                    </td>
+                  );
+                })}
               </tr>
               <tr style={{ background: ui.color.surfaceMuted }}>
                 <td
@@ -991,7 +1012,10 @@ export function ComparisonView() {
                 >
                   Channel
                 </td>
-                {segments.map((c) => (
+                {segments.map((c) => {
+                  const brief = briefOf(c);
+                  const ladder = brief?.channel_ladder ?? [];
+                  return (
                   <td
                     key={c}
                     style={{
@@ -1004,13 +1028,13 @@ export function ComparisonView() {
                     }}
                   >
                     <strong style={{ display: 'block', marginBottom: 4 }}>
-                      {SEGMENT_BRIEF[c].channel.headline}
+                      {brief?.channel.headline ?? (crmState.loading ? 'Loading…' : '—')}
                     </strong>
                     <span style={{ color: ui.color.textMuted, display: 'block', marginBottom: 6 }}>
-                      {SEGMENT_BRIEF[c].channel.body}
+                      {brief?.channel.body ?? ''}
                     </span>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10 }}>
-                      {SEGMENT_BRIEF[c].channelLadder.map((s, j, arr) => (
+                      {ladder.map((s, j, arr) => (
                         <React.Fragment key={`${s}-${j}`}>
                           <span
                             style={{
@@ -1030,7 +1054,8 @@ export function ComparisonView() {
                       ))}
                     </div>
                   </td>
-                ))}
+                  );
+                })}
               </tr>
             </tbody>
           </table>

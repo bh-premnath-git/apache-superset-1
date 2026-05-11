@@ -4,7 +4,7 @@ import { ui } from '../theme';
 import { api, useFetch } from '../api';
 import { ViewKey, SegmentCode, SEGMENT_CODES } from '../nav';
 import { CompareIcon, MapIcon, OverviewIcon, RuralIcon, UrbanIcon } from '../icons';
-import { SEGMENT_BRIEF, TIER_META, TIER_ORDER, Tier } from '../crm';
+import { useCrmState, SegmentBrief, TierMeta } from '../crm';
 
 // Screen 2 — Segment Overview.
 //
@@ -104,6 +104,7 @@ function StateMiniBar({
 
 function SegmentCard({
   code,
+  brief,
   share,
   states,
   onOpen,
@@ -112,6 +113,7 @@ function SegmentCard({
   inCompare,
 }: {
   code: SegmentCode;
+  brief: SegmentBrief | undefined;
   share: number | undefined;
   states: { state: string; share_pct: number }[];
   onOpen: () => void;
@@ -119,10 +121,10 @@ function SegmentCard({
   hoverStats: { mpce: string; internet: string; ration: string } | null;
   inCompare: boolean;
 }) {
-  const brief = SEGMENT_BRIEF[code];
-  const tier = TIER_META[brief.tier];
   const isRural = bandOf(code) === 'Rural';
   const [hover, setHover] = useState(false);
+  const badgeBg = brief?.tier_badge_bg ?? ui.color.surfaceMuted;
+  const badgeColor = brief?.tier_badge_color ?? ui.color.text;
 
   return (
     <div
@@ -163,8 +165,8 @@ function SegmentCard({
               fontWeight: 700,
               padding: '3px 8px',
               borderRadius: 6,
-              background: tier.badgeBg,
-              color: tier.badgeColor,
+              background: badgeBg,
+              color: badgeColor,
             }}
           >
             {code}
@@ -177,23 +179,23 @@ function SegmentCard({
 
       <div>
         <strong style={{ fontSize: 13, color: ui.color.text, lineHeight: 1.4, display: 'block' }}>
-          {brief.name}
+          {brief?.name ?? code}
         </strong>
         <span
           style={{
             fontSize: 11,
-            color: tier.badgeColor,
+            color: badgeColor,
             fontWeight: 600,
             display: 'inline-block',
             marginTop: 4,
           }}
         >
-          {tier.label}
+          {brief?.tier_label ?? '…'}
         </span>
       </div>
 
       <p style={{ margin: 0, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.5 }}>
-        {brief.persona}
+        {brief?.persona ?? ''}
       </p>
 
       <div style={{ borderTop: `1px solid ${ui.color.border}`, paddingTop: 10 }}>
@@ -394,6 +396,8 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
   const states = useFetch(() => api.statesSegments(), []);
   const mpce = useFetch(() => api.mpce(), []);
   const indicators = useFetch(() => api.metricsValues(['any_internet', 'ration_any']), []);
+  const crmState = useCrmState();
+  const crm = crmState.data;
 
   const [viewBy, setViewBy] = useState<ViewBy>('tier');
   const [compare, setCompare] = useState<SegmentCode[]>(() => readCompareDraft());
@@ -442,7 +446,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
   const sumShare = (codes: SegmentCode[]) =>
     codes.reduce((acc, c) => acc + (sharesByCode[c] ?? 0), 0);
 
-  const groups: { key: string; tag: string; title: string; subtitle?: string; total: number; codes: SegmentCode[]; tierMeta?: typeof TIER_META[Tier] }[] = useMemo(() => {
+  const groups: { key: string; tag: string; title: string; subtitle?: string; total: number; codes: SegmentCode[]; tierMeta?: TierMeta }[] = useMemo(() => {
     if (viewBy === 'band') {
       const rural = SEGMENT_CODES.filter((c) => bandOf(c) === 'Rural');
       const urban = SEGMENT_CODES.filter((c) => bandOf(c) === 'Urban');
@@ -455,21 +459,19 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
       const sorted = [...SEGMENT_CODES].sort((a, b) => (sharesByCode[b] ?? 0) - (sharesByCode[a] ?? 0));
       return [{ key: 'size', tag: '#', title: 'Largest to smallest', total: sumShare(sorted), codes: sorted }];
     }
-    return TIER_ORDER.map((t) => {
-      const meta = TIER_META[t];
-      return {
-        key: `tier-${t}`,
-        tag: String(t),
-        title: meta.label,
-        subtitle: meta.tagline,
-        total: sumShare(meta.members),
-        codes: meta.members,
-        tierMeta: meta,
-      };
-    });
-  }, [viewBy, sharesByCode]);
+    if (!crm) return [];
+    return crm.tiers.map((meta) => ({
+      key: `tier-${meta.tier}`,
+      tag: String(meta.tier),
+      title: meta.label,
+      subtitle: meta.tagline,
+      total: sumShare(meta.members),
+      codes: meta.members,
+      tierMeta: meta,
+    }));
+  }, [viewBy, sharesByCode, crm]);
 
-  const fetchError = summary.error ?? segments.error;
+  const fetchError = summary.error ?? segments.error ?? crmState.error;
   const focusStates = summary.data?.states_focus ?? ['Bihar', 'Madhya Pradesh', 'Jharkhand'];
 
   const toggleCompare = (code: SegmentCode) => {
@@ -640,8 +642,8 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
                     height: 22,
                     padding: '0 6px',
                     borderRadius: '50%',
-                    background: g.tierMeta?.badgeBg ?? ui.color.surfaceMuted,
-                    color: g.tierMeta?.badgeColor ?? ui.color.text,
+                    background: g.tierMeta?.badge_bg ?? ui.color.surfaceMuted,
+                    color: g.tierMeta?.badge_color ?? ui.color.text,
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -674,6 +676,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
                   <SegmentCard
                     key={c}
                     code={c}
+                    brief={crm?.segmentByCode.get(c)}
                     share={sharesByCode[c]}
                     states={stateBreakdownByCode[c] ?? []}
                     onOpen={() => onNavigate?.(`segment:${c}` as ViewKey)}

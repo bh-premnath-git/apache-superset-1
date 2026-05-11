@@ -323,9 +323,28 @@ def _jsonify(row: dict[str, Any]) -> dict[str, Any]:
             out[k] = None
         elif isinstance(v, (int, float, str, bool)):
             out[k] = v
+        elif isinstance(v, (list, tuple)):
+            # Postgres ARRAYs come back as Python lists; preserve them so
+            # JSON consumers can iterate without re-parsing a str repr.
+            out[k] = [
+                _jsonify_scalar(item) for item in v
+            ]
+        elif isinstance(v, dict):
+            # JSONB / dict columns — recurse.
+            out[k] = _jsonify(v)
         else:
             out[k] = float(v) if hasattr(v, "__float__") else str(v)
     return out
+
+
+def _jsonify_scalar(v: Any) -> Any:
+    if v is None or isinstance(v, (int, float, str, bool)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_jsonify_scalar(i) for i in v]
+    if isinstance(v, dict):
+        return _jsonify(v)
+    return float(v) if hasattr(v, "__float__") else str(v)
 
 
 def _states_param(req_states: str | None) -> list[str]:
@@ -801,3 +820,137 @@ class HomeShellAPI(RestApi):
                 "metrics": out,
             },
         )
+
+    # ── CRM content endpoints ──────────────────────────────────────────
+    # The structural LCA segmentation above is reframed for FSP users via
+    # the CRM Segment Explorer content tables seeded in
+    # seed/pg/006_crm_segment_brief.sql. These endpoints serve that
+    # content; the frontend never hard-codes copy or tier mappings.
+
+    @expose("/crm/tiers", methods=("GET",))
+    @protect()
+    @safe
+    def crm_tiers(self) -> Response:
+        """Readiness tiers seeded by 006_crm_segment_brief.sql.
+
+        Returns ``{tiers: [{tier, label, tagline, badge_color, badge_bg,
+        chip_color, members: ["R1","U3", ...]}]}`` ordered by ``tier`` ASC.
+        """
+        rows = _query(
+            """
+            SELECT
+                t.tier,
+                t.label,
+                t.tagline,
+                t.badge_color,
+                t.badge_bg,
+                t.chip_color,
+                COALESCE(
+                    (
+                        SELECT array_agg(b.segment ORDER BY b.sort_order)
+                        FROM household.crm_segment_brief b
+                        WHERE b.tier = t.tier
+                    ),
+                    ARRAY[]::text[]
+                )                                                AS members
+            FROM household.crm_tier t
+            ORDER BY t.tier
+            """
+        )
+        for r in rows:
+            r["tier"] = int(r["tier"])
+        return self.response(200, result={"tiers": rows})
+
+    @expose("/crm/segments", methods=("GET",))
+    @protect()
+    @safe
+    def crm_segments(self) -> Response:
+        """Per-segment CRM brief joining tier, readiness pillars and
+        channel ladder.
+
+        Returns ``{segments: [{segment, name, persona, overview, tier,
+        tier_label, tier_tagline, product: {...}, channel: {...},
+        readiness: {need|access|slack: {rating, note}},
+        channel_ladder: [str, ...]}]}`` ordered by ``sort_order``.
+        """
+        rows = _query(
+            """
+            SELECT
+                segment,
+                sort_order,
+                name,
+                persona,
+                overview,
+                tier,
+                tier_label,
+                tier_tagline,
+                tier_badge_color,
+                tier_badge_bg,
+                tier_chip_color,
+                product_headline,
+                product_body,
+                channel_headline,
+                channel_body,
+                readiness,
+                channel_ladder
+            FROM household.vw_crm_segment_brief
+            ORDER BY sort_order
+            """
+        )
+        out = [
+            {
+                "segment": r["segment"],
+                "sort_order": int(r["sort_order"]),
+                "name": r["name"],
+                "persona": r["persona"],
+                "overview": r["overview"],
+                "tier": int(r["tier"]),
+                "tier_label": r["tier_label"],
+                "tier_tagline": r["tier_tagline"],
+                "tier_badge_color": r["tier_badge_color"],
+                "tier_badge_bg": r["tier_badge_bg"],
+                "tier_chip_color": r["tier_chip_color"],
+                "product": {
+                    "headline": r["product_headline"],
+                    "body": r["product_body"],
+                },
+                "channel": {
+                    "headline": r["channel_headline"],
+                    "body": r["channel_body"],
+                },
+                "readiness": r["readiness"] or {},
+                "channel_ladder": r["channel_ladder"] or [],
+            }
+            for r in rows
+        ]
+        return self.response(200, result={"segments": out})
+
+    @expose("/crm/dimensions", methods=("GET",))
+    @protect()
+    @safe
+    def crm_dimensions(self) -> Response:
+        """Data-dimension panels for the segment profile.
+
+        Returns ``{dimensions: [{key, label, blurb, metrics: [str, ...]}]}``
+        — the metric keys point at entries in /metrics/catalog so the
+        frontend can populate each panel from /metrics/values.
+        """
+        rows = _query(
+            """
+            SELECT
+                d.dimension_key                              AS key,
+                d.label,
+                d.blurb,
+                COALESCE(
+                    (
+                        SELECT array_agg(m.metric_key ORDER BY m.sort_order)
+                        FROM household.crm_data_dimension_metric m
+                        WHERE m.dimension_key = d.dimension_key
+                    ),
+                    ARRAY[]::text[]
+                )                                            AS metrics
+            FROM household.crm_data_dimension d
+            ORDER BY d.sort_order
+            """
+        )
+        return self.response(200, result={"dimensions": rows})

@@ -4,7 +4,7 @@ import { ui } from '../theme';
 import { api, useFetch, MetricValues, BinaryMetricValues, CategoricalMetricValues } from '../api';
 import { ViewKey, SegmentCode, SEGMENT_CODES } from '../nav';
 import { Card } from '../components/Card';
-import { SEGMENT_BRIEF, TIER_META, DATA_DIMENSIONS, RATING_STYLE, Rating } from '../crm';
+import { useCrmState, RATING_STYLE, Rating, DataDimension } from '../crm';
 
 // Screen 3 — Segment Profile.
 //
@@ -16,10 +16,6 @@ import { SEGMENT_BRIEF, TIER_META, DATA_DIMENSIONS, RATING_STYLE, Rating } from 
 //   • Channel hypothesis (headline + body)
 //   • Channel activation ladder (horizontal stepped diagram)
 //   • Prev / next segment arrows + "Add to comparison"
-
-const ALL_PROFILE_METRICS = Array.from(
-  new Set(DATA_DIMENSIONS.flatMap((d) => d.metrics)),
-);
 
 const COMPARE_KEY = 'crm.home.comparisonDraft';
 const SAVED_KEY = 'crm.home.savedSegments';
@@ -281,14 +277,23 @@ export function SegmentProfileView({
   code: SegmentCode;
   onNavigate?: (k: ViewKey) => void;
 }) {
-  const brief = SEGMENT_BRIEF[code];
-  const tier = TIER_META[brief.tier];
+  const crmState = useCrmState();
+  const crm = crmState.data;
+  const brief = crm?.segmentByCode.get(code);
+  const dimensions: readonly DataDimension[] = crm?.dimensions ?? [];
+  const profileMetricKeys = crm?.allMetricKeys ?? [];
 
   const summary = useFetch(() => api.summary(), []);
   const segments = useFetch(() => api.segments(), []);
   const mpce = useFetch(() => api.mpce(), []);
   const states = useFetch(() => api.statesSegments(), []);
-  const metrics = useFetch(() => api.metricsValues(ALL_PROFILE_METRICS), []);
+  const metrics = useFetch(
+    () =>
+      profileMetricKeys.length
+        ? api.metricsValues(profileMetricKeys)
+        : Promise.resolve({ states_focus: [], segments: [], metrics: [] as MetricValues[] }),
+    [profileMetricKeys.join(',')],
+  );
 
   const [compare, setCompare] = useState<SegmentCode[]>(() => readArr(COMPARE_KEY));
   const [saved, setSaved] = useState<SegmentCode[]>(() => readArr(SAVED_KEY));
@@ -334,7 +339,8 @@ export function SegmentProfileView({
     return map;
   }, [metrics.data]);
 
-  const fetchError = summary.error ?? segments.error ?? mpce.error ?? metrics.error;
+  const fetchError =
+    summary.error ?? segments.error ?? mpce.error ?? metrics.error ?? crmState.error;
 
   // Prev / next segment in the canonical R1..U3 order.
   const idx = SEGMENT_CODES.indexOf(code);
@@ -393,7 +399,7 @@ export function SegmentProfileView({
             ← All segments
           </button>
           <span>/</span>
-          <span>{tier.label}</span>
+          <span>{brief?.tier_label ?? '…'}</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
@@ -404,14 +410,14 @@ export function SegmentProfileView({
                 fontWeight: 700,
                 padding: '4px 10px',
                 borderRadius: 6,
-                background: tier.badgeBg,
-                color: tier.badgeColor,
+                background: brief?.tier_badge_bg ?? ui.color.surfaceMuted,
+                color: brief?.tier_badge_color ?? ui.color.text,
               }}
             >
-              {brief.code}
+              {code}
             </span>
             <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: ui.color.text }}>
-              {brief.name}
+              {brief?.name ?? code}
             </h1>
           </div>
 
@@ -460,7 +466,7 @@ export function SegmentProfileView({
         </div>
 
         <p style={{ margin: '10px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6, maxWidth: 820 }}>
-          {brief.overview}
+          {brief?.overview ?? (crmState.loading ? 'Loading segment brief…' : '')}
         </p>
 
         {fetchError && (
@@ -511,13 +517,17 @@ export function SegmentProfileView({
                 : 'monthly per-capita'
             }
           />
-          <StatCell label="Readiness tier" value={tier.label.replace(/^Tier \d+\s·\s/, '')} sub={tier.tagline} />
+          <StatCell
+            label="Readiness tier"
+            value={brief?.tier_label.replace(/^Tier \d+\s·\s/, '') ?? '…'}
+            sub={brief?.tier_tagline}
+          />
         </div>
       </section>
 
       {/* ── State breakdown bar ───────────────────────────────────────── */}
       <Card
-        title={`${brief.code} prevalence by state`}
+        title={`${code} prevalence by state`}
         subtitle="Weighted % of households in this segment within each focus state."
       >
         {states.loading && <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>}
@@ -551,7 +561,7 @@ export function SegmentProfileView({
             gap: 12,
           }}
         >
-          {DATA_DIMENSIONS.map((d) => (
+          {dimensions.map((d) => (
             <DimensionPanel
               key={d.key}
               title={d.label}
@@ -583,9 +593,17 @@ export function SegmentProfileView({
           Need × Access × Slack — the three pillars of CRM readiness for this segment.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-          <ReadinessPill label="Need" rating={brief.readiness.need.rating} note={brief.readiness.need.note} />
-          <ReadinessPill label="Access" rating={brief.readiness.access.rating} note={brief.readiness.access.note} />
-          <ReadinessPill label="Slack" rating={brief.readiness.slack.rating} note={brief.readiness.slack.note} />
+          {(['need', 'access', 'slack'] as const).map((pillar) => {
+            const r = brief?.readiness?.[pillar];
+            return (
+              <ReadinessPill
+                key={pillar}
+                label={pillar.charAt(0).toUpperCase() + pillar.slice(1)}
+                rating={(r?.rating as Rating) ?? 'Med'}
+                note={r?.note ?? (crmState.loading ? 'Loading…' : '—')}
+              />
+            );
+          })}
         </div>
       </section>
 
@@ -613,10 +631,10 @@ export function SegmentProfileView({
           }}
         >
           <strong style={{ fontSize: 14, color: ui.color.text, display: 'block', marginBottom: 6 }}>
-            {brief.product.headline}
+            {brief?.product.headline ?? (crmState.loading ? 'Loading…' : '—')}
           </strong>
           <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
-            {brief.product.body}
+            {brief?.product.body ?? ''}
           </p>
         </div>
       </section>
@@ -645,10 +663,10 @@ export function SegmentProfileView({
           }}
         >
           <strong style={{ fontSize: 14, color: ui.color.text, display: 'block', marginBottom: 6 }}>
-            {brief.channel.headline}
+            {brief?.channel.headline ?? (crmState.loading ? 'Loading…' : '—')}
           </strong>
           <p style={{ margin: '0 0 14px', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
-            {brief.channel.body}
+            {brief?.channel.body ?? ''}
           </p>
           <div
             style={{
@@ -662,7 +680,7 @@ export function SegmentProfileView({
           >
             Channel activation ladder
           </div>
-          <ChannelLadder steps={brief.channelLadder} />
+          <ChannelLadder steps={brief?.channel_ladder ?? []} />
         </div>
       </section>
 
@@ -672,7 +690,7 @@ export function SegmentProfileView({
           Compare to other segments →
         </button>
         <button type="button" onClick={() => onNavigate?.('prevalence')} style={linkBtnStyle}>
-          See {brief.code} on the prevalence map →
+          See {code} on the prevalence map →
         </button>
         <button type="button" onClick={() => onNavigate?.('data-browser')} style={linkBtnStyle}>
           Browse all indicators →

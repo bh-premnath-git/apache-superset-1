@@ -8,6 +8,7 @@ import * as ReactDOM from 'react-dom';
 import { ui, NAV_HEIGHT } from './theme';
 import { Sidebar } from './Sidebar';
 import { ViewKey, findNavItem } from './nav';
+import { CrmProvider } from './crm';
 
 declare global {
   namespace JSX {
@@ -34,22 +35,24 @@ function HomeShell() {
   const active = findNavItem(view);
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: NAV_HEIGHT,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      display: 'flex',
-      background: ui.color.surfaceMuted,
-      fontFamily: ui.font,
-      zIndex: 50,
-    }}>
-      <Sidebar active={view} onSelect={setView} />
-      <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-        {active ? active.render({ onNavigate: setView }) : null}
-      </main>
-    </div>
+    <CrmProvider>
+      <div style={{
+        position: 'fixed',
+        top: NAV_HEIGHT,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        display: 'flex',
+        background: ui.color.surfaceMuted,
+        fontFamily: ui.font,
+        zIndex: 50,
+      }}>
+        <Sidebar active={view} onSelect={setView} />
+        <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+          {active ? active.render({ onNavigate: setView }) : null}
+        </main>
+      </div>
+    </CrmProvider>
   );
 }
 

@@ -4,7 +4,7 @@ import { geoMercator, geoPath } from 'd3-geo';
 import { ui } from '../theme';
 import { api, useFetch, DistrictRow } from '../api';
 import { SegmentCode, SEGMENT_CODES } from '../nav';
-import { SEGMENT_BRIEF, TIER_META } from '../crm';
+import { useCrmState } from '../crm';
 
 // Screen 6 — Prevalence Map.
 //
@@ -420,6 +420,8 @@ function downloadCsv(rows: { state: string; district: string; segment: string; s
 
 export function PrevalenceMapView() {
   const geo = useGeo();
+  const crmState = useCrmState();
+  const crm = crmState.data;
   const [stateFilter, setStateFilter] = useState<StateName>('Bihar');
   const [selectedSegment, setSelectedSegment] = useState<SegmentCode | null>(null); // null = dominant
   const [hovered, setHovered] = useState<string | null>(null);
@@ -598,19 +600,21 @@ export function PrevalenceMapView() {
             </button>
             {SEGMENT_CODES.map((c) => {
               const active = selectedSegment === c;
-              const meta = TIER_META[SEGMENT_BRIEF[c].tier];
+              const brief = crm?.segmentByCode.get(c);
+              const badgeBg = brief?.tier_badge_bg ?? ui.color.surfaceMuted;
+              const badgeColor = brief?.tier_badge_color ?? ui.color.text;
               return (
                 <button
                   key={c}
                   type="button"
                   onClick={() => setSelectedSegment(active ? null : c)}
-                  title={SEGMENT_BRIEF[c].name}
+                  title={brief?.name ?? c}
                   style={{
                     padding: '6px 12px',
-                    border: `1px solid ${active ? meta.badgeColor : ui.color.border}`,
+                    border: `1px solid ${active ? badgeColor : ui.color.border}`,
                     borderRadius: 999,
-                    background: active ? meta.badgeBg : ui.color.surface,
-                    color: active ? meta.badgeColor : ui.color.text,
+                    background: active ? badgeBg : ui.color.surface,
+                    color: active ? badgeColor : ui.color.text,
                     fontSize: 12,
                     fontWeight: active ? 700 : 500,
                     fontFamily: ui.font,
@@ -692,7 +696,12 @@ export function PrevalenceMapView() {
                 <div style={{ fontWeight: 700 }}>Top 3 segments</div>
                 {topN(hoveredRow, 3).map((t) => (
                   <div key={t.code} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{t.code} · {SEGMENT_BRIEF[t.code].name.split('—')[0]}</span>
+                    <span>
+                      {t.code}
+                      {crm?.segmentByCode.get(t.code)
+                        ? ` · ${crm.segmentByCode.get(t.code)!.name.split('—')[0].trim()}`
+                        : ''}
+                    </span>
                     <span>{t.share.toFixed(1)}%</span>
                   </div>
                 ))}
@@ -773,7 +782,10 @@ export function PrevalenceMapView() {
                 display: 'inline-block',
               }}
             />
-            {c} · {SEGMENT_BRIEF[c].name.split('—')[0].trim()}
+            {c}
+            {crm?.segmentByCode.get(c)
+              ? ` · ${crm.segmentByCode.get(c)!.name.split('—')[0].trim()}`
+              : ''}
           </span>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: 11, color: ui.color.textMuted }}>

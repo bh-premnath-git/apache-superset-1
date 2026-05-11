@@ -3,21 +3,9 @@ import { useMemo, useState } from 'react';
 import { ui, SIDEBAR_WIDTH } from './theme';
 import { NAV_SECTIONS, ViewKey, SegmentCode, SEGMENT_CODES } from './nav';
 import { api, useFetch } from './api';
-import { SEGMENT_BRIEF, TIER_META } from './crm';
+import { useCrm } from './crm';
 
 const COLLAPSED_SIDEBAR_WIDTH = 72;
-
-// Per-segment badge color, keyed by the CRM readiness tier the segment
-// belongs to. Mirrors TIER_META so sidebar pills match the colors used on
-// the overview / profile pages.
-function badgeStyle(badge: string): { bg: string; fg: string } {
-  if (!(SEGMENT_CODES as readonly string[]).includes(badge)) {
-    return { bg: ui.color.surfaceMuted, fg: ui.color.text };
-  }
-  const tier = SEGMENT_BRIEF[badge as SegmentCode].tier;
-  const meta = TIER_META[tier];
-  return { bg: meta.badgeBg, fg: meta.badgeColor };
-}
 
 export function Sidebar({ active, onSelect }: {
   active: ViewKey;
@@ -25,12 +13,25 @@ export function Sidebar({ active, onSelect }: {
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const segments = useFetch(() => api.segments(), []);
+  const crm = useCrm();
 
   const shareByCode = useMemo(() => {
     const map: Record<string, number> = {};
     for (const r of segments.data?.segments ?? []) map[r.segment] = r.share_pct;
     return map;
   }, [segments.data]);
+
+  // Badge palette per segment — sourced from the CRM tier seed via
+  // useCrm(); falls back to the neutral surface palette if CRM content
+  // hasn't loaded yet.
+  const badgeStyle = (badge: string): { bg: string; fg: string } => {
+    if (!(SEGMENT_CODES as readonly string[]).includes(badge) || !crm) {
+      return { bg: ui.color.surfaceMuted, fg: ui.color.text };
+    }
+    const brief = crm.segmentByCode.get(badge as SegmentCode);
+    if (!brief) return { bg: ui.color.surfaceMuted, fg: ui.color.text };
+    return { bg: brief.tier_badge_bg, fg: brief.tier_badge_color };
+  };
 
   return (
     <aside style={{

@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ui } from '../theme';
 import { api, useFetch } from '../api';
 import { ViewKey, SegmentCode, SEGMENT_CODES } from '../nav';
-import { SEGMENT_BRIEF, TIER_META } from '../crm';
+import { useCrm } from '../crm';
 
 // Screen 1 — Dashboard Home (post-login).
 //
@@ -129,6 +129,7 @@ function StepCard({ n, title, body }: { n: number; title: string; body: string }
 
 export function DashboardHomeView({ onNavigate }: { onNavigate?: (k: ViewKey) => void } = {}) {
   const summary = useFetch(() => api.summary(), []);
+  const crm = useCrm();
 
   const [saved, setSaved] = useState<SegmentCode[]>(() =>
     readJson<SegmentCode[]>(STORAGE.savedSegments, []).filter((s): s is SegmentCode =>
@@ -264,21 +265,24 @@ export function DashboardHomeView({ onNavigate }: { onNavigate?: (k: ViewKey) =>
                 'Bookmark a segment from its profile page to keep it here.'
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {saved.map((s) => (
-                    <span
-                      key={s}
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 999,
-                        background: TIER_META[SEGMENT_BRIEF[s].tier].badgeBg,
-                        color: TIER_META[SEGMENT_BRIEF[s].tier].badgeColor,
-                      }}
-                    >
-                      {s}
-                    </span>
-                  ))}
+                  {saved.map((s) => {
+                    const brief = crm?.segmentByCode.get(s);
+                    return (
+                      <span
+                        key={s}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          background: brief?.tier_badge_bg ?? ui.color.surfaceMuted,
+                          color: brief?.tier_badge_color ?? ui.color.text,
+                        }}
+                      >
+                        {s}
+                      </span>
+                    );
+                  })}
                 </div>
               )
             }
@@ -397,7 +401,7 @@ export function DashboardHomeView({ onNavigate }: { onNavigate?: (k: ViewKey) =>
             gap: 10,
           }}
         >
-          {Object.values(TIER_META).map((t) => (
+          {(crm?.tiers ?? []).map((t) => (
             <button
               key={t.tier}
               type="button"
@@ -421,8 +425,8 @@ export function DashboardHomeView({ onNavigate }: { onNavigate?: (k: ViewKey) =>
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: 6,
-                  background: t.badgeBg,
-                  color: t.badgeColor,
+                  background: t.badge_bg,
+                  color: t.badge_color,
                   width: 'fit-content',
                 }}
               >
@@ -436,6 +440,11 @@ export function DashboardHomeView({ onNavigate }: { onNavigate?: (k: ViewKey) =>
               </span>
             </button>
           ))}
+          {!crm && (
+            <div style={{ fontSize: 12, color: ui.color.textMuted, gridColumn: '1 / -1' }}>
+              Loading tiers…
+            </div>
+          )}
         </div>
       </section>
     </div>
