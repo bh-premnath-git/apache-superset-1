@@ -22,11 +22,13 @@ export type ViewKey =
   | 'compare-curate'
   | 'viz-roadmap';
 
+export type NavContext = { onNavigate: (k: ViewKey) => void };
+
 export type NavItem = {
   key: ViewKey;
   label: string;
   icon: React.ReactNode;
-  render: () => React.ReactElement;
+  render: (ctx: NavContext) => React.ReactElement;
 };
 
 export type NavSection = { heading: string; items: NavItem[] };
@@ -35,7 +37,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     heading: 'Dashboard',
     items: [
-      { key: 'overview',   label: 'Overview',        icon: <OverviewIcon />, render: () => <OverviewView /> },
+      { key: 'overview',   label: 'Overview',        icon: <OverviewIcon />, render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} /> },
       { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />,  render: () => <ComparisonView /> },
       { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
     ],

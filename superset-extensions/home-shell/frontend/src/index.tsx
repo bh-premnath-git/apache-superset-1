@@ -47,7 +47,7 @@ function HomeShell() {
     }}>
       <Sidebar active={view} onSelect={setView} />
       <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-        {active ? active.render() : null}
+        {active ? active.render({ onNavigate: setView }) : null}
       </main>
     </div>
   );
