@@ -54,6 +54,59 @@ export interface DistrictDetailResponse {
   segments: SegmentShare[];
 }
 
+export interface CatalogBucket {
+  key: string;
+  label: string;
+  color: string;
+}
+
+export interface CatalogMetric {
+  key: string;
+  label: string;
+  type: 'binary' | 'categorical';
+  categories?: CatalogBucket[];
+}
+
+export interface CatalogCategory {
+  key: string;
+  label: string;
+  metrics: CatalogMetric[];
+}
+
+export interface MetricsCatalogResponse {
+  categories: CatalogCategory[];
+}
+
+export interface BinaryMetricValues {
+  key: string;
+  label: string;
+  category: string;
+  category_label: string;
+  type: 'binary';
+  values: { segment: string; share_pct: number }[];
+}
+
+export interface CategoricalMetricValues {
+  key: string;
+  label: string;
+  category: string;
+  category_label: string;
+  type: 'categorical';
+  categories: CatalogBucket[];
+  values: {
+    segment: string;
+    breakdown: { category: string; share_pct: number }[];
+  }[];
+}
+
+export type MetricValues = BinaryMetricValues | CategoricalMetricValues;
+
+export interface MetricsValuesResponse {
+  states_focus: string[];
+  segments: string[];
+  metrics: MetricValues[];
+}
+
 export interface MpceRow {
   segment: string;
   sector: 'Rural' | 'Urban';
@@ -104,6 +157,13 @@ export const api = {
       `/states/${encodeURIComponent(state)}/districts/${encodeURIComponent(district)}`,
     ),
   mpce: () => getJson<{ segments: MpceRow[] }>('/mpce'),
+  metricsCatalog: () => getJson<MetricsCatalogResponse>('/metrics/catalog'),
+  metricsValues: (metrics: string[], states?: string[]) => {
+    const params = new URLSearchParams();
+    params.set('metrics', metrics.join(','));
+    if (states && states.length) params.set('states', states.join(','));
+    return getJson<MetricsValuesResponse>(`/metrics/values?${params.toString()}`);
+  },
 };
 
 export function useFetch<T>(loader: () => Promise<T>, deps: unknown[]):
