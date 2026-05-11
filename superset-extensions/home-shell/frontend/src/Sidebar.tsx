@@ -1,20 +1,22 @@
 import * as React from 'react';
 import { useMemo, useState } from 'react';
 import { ui, SIDEBAR_WIDTH } from './theme';
-import { NAV_SECTIONS, ViewKey } from './nav';
+import { NAV_SECTIONS, ViewKey, SegmentCode, SEGMENT_CODES } from './nav';
 import { api, useFetch } from './api';
+import { SEGMENT_BRIEF, TIER_META } from './crm';
 
 const COLLAPSED_SIDEBAR_WIDTH = 72;
 
-// Per-segment badge color, keyed by vulnerability level encoded in the
-// segment code's numeric suffix. Mirrors LEVEL_META in pages/Overview.tsx so
-// the sidebar pills match the colors used on the Overview page.
+// Per-segment badge color, keyed by the CRM readiness tier the segment
+// belongs to. Mirrors TIER_META so sidebar pills match the colors used on
+// the overview / profile pages.
 function badgeStyle(badge: string): { bg: string; fg: string } {
-  if (badge === 'R1' || badge === 'U1') return { bg: '#e5e7eb', fg: '#374151' };
-  if (badge === 'R2' || badge === 'U2') return { bg: '#dbeafe', fg: '#1e3a8a' };
-  if (badge === 'R3')                    return { bg: '#f3e8ff', fg: '#6b21a8' };
-  // R4 / U3 — most constrained
-  return { bg: '#fce7f3', fg: '#9d174d' };
+  if (!(SEGMENT_CODES as readonly string[]).includes(badge)) {
+    return { bg: ui.color.surfaceMuted, fg: ui.color.text };
+  }
+  const tier = SEGMENT_BRIEF[badge as SegmentCode].tier;
+  const meta = TIER_META[tier];
+  return { bg: meta.badgeBg, fg: meta.badgeColor };
 }
 
 export function Sidebar({ active, onSelect }: {
@@ -73,13 +75,13 @@ export function Sidebar({ active, onSelect }: {
       </button>
       {!collapsed && (
         <div style={{ padding: '0 20px 16px', fontSize: 13, color: ui.color.sidebarTextMuted, letterSpacing: 1, textTransform: 'uppercase' }}>
-          India Segmentation
+          CRM Segment Explorer
         </div>
       )}
       <nav style={{ display: 'flex', flexDirection: 'column' }}>
         {NAV_SECTIONS.map((section, sIdx) => (
           <div key={section.heading} style={{ marginTop: sIdx === 0 ? 0 : 18 }}>
-            {!collapsed && sIdx > 0 && (
+            {!collapsed && (
               <div style={{
                 padding: '0 20px 8px',
                 fontSize: 11,

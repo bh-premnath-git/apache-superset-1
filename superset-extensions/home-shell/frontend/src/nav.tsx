@@ -1,8 +1,10 @@
 import * as React from 'react';
 import {
   OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
-  RuralIcon, UrbanIcon,
+  RuralIcon, UrbanIcon, DoorIcon, ChartIcon,
 } from './icons';
+import { LandingView } from './pages/Landing';
+import { DashboardHomeView } from './pages/DashboardHome';
 import { OverviewView } from './pages/Overview';
 import { ComparisonView } from './pages/Comparison';
 import { DataBrowserView } from './pages/DataBrowser';
@@ -13,6 +15,8 @@ export const SEGMENT_CODES = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const
 export type SegmentCode = typeof SEGMENT_CODES[number];
 
 export type ViewKey =
+  | 'landing'
+  | 'home'
   | 'overview'
   | 'comparison'
   | 'data-browser'
@@ -44,12 +48,19 @@ const SEGMENT_NAV: NavItem[] = SEGMENT_CODES.map((code) => {
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    heading: 'Dashboard',
+    heading: 'Start',
     items: [
-      { key: 'overview',   label: 'Overview',        icon: <OverviewIcon />, render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} /> },
-      { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />,  render: () => <ComparisonView /> },
-      { key: 'data-browser', label: 'Data browser',  icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
-      { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
+      { key: 'landing', label: 'Business case',  icon: <DoorIcon />,    render: (ctx) => <LandingView onNavigate={ctx.onNavigate} /> },
+      { key: 'home',    label: 'Dashboard home', icon: <ChartIcon />,   render: (ctx) => <DashboardHomeView onNavigate={ctx.onNavigate} /> },
+    ],
+  },
+  {
+    heading: 'Explore',
+    items: [
+      { key: 'overview',     label: 'Segment overview', icon: <OverviewIcon />, render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} /> },
+      { key: 'comparison',   label: 'Comparison tool',  icon: <CompareIcon />,  render: () => <ComparisonView /> },
+      { key: 'data-browser', label: 'Data browser',     icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
+      { key: 'prevalence',   label: 'Prevalence map',   icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
     ],
   },
   {

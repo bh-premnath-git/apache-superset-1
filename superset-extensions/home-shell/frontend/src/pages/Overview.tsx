@@ -2,161 +2,275 @@ import * as React from 'react';
 import { useMemo, useState } from 'react';
 import { ui } from '../theme';
 import { api, useFetch } from '../api';
-import { ViewKey } from '../nav';
-import { CompareIcon, MapIcon, OverviewIcon } from '../icons';
+import { ViewKey, SegmentCode, SEGMENT_CODES } from '../nav';
+import { CompareIcon, MapIcon, OverviewIcon, RuralIcon, UrbanIcon } from '../icons';
+import { SEGMENT_BRIEF, TIER_META, TIER_ORDER, Tier } from '../crm';
 
-// Pathways-style overview for the Indian Living Conditions Approach (LCA)
-// segmentation. The underlying data model defines four rural segments
-// (R1–R4, best → most constrained) and three urban segments (U1–U3). We
-// re-group those into four vulnerability levels for the hero summary, so
-// the page reads like the Northern Nigeria reference design while still
-// being faithful to seed/pg/002_lca_segment_views.sql.
+// Screen 2 — Segment Overview.
+//
+// All 7 CRM segments at a glance, grouped by readiness tier (default) or by
+// sector / size. Each card shows the segment code, FSP-facing name, the
+// readiness tier badge, the overall prevalence %, and a per-state mini bar.
 
 type Band = 'Rural' | 'Urban';
-
-interface SegmentDef {
-  code: string;
-  band: Band;
-  label: string;
-  rule: string;
-  level: 1 | 2 | 3 | 4;
-}
-
-const SEGMENT_DEFS: Record<string, SegmentDef> = {
-  R1: {
-    code: 'R1',
-    band: 'Rural',
-    label: 'Connected, asset-rich rural',
-    rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
-    level: 1,
-  },
-  R2: {
-    code: 'R2',
-    band: 'Rural',
-    label: 'Digitally engaged rural',
-    rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not R1)',
-    level: 2,
-  },
-  R3: {
-    code: 'R3',
-    band: 'Rural',
-    label: 'Low-connectivity rural',
-    rule: 'digital_score ≤ 1 AND internet_access = 0',
-    level: 3,
-  },
-  R4: {
-    code: 'R4',
-    band: 'Rural',
-    label: 'Most constrained rural',
-    rule: 'fallback — none of R1/R2/R3 apply',
-    level: 4,
-  },
-  U1: {
-    code: 'U1',
-    band: 'Urban',
-    label: 'Connected, asset-rich urban',
-    rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
-    level: 1,
-  },
-  U2: {
-    code: 'U2',
-    band: 'Urban',
-    label: 'Digitally engaged urban',
-    rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not U1)',
-    level: 2,
-  },
-  U3: {
-    code: 'U3',
-    band: 'Urban',
-    label: 'Most constrained urban',
-    rule: 'fallback — neither U1 nor U2 applies',
-    level: 4,
-  },
-};
-
-const SEGMENT_ORDER = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
-
-const LEVEL_META: Record<1 | 2 | 3 | 4, { name: string; tagColor: string; tagBg: string; chipColor: string }> = {
-  4: { name: 'most vulnerable',  tagColor: '#9d174d', tagBg: '#fce7f3', chipColor: '#ec4899' },
-  3: { name: 'more vulnerable',  tagColor: '#6b21a8', tagBg: '#f3e8ff', chipColor: '#a855f7' },
-  2: { name: 'less vulnerable',  tagColor: '#1e3a8a', tagBg: '#dbeafe', chipColor: '#3b82f6' },
-  1: { name: 'least vulnerable', tagColor: '#374151', tagBg: '#e5e7eb', chipColor: '#9ca3af' },
-};
-
-type ViewBy = 'level' | 'band' | 'size';
+type ViewBy = 'tier' | 'band' | 'size';
 
 function fmtInt(n: number | undefined | null): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return Math.round(n).toLocaleString('en-IN');
 }
 
-function fmtPct(n: number | undefined | null): string {
+function fmtPct(n: number | undefined | null, digits = 0): string {
   if (n == null || !Number.isFinite(n)) return '—';
-  return `${n.toFixed(0)}%`;
+  return `${n.toFixed(digits)}%`;
 }
 
-function SegmentChip({
-  def,
-  share,
-}: {
-  def: SegmentDef;
-  share: number | undefined;
-}) {
-  const meta = LEVEL_META[def.level];
+function bandOf(code: SegmentCode): Band {
+  return code.startsWith('R') ? 'Rural' : 'Urban';
+}
+
+// Lightweight tooltip rendered absolutely over the card on hover.
+function HoverTooltip({ children }: { children: React.ReactNode }) {
   return (
     <div
-      title={`${def.label} — ${def.rule}`}
+      role="tooltip"
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '10px 14px',
-        background: ui.color.surface,
-        border: `1px solid ${ui.color.border}`,
-        borderRadius: 10,
-        minWidth: 180,
+        position: 'absolute',
+        bottom: -10,
+        left: 12,
+        right: 12,
+        transform: 'translateY(100%)',
+        background: ui.color.text,
+        color: ui.color.surface,
+        padding: '8px 10px',
+        borderRadius: 6,
+        fontSize: 11,
+        lineHeight: 1.5,
+        boxShadow: '0 6px 18px rgba(15,23,42,0.25)',
+        zIndex: 10,
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: '50%',
-          background: meta.chipColor,
-          opacity: 0.85,
-          display: 'inline-block',
-          flexShrink: 0,
-        }}
-      />
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <span style={{ fontSize: 13, color: ui.color.text }}>{def.band}</span>
+      {children}
+    </div>
+  );
+}
+
+function StateMiniBar({
+  states,
+}: {
+  states: { state: string; share_pct: number }[];
+}) {
+  const max = Math.max(1, ...states.map((s) => s.share_pct));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {states.map((s) => (
+        <div
+          key={s.state}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '46px 1fr 36px',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <span style={{ fontSize: 10, color: ui.color.textMuted, fontWeight: 600, letterSpacing: 0.2 }}>
+            {s.state.slice(0, 3).toUpperCase()}
+          </span>
+          <div
+            style={{
+              position: 'relative',
+              height: 6,
+              background: ui.color.surfaceMuted,
+              borderRadius: 2,
+            }}
+          >
+            <div
+              style={{
+                width: `${(s.share_pct / max) * 100}%`,
+                height: '100%',
+                background: ui.color.chipText,
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          <span style={{ fontSize: 10, color: ui.color.text, textAlign: 'right' }}>
+            {fmtPct(s.share_pct)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SegmentCard({
+  code,
+  share,
+  states,
+  onOpen,
+  onAddToCompare,
+  hoverStats,
+  inCompare,
+}: {
+  code: SegmentCode;
+  share: number | undefined;
+  states: { state: string; share_pct: number }[];
+  onOpen: () => void;
+  onAddToCompare: () => void;
+  hoverStats: { mpce: string; internet: string; ration: string } | null;
+  inCompare: boolean;
+}) {
+  const brief = SEGMENT_BRIEF[code];
+  const tier = TIER_META[brief.tier];
+  const isRural = bandOf(code) === 'Rural';
+  const [hover, setHover] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'relative',
+        background: ui.color.surface,
+        border: `1px solid ${ui.color.border}`,
+        borderRadius: 12,
+        padding: 14,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              background: ui.color.surfaceMuted,
+              color: ui.color.text,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {isRural ? <RuralIcon /> : <UrbanIcon />}
+          </span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              padding: '3px 8px',
+              borderRadius: 6,
+              background: tier.badgeBg,
+              color: tier.badgeColor,
+            }}
+          >
+            {code}
+          </span>
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 700, color: ui.color.text }}>
+          {fmtPct(share, 1)}
+        </span>
       </div>
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: meta.tagBg,
-          color: meta.tagColor,
-        }}
-      >
-        {def.code}
-      </span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: ui.color.text, minWidth: 36, textAlign: 'right' }}>
-        {fmtPct(share)}
-      </span>
-      <span aria-hidden style={{ color: ui.color.textMuted, fontSize: 14 }}>→</span>
+
+      <div>
+        <strong style={{ fontSize: 13, color: ui.color.text, lineHeight: 1.4, display: 'block' }}>
+          {brief.name}
+        </strong>
+        <span
+          style={{
+            fontSize: 11,
+            color: tier.badgeColor,
+            fontWeight: 600,
+            display: 'inline-block',
+            marginTop: 4,
+          }}
+        >
+          {tier.label}
+        </span>
+      </div>
+
+      <p style={{ margin: 0, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.5 }}>
+        {brief.persona}
+      </p>
+
+      <div style={{ borderTop: `1px solid ${ui.color.border}`, paddingTop: 10 }}>
+        <span style={{ fontSize: 10, color: ui.color.textMuted, fontWeight: 600, letterSpacing: 0.4 }}>
+          STATE PREVALENCE
+        </span>
+        <div style={{ marginTop: 6 }}>
+          <StateMiniBar states={states} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={onOpen}
+          style={{
+            flex: 1,
+            padding: '7px 10px',
+            border: 'none',
+            borderRadius: 6,
+            background: ui.color.text,
+            color: ui.color.surface,
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: ui.font,
+          }}
+        >
+          Open profile →
+        </button>
+        <button
+          type="button"
+          onClick={onAddToCompare}
+          title={inCompare ? 'Already in comparison' : 'Add to comparison'}
+          style={{
+            padding: '7px 10px',
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 6,
+            background: inCompare ? ui.color.chip : ui.color.surface,
+            color: inCompare ? ui.color.chipText : ui.color.text,
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: ui.font,
+          }}
+        >
+          {inCompare ? '✓ Compare' : '+ Compare'}
+        </button>
+      </div>
+
+      {hover && hoverStats && (
+        <HoverTooltip>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <div>
+              <div style={{ opacity: 0.7 }}>MPCE</div>
+              <div style={{ fontWeight: 700 }}>{hoverStats.mpce}</div>
+            </div>
+            <div>
+              <div style={{ opacity: 0.7 }}>Internet</div>
+              <div style={{ fontWeight: 700 }}>{hoverStats.internet}</div>
+            </div>
+            <div>
+              <div style={{ opacity: 0.7 }}>Ration</div>
+              <div style={{ fontWeight: 700 }}>{hoverStats.ration}</div>
+            </div>
+          </div>
+        </HoverTooltip>
+      )}
     </div>
   );
 }
 
 function ViewByToggle({ value, onChange }: { value: ViewBy; onChange: (v: ViewBy) => void }) {
   const opts: { key: ViewBy; label: string }[] = [
-    { key: 'level', label: 'Vulnerability level' },
-    { key: 'band', label: 'Urban / Rural' },
-    { key: 'size', label: 'Segment size' },
+    { key: 'tier', label: 'By readiness tier' },
+    { key: 'band', label: 'Rural / Urban' },
+    { key: 'size', label: 'By prevalence' },
   ];
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
@@ -221,10 +335,10 @@ function DiveCard({
         background: ui.color.surface,
         border: `1px solid ${ui.color.border}`,
         borderRadius: 12,
-        padding: 20,
+        padding: 18,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
+        gap: 8,
         cursor: 'pointer',
         fontFamily: ui.font,
         boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
@@ -245,18 +359,44 @@ function DiveCard({
       >
         {icon}
       </span>
-      <strong style={{ fontSize: 15, color: ui.color.text }}>{title}</strong>
-      <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>{body}</p>
-      <span style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: ui.color.chipText }}>{cta} →</span>
+      <strong style={{ fontSize: 14, color: ui.color.text }}>{title}</strong>
+      <p style={{ margin: 0, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.5 }}>{body}</p>
+      <span style={{ marginTop: 4, fontSize: 13, fontWeight: 600, color: ui.color.chipText }}>{cta} →</span>
     </button>
   );
+}
+
+const COMPARE_KEY = 'crm.home.comparisonDraft';
+const MAX_COMPARE = 3;
+
+function readCompareDraft(): SegmentCode[] {
+  try {
+    const raw = localStorage.getItem(COMPARE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s: unknown): s is SegmentCode => typeof s === 'string' && (SEGMENT_CODES as readonly string[]).includes(s)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCompareDraft(arr: SegmentCode[]) {
+  try {
+    localStorage.setItem(COMPARE_KEY, JSON.stringify(arr));
+  } catch {
+    /* ignore */
+  }
 }
 
 export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void } = {}) {
   const summary = useFetch(() => api.summary(), []);
   const segments = useFetch(() => api.segments(), []);
+  const states = useFetch(() => api.statesSegments(), []);
+  const mpce = useFetch(() => api.mpce(), []);
+  const indicators = useFetch(() => api.metricsValues(['any_internet', 'ration_any']), []);
 
-  const [viewBy, setViewBy] = useState<ViewBy>('level');
+  const [viewBy, setViewBy] = useState<ViewBy>('tier');
+  const [compare, setCompare] = useState<SegmentCode[]>(() => readCompareDraft());
 
   const sharesByCode = useMemo(() => {
     const map: Record<string, number> = {};
@@ -264,62 +404,97 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
     return map;
   }, [segments.data]);
 
-  const allDefs = SEGMENT_ORDER.map((c) => SEGMENT_DEFS[c]);
+  const stateBreakdownByCode = useMemo(() => {
+    const map: Record<string, { state: string; share_pct: number }[]> = {};
+    for (const code of SEGMENT_CODES) map[code] = [];
+    for (const st of states.data?.states ?? []) {
+      for (const seg of st.segments) {
+        if (!(SEGMENT_CODES as readonly string[]).includes(seg.segment)) continue;
+        map[seg.segment].push({ state: st.state, share_pct: seg.share_pct });
+      }
+    }
+    return map;
+  }, [states.data]);
 
-  // Total share within an arbitrary subset, used for the level totals.
-  const sumShare = (defs: SegmentDef[]) =>
-    defs.reduce((acc, d) => acc + (sharesByCode[d.code] ?? 0), 0);
+  const hoverStatsByCode = useMemo(() => {
+    const out: Record<string, { mpce: string; internet: string; ration: string }> = {};
+    const mpceBySeg = new Map<string, number>();
+    for (const r of mpce.data?.segments ?? []) mpceBySeg.set(r.segment, r.mean_mpce);
+    const internetBySeg = new Map<string, number>();
+    const rationBySeg = new Map<string, number>();
+    for (const m of indicators.data?.metrics ?? []) {
+      if (m.type !== 'binary') continue;
+      const target = m.key === 'any_internet' ? internetBySeg : m.key === 'ration_any' ? rationBySeg : null;
+      if (!target) continue;
+      for (const v of m.values) target.set(v.segment, v.share_pct);
+    }
+    for (const code of SEGMENT_CODES) {
+      const mp = mpceBySeg.get(code);
+      out[code] = {
+        mpce: mp == null ? '—' : `₹${Math.round(mp).toLocaleString('en-IN')}`,
+        internet: fmtPct(internetBySeg.get(code) ?? null),
+        ration: fmtPct(rationBySeg.get(code) ?? null),
+      };
+    }
+    return out;
+  }, [mpce.data, indicators.data]);
 
-  const groups: { key: string; tag: string; title: string; total: number; defs: SegmentDef[] }[] = useMemo(() => {
+  const sumShare = (codes: SegmentCode[]) =>
+    codes.reduce((acc, c) => acc + (sharesByCode[c] ?? 0), 0);
+
+  const groups: { key: string; tag: string; title: string; subtitle?: string; total: number; codes: SegmentCode[]; tierMeta?: typeof TIER_META[Tier] }[] = useMemo(() => {
     if (viewBy === 'band') {
-      const rural = allDefs.filter((d) => d.band === 'Rural');
-      const urban = allDefs.filter((d) => d.band === 'Urban');
+      const rural = SEGMENT_CODES.filter((c) => bandOf(c) === 'Rural');
+      const urban = SEGMENT_CODES.filter((c) => bandOf(c) === 'Urban');
       return [
-        { key: 'rural', tag: 'R', title: 'Rural households', total: sumShare(rural), defs: rural },
-        { key: 'urban', tag: 'U', title: 'Urban households', total: sumShare(urban), defs: urban },
+        { key: 'rural', tag: 'R', title: 'Rural households', total: sumShare([...rural]), codes: [...rural] },
+        { key: 'urban', tag: 'U', title: 'Urban households', total: sumShare([...urban]), codes: [...urban] },
       ];
     }
     if (viewBy === 'size') {
-      const sorted = [...allDefs].sort((a, b) => (sharesByCode[b.code] ?? 0) - (sharesByCode[a.code] ?? 0));
-      return [{ key: 'size', tag: '#', title: 'Largest to smallest', total: sumShare(sorted), defs: sorted }];
+      const sorted = [...SEGMENT_CODES].sort((a, b) => (sharesByCode[b] ?? 0) - (sharesByCode[a] ?? 0));
+      return [{ key: 'size', tag: '#', title: 'Largest to smallest', total: sumShare(sorted), codes: sorted }];
     }
-    // level
-    return ([4, 3, 2, 1] as const).map((lvl) => {
-      const defs = allDefs.filter((d) => d.level === lvl);
+    return TIER_ORDER.map((t) => {
+      const meta = TIER_META[t];
       return {
-        key: `lvl-${lvl}`,
-        tag: String(lvl),
-        title: LEVEL_META[lvl].name,
-        total: sumShare(defs),
-        defs,
+        key: `tier-${t}`,
+        tag: String(t),
+        title: meta.label,
+        subtitle: meta.tagline,
+        total: sumShare(meta.members),
+        codes: meta.members,
+        tierMeta: meta,
       };
     });
   }, [viewBy, sharesByCode]);
 
   const fetchError = summary.error ?? segments.error;
-  const states = summary.data?.states_focus ?? ['Bihar', 'Jharkhand', 'Madhya Pradesh'];
+  const focusStates = summary.data?.states_focus ?? ['Bihar', 'Madhya Pradesh', 'Jharkhand'];
+
+  const toggleCompare = (code: SegmentCode) => {
+    setCompare((cur) => {
+      const next = cur.includes(code)
+        ? cur.filter((c) => c !== code)
+        : cur.length >= MAX_COMPARE
+          ? [...cur.slice(1), code]
+          : [...cur, code];
+      writeCompareDraft(next);
+      return next;
+    });
+  };
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 36 }}>
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+    <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 30 }}>
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <section>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: ui.color.text }}>
-          India household segmentation
+          CRM Population Segments — {focusStates.join(', ')}
         </h1>
-        <p style={{ margin: '12px 0 0', color: ui.color.chipText, fontSize: 13, lineHeight: 1.6 }}>
-          The India segmentation classifies households across focus states using the Living
-          Conditions Approach (LCA). Households are split by sector — rural and urban — and then
-          grouped into vulnerability-based segments built from digital, asset and connectivity
-          signals on <code>household.hh_master</code>. Rural households fall into four segments
-          (R1–R4) and urban households into three (U1–U3). R4 and U3 are the two most constrained
-          segments: R4 is the largest rural segment in the focus states and U3 covers the urban
-          households missing both digital and asset signals. R1 and U1 represent the
-          least-constrained ends, where households score on both digital engagement and household
-          assets. Segment shares on this page are weighted by the survey weight <code>wt</code>{' '}
-          aggregated from <code>vw_state_segment_distribution</code>. Counts come from{' '}
-          <code>hh_master</code>; geography from <code>vw_state_district_segment_geo</code>.
-          Sonder Collective has taken reasonable steps to assure the accuracy of the data, but
-          takes no responsibility for upstream survey accuracy.
+        <p style={{ margin: '10px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6, maxWidth: 760 }}>
+          Seven segments cluster into four readiness tiers based on FSP entry strategy. Pick the
+          tier that matches your product hypothesis, then drill into a segment for the persona,
+          data dimensions and channel ladder.
         </p>
 
         {fetchError && (
@@ -334,137 +509,240 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
               background: '#fff5f5',
             }}
           >
-            Could not load live segmentation data: {fetchError.message}. Showing segment
-            definitions only.
+            Could not load live segmentation data: {fetchError.message}.
           </div>
         )}
 
-        {/* Metadata strip */}
+        {/* Methodology strip */}
         <div
           style={{
-            marginTop: 18,
+            marginTop: 16,
             border: `1px solid ${ui.color.border}`,
             borderRadius: 8,
-            padding: '14px 18px',
+            padding: '12px 16px',
             display: 'grid',
             gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-            gap: 18,
+            gap: 16,
             background: ui.color.surface,
           }}
         >
-          <MetaCell label="Data source">NSSO HCES (hh_master)</MetaCell>
-          <MetaCell label="Sample population">Rural &amp; urban households</MetaCell>
-          <MetaCell label="Sample size">
+          <MetaCell label="Data source">NSSO HCES 2023-24</MetaCell>
+          <MetaCell label="Sample">
             {summary.loading ? '…' : fmtInt(summary.data?.weighted_households)} weighted hh
           </MetaCell>
-          <MetaCell label="Geographic coverage">
-            <span>{states.join(', ')}</span>
-            <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: ui.color.chipText }}>
+          <MetaCell label="Method">LCA · 4-class structural</MetaCell>
+          <MetaCell label="Geography">
+            {focusStates.join(', ')}
+            <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: ui.color.textMuted }}>
               {summary.loading ? '…' : fmtInt(summary.data?.districts_covered)} districts
             </span>
           </MetaCell>
         </div>
+      </section>
+
+      {/* ── Compare tray ───────────────────────────────────────────────── */}
+      {compare.length > 0 && (
         <div
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: 10,
-            color: ui.color.textMuted,
-            marginTop: 6,
-            padding: '0 2px',
+            alignItems: 'center',
+            gap: 10,
+            padding: '10px 14px',
+            background: ui.color.chip,
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 8,
+            color: ui.color.chipText,
+            fontSize: 13,
           }}
         >
-          <span>Refreshed nightly from PostgreSQL views</span>
-          <span>IND_LCA_2024_v1</span>
+          <strong>Compare ({compare.length}/{MAX_COMPARE}):</strong>
+          {compare.map((c) => (
+            <span
+              key={c}
+              style={{
+                padding: '2px 8px',
+                background: ui.color.surface,
+                borderRadius: 999,
+                fontWeight: 700,
+                fontSize: 12,
+              }}
+            >
+              {c}
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => onNavigate?.('comparison')}
+            style={{
+              marginLeft: 'auto',
+              padding: '6px 12px',
+              border: 'none',
+              borderRadius: 6,
+              background: ui.color.chipText,
+              color: ui.color.surface,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: ui.font,
+            }}
+          >
+            Open comparison →
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCompare([]);
+              writeCompareDraft([]);
+            }}
+            style={{
+              padding: '6px 10px',
+              border: `1px solid ${ui.color.chipText}`,
+              borderRadius: 6,
+              background: 'transparent',
+              color: ui.color.chipText,
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: ui.font,
+            }}
+          >
+            Clear
+          </button>
         </div>
-      </section>
+      )}
 
-      {/* ── Population segments ──────────────────────────────────────────── */}
+      {/* ── Segments ───────────────────────────────────────────────────── */}
       <section>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `2px solid ${ui.color.text}`, paddingTop: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: ui.color.text }}>
             Population segments
           </h2>
           <ViewByToggle value={viewBy} onChange={setViewBy} />
         </div>
 
-        <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {groups.map((g) => {
-            const meta = viewBy === 'level'
-              ? LEVEL_META[Number(g.tag) as 1 | 2 | 3 | 4]
-              : { tagColor: ui.color.text, tagBg: ui.color.surfaceMuted, chipColor: ui.color.chipText, name: g.title };
-            return (
-              <div key={g.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: '50%',
-                      background: meta.tagBg,
-                      color: meta.tagColor,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 11,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {g.tag}
+        <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 22 }}>
+          {groups.map((g) => (
+            <div key={g.key} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    minWidth: 22,
+                    height: 22,
+                    padding: '0 6px',
+                    borderRadius: '50%',
+                    background: g.tierMeta?.badgeBg ?? ui.color.surfaceMuted,
+                    color: g.tierMeta?.badgeColor ?? ui.color.text,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                >
+                  {g.tag}
+                </span>
+                <span style={{ fontSize: 14, color: ui.color.text, fontWeight: 700 }}>
+                  {g.title}
+                </span>
+                <span style={{ fontSize: 12, color: ui.color.textMuted }}>
+                  · {fmtPct(g.total, 1)} of population
+                </span>
+                {g.subtitle && (
+                  <span style={{ fontSize: 12, color: ui.color.textMuted, lineHeight: 1.4, flexBasis: '100%' }}>
+                    {g.subtitle}
                   </span>
-                  <span style={{ fontSize: 13, color: ui.color.text, fontWeight: 600 }}>{g.title}</span>
-                  <span style={{ fontSize: 12, color: ui.color.textMuted }}>
-                    · {fmtPct(g.total)} of population
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                  {g.defs.map((d) => (
-                    <SegmentChip key={d.code} def={d} share={sharesByCode[d.code]} />
-                  ))}
-                </div>
+                )}
               </div>
-            );
-          })}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {g.codes.map((c) => (
+                  <SegmentCard
+                    key={c}
+                    code={c}
+                    share={sharesByCode[c]}
+                    states={stateBreakdownByCode[c] ?? []}
+                    onOpen={() => onNavigate?.(`segment:${c}` as ViewKey)}
+                    onAddToCompare={() => toggleCompare(c)}
+                    hoverStats={hoverStatsByCode[c] ?? null}
+                    inCompare={compare.includes(c)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-
-        <p style={{ marginTop: 18, fontSize: 12, color: ui.color.chipText, lineHeight: 1.6 }}>
-          Letter prefixes (R, U) distinguish rural and urban segments; numeric suffixes (1–4)
-          increase with vulnerability. R4 and U3 are the most constrained groups within their
-          sector.{' '}
-          <a href="#" style={{ color: ui.color.chipText, textDecoration: 'underline' }}>
-            Rural/Urban definitions here
-          </a>
-        </p>
       </section>
 
-      {/* ── Dive deeper ──────────────────────────────────────────────────── */}
+      {/* ── Methodology summary ────────────────────────────────────────── */}
+      <section
+        style={{
+          padding: '14px 18px',
+          background: ui.color.surfaceMuted,
+          border: `1px solid ${ui.color.border}`,
+          borderRadius: 10,
+          fontSize: 12,
+          color: ui.color.textMuted,
+          lineHeight: 1.6,
+        }}
+      >
+        <strong style={{ color: ui.color.text }}>Methodology summary</strong>
+        <br />
+        Source: NSSO HCES 2023-24, restricted to Bihar, MP and Jharkhand. Method: 4-class LCA
+        on digital, asset, welfare and demographic signals from
+        <code> household.hh_master</code>. Sample: {summary.loading ? '…' : fmtInt(summary.data?.weighted_households)}{' '}
+        weighted households across {summary.loading ? '…' : fmtInt(summary.data?.districts_covered)} districts.
+        Limitations: M1 captures structural readiness only — behavioural (M2) and outcome (M3)
+        layers are deferred. SBC Labs takes no responsibility for upstream survey accuracy.
+      </section>
+
+      {/* ── Dive deeper ────────────────────────────────────────────────── */}
       <section>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: ui.color.text, borderTop: `2px solid ${ui.color.text}`, paddingTop: 12 }}>
-          Dive deeper into the data
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 700,
+            color: ui.color.text,
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+          }}
+        >
+          Dive deeper
         </h2>
-        <p style={{ margin: '8px 0 16px', fontSize: 13, color: ui.color.chipText, lineHeight: 1.5 }}>
-          Go beyond the segment shares above with interactive tools that let you compare, map and
-          filter the India segmentation data for your specific needs.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
+        <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
           <DiveCard
             icon={<CompareIcon />}
             title="Comparison tool"
-            body="Explore patterns across population segments and health areas to inform your work."
+            body="Compare any 2–3 segments side-by-side across data dimensions, readiness and channel."
             cta="Compare segments"
             onClick={() => onNavigate?.('comparison')}
           />
           <DiveCard
             icon={<OverviewIcon />}
             title="Data browser"
-            body="Browse individual data points and segment definitions from this segmentation."
+            body="Browse every indicator by segment, with a search and per-category filter."
             cta="Browse data"
             onClick={() => onNavigate?.('data-browser')}
           />
           <DiveCard
             icon={<MapIcon />}
             title="Prevalence map"
-            body="Discover how population segments are distributed geographically across states and districts."
+            body="See the district-level concentration of any segment across the three focus states."
             cta="View map"
             onClick={() => onNavigate?.('prevalence')}
           />

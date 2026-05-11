@@ -1,69 +1,50 @@
 import * as React from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ui } from '../theme';
 import { api, useFetch, MetricValues, BinaryMetricValues, CategoricalMetricValues } from '../api';
-import { ViewKey, SegmentCode } from '../nav';
+import { ViewKey, SegmentCode, SEGMENT_CODES } from '../nav';
 import { Card } from '../components/Card';
+import { SEGMENT_BRIEF, TIER_META, DATA_DIMENSIONS, RATING_STYLE, Rating } from '../crm';
 
-// Per-segment profile, mirroring the "segment profile" sidebar pattern from
-// reference Pathways-style dashboards. Reuses the same backend endpoints
-// that power Overview and Comparison: /segments (share), /mpce (consumption
-// expenditure), and /metrics/values (per-segment indicator breakdowns).
+// Screen 3 — Segment Profile.
+//
+// Deep-dive on one CRM segment. Layout follows the FSP-facing spec:
+//   • Hero: code + readiness tier + prevalence
+//   • 4 data-dimension panels (Economic / Welfare / Digital / Vulnerability)
+//   • Readiness panel (Need / Access / Slack pills)
+//   • Product hypothesis (headline + body)
+//   • Channel hypothesis (headline + body)
+//   • Channel activation ladder (horizontal stepped diagram)
+//   • Prev / next segment arrows + "Add to comparison"
 
-type SegmentDef = {
-  code: SegmentCode;
-  band: 'Rural' | 'Urban';
-  label: string;
-  rule: string;
-  level: 1 | 2 | 3 | 4;
-  blurb: string;
-};
+const ALL_PROFILE_METRICS = Array.from(
+  new Set(DATA_DIMENSIONS.flatMap((d) => d.metrics)),
+);
 
-const DEFS: Record<SegmentCode, SegmentDef> = {
-  R1: { code: 'R1', band: 'Rural', label: 'Connected, asset-rich rural', level: 1,
-        rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
-        blurb: 'Rural households that score on both digital engagement and household assets — the least-constrained rural group.' },
-  R2: { code: 'R2', band: 'Rural', label: 'Digitally engaged rural', level: 2,
-        rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not R1)',
-        blurb: 'Rural households with mobile phones and digital activity, but without the asset depth of R1.' },
-  R3: { code: 'R3', band: 'Rural', label: 'Low-connectivity rural', level: 3,
-        rule: 'digital_score ≤ 1 AND internet_access = 0',
-        blurb: 'Rural households without internet access and limited digital engagement.' },
-  R4: { code: 'R4', band: 'Rural', label: 'Most constrained rural', level: 4,
-        rule: 'fallback — none of R1/R2/R3 apply',
-        blurb: 'Rural households missing both digital and asset signals — the most constrained rural group, and the largest in the focus states.' },
-  U1: { code: 'U1', band: 'Urban', label: 'Connected, asset-rich urban', level: 1,
-        rule: 'asset_score ≥ 2 AND digital_score ≥ 2 AND internet_access = 1',
-        blurb: 'Urban households that score on both digital engagement and household assets.' },
-  U2: { code: 'U2', band: 'Urban', label: 'Digitally engaged urban', level: 2,
-        rule: 'digital_score ≥ 2 AND mobile_ownership = 1 (and not U1)',
-        blurb: 'Urban households with mobile phones and digital activity, but without the asset depth of U1.' },
-  U3: { code: 'U3', band: 'Urban', label: 'Most constrained urban', level: 4,
-        rule: 'fallback — neither U1 nor U2 applies',
-        blurb: 'Urban households missing both digital and asset signals.' },
-};
+const COMPARE_KEY = 'crm.home.comparisonDraft';
+const SAVED_KEY = 'crm.home.savedSegments';
+const MAX_COMPARE = 3;
 
-const LEVEL_META: Record<1 | 2 | 3 | 4, { name: string; tagColor: string; tagBg: string }> = {
-  4: { name: 'most vulnerable',  tagColor: '#9d174d', tagBg: '#fce7f3' },
-  3: { name: 'more vulnerable',  tagColor: '#6b21a8', tagBg: '#f3e8ff' },
-  2: { name: 'less vulnerable',  tagColor: '#1e3a8a', tagBg: '#dbeafe' },
-  1: { name: 'least vulnerable', tagColor: '#374151', tagBg: '#e5e7eb' },
-};
+function readArr(key: string): SegmentCode[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? arr.filter((s: unknown): s is SegmentCode => typeof s === 'string' && (SEGMENT_CODES as readonly string[]).includes(s))
+      : [];
+  } catch {
+    return [];
+  }
+}
 
-// Curated indicator set used on the profile. Drawn from METRIC_CATALOG in
-// backend/entrypoint.py — keep these keys in sync with the catalog there.
-const PROFILE_METRICS = [
-  'any_internet',
-  'possess_mobile',
-  'any_secondary',
-  'any_higher',
-  'head_edu_level',
-  'social_group',
-  'dwelling_type',
-  'cooking_energy',
-  'ration_card',
-  'ration_any',
-];
+function writeArr(key: string, arr: SegmentCode[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch {
+    /* ignore */
+  }
+}
 
 function fmtPct(n: number | undefined | null, digits = 0): string {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -93,16 +74,13 @@ function StatCell({ label, value, sub }: { label: string; value: string; sub?: s
 function BinaryRow({ label, pct }: { label: string; pct: number }) {
   const bounded = Math.max(0, Math.min(100, pct));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: ui.color.text }}>
         <span>{label}</span>
         <strong>{fmtPct(pct)}</strong>
       </div>
-      <div style={{ position: 'relative', height: 10, background: ui.color.surfaceMuted, borderRadius: 4, overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${bounded}%`, background: '#60a5fa',
-        }} />
+      <div style={{ position: 'relative', height: 8, background: ui.color.surfaceMuted, borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${bounded}%`, background: '#60a5fa' }} />
       </div>
     </div>
   );
@@ -120,7 +98,7 @@ function CategoricalRow({
   const byKey: Record<string, number> = {};
   for (const b of breakdown) byKey[b.category] = b.share_pct;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
       <span style={{ fontSize: 12, color: ui.color.text }}>{label}</span>
       <div style={{ display: 'flex', height: 10, borderRadius: 4, overflow: 'hidden' }}>
         {categories.map((c) => {
@@ -147,6 +125,155 @@ function CategoricalRow({
   );
 }
 
+function DimensionPanel({
+  title,
+  blurb,
+  metrics,
+  metricsByKey,
+  loading,
+  segmentCode,
+}: {
+  title: string;
+  blurb: string;
+  metrics: readonly string[];
+  metricsByKey: Map<string, MetricValues>;
+  loading: boolean;
+  segmentCode: SegmentCode;
+}) {
+  return (
+    <div
+      style={{
+        background: ui.color.surface,
+        border: `1px solid ${ui.color.border}`,
+        borderRadius: 10,
+        padding: 14,
+      }}
+    >
+      <strong style={{ fontSize: 13, color: ui.color.text, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+        {title}
+      </strong>
+      <p style={{ margin: '4px 0 12px', fontSize: 11, color: ui.color.textMuted, lineHeight: 1.5 }}>
+        {blurb}
+      </p>
+      {loading && <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>}
+      {!loading && metrics.map((key) => {
+        const m = metricsByKey.get(key);
+        if (!m) {
+          return (
+            <div key={key} style={{ fontSize: 11, color: ui.color.textMuted, marginBottom: 6 }}>
+              <em>{key}</em> — not available
+            </div>
+          );
+        }
+        if (m.type === 'binary') {
+          const bm = m as BinaryMetricValues;
+          const v = bm.values.find((x) => x.segment === segmentCode);
+          return <BinaryRow key={m.key} label={m.label} pct={v?.share_pct ?? 0} />;
+        }
+        const cm = m as CategoricalMetricValues;
+        const v = cm.values.find((x) => x.segment === segmentCode);
+        return (
+          <CategoricalRow
+            key={m.key}
+            label={m.label}
+            breakdown={v?.breakdown ?? []}
+            categories={cm.categories}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function ReadinessPill({ label, rating, note }: { label: string; rating: Rating; note: string }) {
+  const style = RATING_STYLE[rating];
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        padding: 14,
+        background: ui.color.surface,
+        border: `1px solid ${ui.color.border}`,
+        borderRadius: 10,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: ui.color.text, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            padding: '3px 10px',
+            borderRadius: 999,
+            background: style.bg,
+            color: style.fg,
+          }}
+        >
+          {rating}
+        </span>
+      </div>
+      <span style={{ fontSize: 12, color: ui.color.textMuted, lineHeight: 1.5 }}>{note}</span>
+    </div>
+  );
+}
+
+function ChannelLadder({ steps }: { steps: string[] }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, flexWrap: 'wrap' }}>
+      {steps.map((s, i) => (
+        <React.Fragment key={`${s}-${i}`}>
+          <div
+            style={{
+              flex: '1 1 0',
+              minWidth: 120,
+              padding: '12px 14px',
+              background: ui.color.surface,
+              border: `1px solid ${ui.color.border}`,
+              borderRadius: 8,
+              textAlign: 'center',
+              fontSize: 12,
+              fontWeight: 600,
+              color: ui.color.text,
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: ui.color.chipText,
+                marginBottom: 4,
+                letterSpacing: 0.4,
+              }}
+            >
+              STEP {i + 1}
+            </div>
+            {s}
+          </div>
+          {i < steps.length - 1 && (
+            <div
+              aria-hidden
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 6px',
+                color: ui.color.textMuted,
+                fontSize: 18,
+              }}
+            >
+              →
+            </div>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 export function SegmentProfileView({
   code,
   onNavigate,
@@ -154,17 +281,27 @@ export function SegmentProfileView({
   code: SegmentCode;
   onNavigate?: (k: ViewKey) => void;
 }) {
-  const def = DEFS[code];
-  const meta = LEVEL_META[def.level];
+  const brief = SEGMENT_BRIEF[code];
+  const tier = TIER_META[brief.tier];
 
   const summary = useFetch(() => api.summary(), []);
   const segments = useFetch(() => api.segments(), []);
   const mpce = useFetch(() => api.mpce(), []);
   const states = useFetch(() => api.statesSegments(), []);
-  const metrics = useFetch(
-    () => api.metricsValues(PROFILE_METRICS),
-    [],
-  );
+  const metrics = useFetch(() => api.metricsValues(ALL_PROFILE_METRICS), []);
+
+  const [compare, setCompare] = useState<SegmentCode[]>(() => readArr(COMPARE_KEY));
+  const [saved, setSaved] = useState<SegmentCode[]>(() => readArr(SAVED_KEY));
+
+  // Re-sync from storage when other tabs change it.
+  useEffect(() => {
+    const onStorage = () => {
+      setCompare(readArr(COMPARE_KEY));
+      setSaved(readArr(SAVED_KEY));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const seg = useMemo(
     () => segments.data?.segments.find((s) => s.segment === code),
@@ -176,10 +313,11 @@ export function SegmentProfileView({
   );
   const sectorTotal = useMemo(() => {
     const all = segments.data?.segments ?? [];
-    const sectorRows = all.filter((s) => (s.segment.startsWith('R') ? 'Rural' : 'Urban') === def.band);
+    const band = code.startsWith('R') ? 'Rural' : 'Urban';
+    const sectorRows = all.filter((s) => (s.segment.startsWith('R') ? 'Rural' : 'Urban') === band);
     const total = sectorRows.reduce((acc, s) => acc + s.share_pct, 0);
     return total > 0 ? total : undefined;
-  }, [segments.data, def.band]);
+  }, [segments.data, code]);
 
   const stateBreakdown = useMemo(() => {
     const out: { state: string; share_pct: number }[] = [];
@@ -190,72 +328,174 @@ export function SegmentProfileView({
     return out;
   }, [states.data, code]);
 
+  const metricsByKey = useMemo(() => {
+    const map = new Map<string, MetricValues>();
+    for (const m of metrics.data?.metrics ?? []) map.set(m.key, m);
+    return map;
+  }, [metrics.data]);
+
   const fetchError = summary.error ?? segments.error ?? mpce.error ?? metrics.error;
 
+  // Prev / next segment in the canonical R1..U3 order.
+  const idx = SEGMENT_CODES.indexOf(code);
+  const prevCode = idx > 0 ? SEGMENT_CODES[idx - 1] : SEGMENT_CODES[SEGMENT_CODES.length - 1];
+  const nextCode = idx < SEGMENT_CODES.length - 1 ? SEGMENT_CODES[idx + 1] : SEGMENT_CODES[0];
+
+  const inCompare = compare.includes(code);
+  const inSaved = saved.includes(code);
+
+  const toggleCompare = () => {
+    setCompare((cur) => {
+      const next = cur.includes(code)
+        ? cur.filter((c) => c !== code)
+        : cur.length >= MAX_COMPARE
+          ? [...cur.slice(1), code]
+          : [...cur, code];
+      writeArr(COMPARE_KEY, next);
+      return next;
+    });
+  };
+
+  const toggleSaved = () => {
+    setSaved((cur) => {
+      const next = cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code];
+      writeArr(SAVED_KEY, next);
+      return next;
+    });
+  };
+
   return (
-    <div style={{ maxWidth: 920, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 28 }}>
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+    <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: ui.color.textMuted }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 12,
+            color: ui.color.textMuted,
+          }}
+        >
           <button
             type="button"
             onClick={() => onNavigate?.('overview')}
             style={{
-              background: 'transparent', border: 'none', padding: 0,
-              color: ui.color.chipText, fontSize: 12, cursor: 'pointer', fontFamily: ui.font,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              color: ui.color.chipText,
+              fontSize: 12,
+              cursor: 'pointer',
+              fontFamily: ui.font,
             }}
           >
             ← All segments
           </button>
           <span>/</span>
-          <span>{def.band}</span>
+          <span>{tier.label}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
-          <span
-            style={{
-              fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
-              background: meta.tagBg, color: meta.tagColor,
-            }}
-          >
-            {def.code}
-          </span>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: ui.color.text }}>
-            {def.band} · {def.label}
-          </h1>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginTop: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: 6,
+                background: tier.badgeBg,
+                color: tier.badgeColor,
+              }}
+            >
+              {brief.code}
+            </span>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: ui.color.text }}>
+              {brief.name}
+            </h1>
+          </div>
+
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => onNavigate?.(`segment:${prevCode}` as ViewKey)}
+              title={`Previous segment (${prevCode})`}
+              style={navArrowStyle}
+            >
+              ← {prevCode}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.(`segment:${nextCode}` as ViewKey)}
+              title={`Next segment (${nextCode})`}
+              style={navArrowStyle}
+            >
+              {nextCode} →
+            </button>
+            <button
+              type="button"
+              onClick={toggleSaved}
+              title={inSaved ? 'Remove bookmark' : 'Bookmark this segment'}
+              style={{
+                ...navArrowStyle,
+                background: inSaved ? ui.color.chip : ui.color.surface,
+                color: inSaved ? ui.color.chipText : ui.color.text,
+              }}
+            >
+              {inSaved ? '★ Saved' : '☆ Save'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleCompare}
+              style={{
+                ...navArrowStyle,
+                background: inCompare ? ui.color.chipText : ui.color.text,
+                color: ui.color.surface,
+                border: 'none',
+              }}
+            >
+              {inCompare ? '✓ In compare' : '+ Add to comparison'}
+            </button>
+          </div>
         </div>
-        <p style={{ margin: '12px 0 0', color: ui.color.chipText, fontSize: 13, lineHeight: 1.6 }}>
-          {def.blurb}
-        </p>
-        <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 12 }}>
-          Rule: <code>{def.rule}</code> ·{' '}
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
-            background: meta.tagBg, color: meta.tagColor,
-          }}>
-            {meta.name}
-          </span>
+
+        <p style={{ margin: '10px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6, maxWidth: 820 }}>
+          {brief.overview}
         </p>
 
         {fetchError && (
-          <div style={{
-            marginTop: 14, padding: 12, border: `1px solid ${ui.color.border}`,
-            borderRadius: 8, color: '#b00020', fontSize: 12, background: '#fff5f5',
-          }}>
+          <div
+            style={{
+              marginTop: 14,
+              padding: 12,
+              border: `1px solid ${ui.color.border}`,
+              borderRadius: 8,
+              color: '#b00020',
+              fontSize: 12,
+              background: '#fff5f5',
+            }}
+          >
             Could not load segment data: {fetchError.message}
           </div>
         )}
 
         {/* KPI strip */}
-        <div style={{
-          marginTop: 18, border: `1px solid ${ui.color.border}`, borderRadius: 8,
-          padding: '14px 18px', display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 18,
-          background: ui.color.surface,
-        }}>
+        <div
+          style={{
+            marginTop: 18,
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 10,
+            padding: '14px 18px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+            gap: 18,
+            background: ui.color.surface,
+          }}
+        >
           <StatCell
             label="Share of focus-state population"
             value={segments.loading ? '…' : fmtPct(seg?.share_pct, 1)}
-            sub={sectorTotal != null ? `${fmtPct(sectorTotal, 1)} of HH are ${def.band}` : undefined}
+            sub={sectorTotal != null ? `${fmtPct(sectorTotal, 1)} of HH are ${code.startsWith('R') ? 'Rural' : 'Urban'}` : undefined}
           />
           <StatCell
             label="Weighted households"
@@ -265,23 +505,19 @@ export function SegmentProfileView({
           <StatCell
             label="Mean MPCE"
             value={mpce.loading ? '…' : fmtCurrency(mpceRow?.mean_mpce)}
-            sub={mpceRow?.overall_sector_mean
-              ? `${def.band} avg ${fmtCurrency(mpceRow.overall_sector_mean)}`
-              : 'monthly per-capita'}
+            sub={
+              mpceRow?.overall_sector_mean
+                ? `${code.startsWith('R') ? 'Rural' : 'Urban'} avg ${fmtCurrency(mpceRow.overall_sector_mean)}`
+                : 'monthly per-capita'
+            }
           />
-          <StatCell
-            label="MPCE std. dev."
-            value={mpce.loading ? '…' : fmtCurrency(mpceRow?.stddev_mpce)}
-            sub={mpceRow?.weighted_count
-              ? `${fmtInt(mpceRow.weighted_count)} hh in MPCE view`
-              : undefined}
-          />
+          <StatCell label="Readiness tier" value={tier.label.replace(/^Tier \d+\s·\s/, '')} sub={tier.tagline} />
         </div>
       </section>
 
-      {/* ── State breakdown ─────────────────────────────────────────────── */}
+      {/* ── State breakdown bar ───────────────────────────────────────── */}
       <Card
-        title={`${def.code} share by state`}
+        title={`${brief.code} prevalence by state`}
         subtitle="Weighted % of households in this segment within each focus state."
       >
         {states.loading && <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>}
@@ -293,52 +529,152 @@ export function SegmentProfileView({
         ))}
       </Card>
 
-      {/* ── Indicator profile ───────────────────────────────────────────── */}
-      <Card
-        title="Indicator profile"
-        subtitle={`Weighted % within ${def.code}. Computed from household.hh_master joined to vw_hh_segments.`}
-      >
-        {metrics.loading && <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading indicators…</div>}
-        {!metrics.loading && (metrics.data?.metrics ?? []).map((m: MetricValues) => {
-          if (m.type === 'binary') {
-            const bm = m as BinaryMetricValues;
-            const v = bm.values.find((x) => x.segment === code);
-            return <BinaryRow key={m.key} label={m.label} pct={v?.share_pct ?? 0} />;
-          }
-          const cm = m as CategoricalMetricValues;
-          const v = cm.values.find((x) => x.segment === code);
-          return (
-            <CategoricalRow
-              key={m.key}
-              label={m.label}
-              breakdown={v?.breakdown ?? []}
-              categories={cm.categories}
-            />
-          );
-        })}
-      </Card>
-
-      {/* ── Cross-links ─────────────────────────────────────────────────── */}
-      <section style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={() => onNavigate?.('comparison')}
-          style={linkBtnStyle}
+      {/* ── 4 data dimension panels ───────────────────────────────────── */}
+      <section>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: ui.color.text,
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+          }}
         >
+          Data dimensions
+        </h2>
+        <div
+          style={{
+            marginTop: 12,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 12,
+          }}
+        >
+          {DATA_DIMENSIONS.map((d) => (
+            <DimensionPanel
+              key={d.key}
+              title={d.label}
+              blurb={d.blurb}
+              metrics={d.metrics}
+              metricsByKey={metricsByKey}
+              loading={metrics.loading}
+              segmentCode={code}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* ── Readiness panel ───────────────────────────────────────────── */}
+      <section>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: ui.color.text,
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+          }}
+        >
+          Readiness profile
+        </h2>
+        <p style={{ margin: '6px 0 12px', fontSize: 12, color: ui.color.textMuted }}>
+          Need × Access × Slack — the three pillars of CRM readiness for this segment.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <ReadinessPill label="Need" rating={brief.readiness.need.rating} note={brief.readiness.need.note} />
+          <ReadinessPill label="Access" rating={brief.readiness.access.rating} note={brief.readiness.access.note} />
+          <ReadinessPill label="Slack" rating={brief.readiness.slack.rating} note={brief.readiness.slack.note} />
+        </div>
+      </section>
+
+      {/* ── Product hypothesis ────────────────────────────────────────── */}
+      <section>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: ui.color.text,
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+          }}
+        >
+          Product hypothesis
+        </h2>
+        <div
+          style={{
+            marginTop: 10,
+            background: ui.color.surface,
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 10,
+            padding: 16,
+          }}
+        >
+          <strong style={{ fontSize: 14, color: ui.color.text, display: 'block', marginBottom: 6 }}>
+            {brief.product.headline}
+          </strong>
+          <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
+            {brief.product.body}
+          </p>
+        </div>
+      </section>
+
+      {/* ── Channel hypothesis + activation ladder ───────────────────── */}
+      <section>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontWeight: 700,
+            color: ui.color.text,
+            borderTop: `2px solid ${ui.color.text}`,
+            paddingTop: 12,
+          }}
+        >
+          Channel hypothesis
+        </h2>
+        <div
+          style={{
+            marginTop: 10,
+            background: ui.color.surface,
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 10,
+            padding: 16,
+          }}
+        >
+          <strong style={{ fontSize: 14, color: ui.color.text, display: 'block', marginBottom: 6 }}>
+            {brief.channel.headline}
+          </strong>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.6 }}>
+            {brief.channel.body}
+          </p>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: ui.color.textMuted,
+              letterSpacing: 0.4,
+              textTransform: 'uppercase',
+              marginBottom: 8,
+            }}
+          >
+            Channel activation ladder
+          </div>
+          <ChannelLadder steps={brief.channelLadder} />
+        </div>
+      </section>
+
+      {/* ── Cross-links ───────────────────────────────────────────────── */}
+      <section style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => onNavigate?.('comparison')} style={linkBtnStyle}>
           Compare to other segments →
         </button>
-        <button
-          type="button"
-          onClick={() => onNavigate?.('prevalence')}
-          style={linkBtnStyle}
-        >
-          See {def.code} on the prevalence map →
+        <button type="button" onClick={() => onNavigate?.('prevalence')} style={linkBtnStyle}>
+          See {brief.code} on the prevalence map →
         </button>
-        <button
-          type="button"
-          onClick={() => onNavigate?.('data-browser')}
-          style={linkBtnStyle}
-        >
+        <button type="button" onClick={() => onNavigate?.('data-browser')} style={linkBtnStyle}>
           Browse all indicators →
         </button>
       </section>
@@ -358,4 +694,16 @@ const linkBtnStyle: React.CSSProperties = {
   fontWeight: 600,
   color: ui.color.chipText,
   cursor: 'pointer',
+};
+
+const navArrowStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  border: `1px solid ${ui.color.border}`,
+  borderRadius: 6,
+  background: ui.color.surface,
+  color: ui.color.text,
+  cursor: 'pointer',
+  fontSize: 12,
+  fontWeight: 600,
+  fontFamily: ui.font,
 };

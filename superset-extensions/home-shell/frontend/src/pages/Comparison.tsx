@@ -8,30 +8,32 @@ import {
   CatalogMetric,
   CatalogBucket,
   MetricValues,
+  BinaryMetricValues,
+  CategoricalMetricValues,
 } from '../api';
+import { SegmentCode, SEGMENT_CODES } from '../nav';
+import { SEGMENT_BRIEF, TIER_META, RATING_STYLE } from '../crm';
 
-// Pathways-style comparison tool for the Indian LCA segmentation.
-// Rows are LCA segments (R1..U3); columns are indicators picked from a
-// catalog grouped by "health-area"-style categories. Binary indicators
-// render as a single horizontal bar with the weighted % per segment;
-// categorical indicators render as a stacked multi-color bar across an
-// ordered list of buckets. All values come from /metrics/values, which
-// re-aggregates household.hh_master against the LCA segment view.
+// Screen 4 — Comparison tool.
+//
+// Side-by-side comparison of 2–3 CRM segments. Rows are data indicators;
+// columns are the selected segments. The highest value in each row is
+// highlighted green, the lowest light red, so the FSP can rank segments at
+// a glance. Below the data rows: readiness pillars (Need / Access / Slack)
+// and a one-line product + channel summary per segment.
+//
+// Defaults to comparing R2 vs R4 vs U2 — adjacent welfare-bridge / protection
+// segments which is the most common FSP decision.
 
-const SEGMENT_ORDER = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
-const SEGMENT_LABEL: Record<string, string> = {
-  R1: 'R1 · Connected rural',
-  R2: 'R2 · Digitally engaged rural',
-  R3: 'R3 · Low-connectivity rural',
-  R4: 'R4 · Most constrained rural',
-  U1: 'U1 · Connected urban',
-  U2: 'U2 · Digitally engaged urban',
-  U3: 'U3 · Most constrained urban',
-};
+const DEFAULT_SEGMENTS: SegmentCode[] = ['R2', 'R4', 'U2'];
+const MAX_SEGMENTS = 3;
+const MIN_SEGMENTS = 2;
 
-// Initial selection — roughly mirrors the screenshot mix of binary +
-// categorical indicators (illness count proxy, hospitalisation proxy,
-// education attainment, social group, ration card).
+const COMPARE_KEY = 'crm.home.comparisonDraft';
+
+const FOCUS_STATES = ['Bihar', 'Jharkhand', 'Madhya Pradesh'] as const;
+type StateFilter = 'overall' | (typeof FOCUS_STATES)[number];
+
 const INITIAL_KEYS = [
   'any_internet',
   'possess_mobile',
@@ -40,8 +42,6 @@ const INITIAL_KEYS = [
   'ration_card',
 ];
 
-// "Explore by health area" preset categories. Clicking one replaces the
-// current selection with up to N metrics from that category.
 const PRESET_ICON: Record<string, string> = {
   digital: '📶',
   education: '🎓',
@@ -63,10 +63,39 @@ function findMetric(cats: CatalogCategory[], key: string): CatalogMetric | undef
   return flattenMetrics(cats).find((m) => m.key === key);
 }
 
-// ─── Bar cells ───────────────────────────────────────────────────────────────
+function readArr(key: string): SegmentCode[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)
+      ? arr.filter((s: unknown): s is SegmentCode => typeof s === 'string' && (SEGMENT_CODES as readonly string[]).includes(s))
+      : [];
+  } catch {
+    return [];
+  }
+}
 
-function BinaryBar({ pct }: { pct: number }) {
+function writeArr(key: string, arr: SegmentCode[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ── Bar with optional differential highlight ────────────────────────────────
+
+function ValueBar({
+  pct,
+  highlight,
+}: {
+  pct: number;
+  highlight?: 'high' | 'low' | null;
+}) {
   const bounded = Math.max(0, Math.min(100, pct));
+  const fill =
+    highlight === 'high' ? '#10b981' : highlight === 'low' ? '#fca5a5' : '#93c5fd';
   return (
     <div
       style={{
@@ -85,24 +114,7 @@ function BinaryBar({ pct }: { pct: number }) {
           overflow: 'hidden',
         }}
       >
-        <div
-          style={{
-            width: `${bounded}%`,
-            height: '100%',
-            background: '#93c5fd',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            left: '33%',
-            top: -2,
-            bottom: -2,
-            width: 0,
-            borderLeft: `1px dashed ${ui.color.textMuted}`,
-            opacity: 0.6,
-          }}
-        />
+        <div style={{ width: `${bounded}%`, height: '100%', background: fill }} />
       </div>
       <div style={{ textAlign: 'right', fontSize: 12, color: ui.color.text, fontWeight: 600 }}>
         {fmtPct(pct)}
@@ -151,18 +163,15 @@ function CategoricalLegend({ categories }: { categories: CatalogBucket[] }) {
       style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 10,
-        fontSize: 11,
+        gap: 8,
+        fontSize: 10,
         color: ui.color.textMuted,
         marginTop: 6,
       }}
     >
       {categories.map((c) => (
         <span key={c.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <span
-            aria-hidden
-            style={{ width: 10, height: 10, background: c.color, borderRadius: 2 }}
-          />
+          <span aria-hidden style={{ width: 8, height: 8, background: c.color, borderRadius: 2 }} />
           {c.label}
         </span>
       ))}
@@ -170,7 +179,7 @@ function CategoricalLegend({ categories }: { categories: CatalogBucket[] }) {
   );
 }
 
-// ─── Add / remove modal ──────────────────────────────────────────────────────
+// ── Add / remove modal (kept from previous version, simplified) ─────────────
 
 function AddRemoveModal({
   catalog,
@@ -202,11 +211,6 @@ function AddRemoveModal({
       .filter((c) => c.metrics.length > 0);
   }, [catalog, search]);
 
-  const totalCount = useMemo(
-    () => catalog.reduce((acc, c) => acc + c.metrics.length, 0),
-    [catalog],
-  );
-
   return (
     <div
       role="dialog"
@@ -225,10 +229,10 @@ function AddRemoveModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(960px, 92vw)',
+          width: 'min(720px, 92vw)',
           maxHeight: '88vh',
-          display: 'grid',
-          gridTemplateColumns: '1.5fr 1fr',
+          display: 'flex',
+          flexDirection: 'column',
           background: ui.color.surface,
           border: `1px solid ${ui.color.border}`,
           borderRadius: 12,
@@ -236,227 +240,205 @@ function AddRemoveModal({
           overflow: 'hidden',
         }}
       >
-        {/* Left: catalog */}
-        <div style={{ display: 'flex', flexDirection: 'column', borderRight: `1px solid ${ui.color.border}` }}>
-          <div
+        <div
+          style={{
+            padding: '14px 18px',
+            borderBottom: `1px solid ${ui.color.border}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: ui.color.text }}>
+            Select indicators ({draft.length})
+          </h2>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
             style={{
-              padding: '16px 20px',
-              borderBottom: `1px solid ${ui.color.border}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
+              padding: '6px 10px',
+              fontSize: 12,
+              border: `1px solid ${ui.color.border}`,
+              borderRadius: 6,
+              width: 200,
+              background: ui.color.surface,
+              color: ui.color.text,
+              fontFamily: ui.font,
             }}
-          >
-            <div>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: ui.color.text }}>
-                Select data to compare
-              </h2>
-              <p style={{ margin: '4px 0 0', fontSize: 11, color: ui.color.textMuted }}>
-                All data ({totalCount}) · Filter: <span style={{ color: ui.color.chipText, fontWeight: 600 }}>Health area ▾</span>
-              </p>
-            </div>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search for anything"
-              style={{
-                padding: '8px 12px',
-                fontSize: 13,
-                border: `1px solid ${ui.color.border}`,
-                borderRadius: 6,
-                width: 220,
-                background: ui.color.surfaceMuted,
-                color: ui.color.text,
-                fontFamily: ui.font,
-              }}
-            />
-          </div>
-          <div style={{ overflow: 'auto', padding: '8px 0' }}>
-            {filteredCats.map((c) => (
-              <div key={c.key}>
-                <div
-                  style={{
-                    padding: '10px 20px',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: ui.color.textMuted,
-                    background: ui.color.surfaceMuted,
-                    letterSpacing: 0.2,
-                  }}
-                >
-                  {c.label} ({c.metrics.length})
-                </div>
-                {c.metrics.map((m) => {
-                  const on = draft.includes(m.key);
-                  return (
-                    <label
-                      key={m.key}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '10px 20px',
-                        fontSize: 13,
-                        color: ui.color.text,
-                        cursor: 'pointer',
-                        borderBottom: `1px solid ${ui.color.border}`,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => toggle(m.key)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      <span style={{ flex: 1 }}>{m.label}</span>
-                      {m.type === 'categorical' && (
-                        <span style={{ fontSize: 11, color: ui.color.textMuted }}>
-                          ({m.categories?.length ?? 0} cat.)
-                        </span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
+          />
         </div>
-
-        {/* Right: selected chips + actions */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div
-            style={{
-              padding: '16px 20px',
-              borderBottom: `1px solid ${ui.color.border}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: ui.color.text }}>
-              Selected data ({draft.length})
-            </h3>
-            <button
-              type="button"
-              onClick={() => setDraft([])}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: ui.color.chipText,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Clear all
-            </button>
-          </div>
-          <div style={{ flex: 1, padding: 16, overflow: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, alignContent: 'flex-start' }}>
-            {draft.length === 0 && (
-              <p style={{ color: ui.color.textMuted, fontSize: 12 }}>
-                Nothing selected yet. Pick metrics from the left.
-              </p>
-            )}
-            {draft.map((k) => {
-              const m = findMetric(catalog, k);
-              if (!m) return null;
-              return (
-                <span
-                  key={k}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '4px 8px',
-                    background: ui.color.surfaceMuted,
-                    border: `1px solid ${ui.color.border}`,
-                    borderRadius: 999,
-                    fontSize: 12,
-                    color: ui.color.text,
-                  }}
-                >
-                  {m.label}
-                  <button
-                    type="button"
-                    onClick={() => toggle(k)}
+        <div style={{ overflow: 'auto', flex: 1 }}>
+          {filteredCats.map((c) => (
+            <div key={c.key}>
+              <div
+                style={{
+                  padding: '8px 18px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: ui.color.textMuted,
+                  background: ui.color.surfaceMuted,
+                  letterSpacing: 0.4,
+                }}
+              >
+                {c.label}
+              </div>
+              {c.metrics.map((m) => {
+                const on = draft.includes(m.key);
+                return (
+                  <label
+                    key={m.key}
                     style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: ui.color.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 18px',
+                      fontSize: 13,
+                      color: ui.color.text,
                       cursor: 'pointer',
-                      fontSize: 12,
+                      borderBottom: `1px solid ${ui.color.border}`,
                     }}
                   >
-                    ×
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-          <div
+                    <input type="checkbox" checked={on} onChange={() => toggle(m.key)} />
+                    <span style={{ flex: 1 }}>{m.label}</span>
+                    {m.type === 'categorical' && (
+                      <span style={{ fontSize: 11, color: ui.color.textMuted }}>
+                        ({m.categories?.length ?? 0} cat.)
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            padding: 14,
+            borderTop: `1px solid ${ui.color.border}`,
+            display: 'flex',
+            gap: 10,
+            justifyContent: 'flex-end',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
             style={{
-              padding: 16,
-              borderTop: `1px solid ${ui.color.border}`,
-              display: 'flex',
-              gap: 10,
-              justifyContent: 'flex-end',
+              padding: '8px 14px',
+              border: `1px solid ${ui.color.border}`,
+              borderRadius: 6,
+              background: ui.color.surface,
+              color: ui.color.text,
+              cursor: 'pointer',
+              fontSize: 13,
             }}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '8px 14px',
-                border: `1px solid ${ui.color.border}`,
-                borderRadius: 6,
-                background: ui.color.surface,
-                color: ui.color.text,
-                cursor: 'pointer',
-                fontSize: 13,
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                onApply(draft);
-                onClose();
-              }}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderRadius: 6,
-                background: ui.color.text,
-                color: ui.color.surface,
-                cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              Compare →
-            </button>
-          </div>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onApply(draft);
+              onClose();
+            }}
+            style={{
+              padding: '8px 16px',
+              border: 'none',
+              borderRadius: 6,
+              background: ui.color.text,
+              color: ui.color.surface,
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Apply
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ── PDF / CSV download ─────────────────────────────────────────────────────
+
+function downloadPdfStub(rows: { label: string; values: { segment: string; value: string }[] }[], segments: SegmentCode[], stateFilter: StateFilter) {
+  // Lightweight printable HTML — opens in a new tab where the user can use the
+  // browser's "Save as PDF" print flow. Avoids a heavy PDF dependency.
+  const win = window.open('', '_blank', 'noopener,noreferrer');
+  if (!win) return;
+  const segHeader = segments.map((s) => `<th>${s} · ${SEGMENT_BRIEF[s].name}</th>`).join('');
+  const body = rows
+    .map(
+      (r) =>
+        `<tr><th style="text-align:left">${r.label}</th>${r.values
+          .map((v) => `<td>${v.value}</td>`)
+          .join('')}</tr>`,
+    )
+    .join('');
+  win.document.write(`
+    <!doctype html>
+    <html><head><title>CRM Comparison</title>
+    <style>
+      body { font-family: -apple-system, system-ui, sans-serif; padding: 24px; color: #111827; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; }
+      th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: right; }
+      th:first-child { text-align: left; background: #f8fafc; }
+      thead th { background: #f1f5f9; text-align: left; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p { color: #6b7280; margin: 0 0 16px; font-size: 12px; }
+    </style></head><body>
+    <h1>CRM Segment Comparison</h1>
+    <p>Geography: ${stateFilter === 'overall' ? FOCUS_STATES.join(', ') : stateFilter}. Generated ${new Date().toLocaleString()}.</p>
+    <table>
+      <thead><tr><th>Indicator</th>${segHeader}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p style="margin-top:16px">Use your browser's <em>File → Print → Save as PDF</em> to export.</p>
+    </body></html>
+  `);
+  win.document.close();
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
+
+function ReadinessPill({ rating, note }: { rating: 'High' | 'Med' | 'Low'; note: string }) {
+  const style = RATING_STYLE[rating];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '3px 8px',
+          borderRadius: 999,
+          background: style.bg,
+          color: style.fg,
+          width: 'fit-content',
+        }}
+      >
+        {rating}
+      </span>
+      <span style={{ fontSize: 11, color: ui.color.textMuted, lineHeight: 1.4 }}>{note}</span>
+    </div>
+  );
+}
 
 export function ComparisonView() {
   const catalog = useFetch(() => api.metricsCatalog(), []);
 
+  const [segments, setSegments] = useState<SegmentCode[]>(() => {
+    const draft = readArr(COMPARE_KEY);
+    return draft.length >= MIN_SEGMENTS ? draft.slice(0, MAX_SEGMENTS) : DEFAULT_SEGMENTS;
+  });
   const [selected, setSelected] = useState<string[]>(INITIAL_KEYS);
   const [modalOpen, setModalOpen] = useState(false);
-  const [stdError, setStdError] = useState(false);
+  const [stateFilter, setStateFilter] = useState<StateFilter>('overall');
 
   const cats = catalog.data?.categories ?? [];
 
-  // Once the catalog loads, filter the initial selection to only keys that
-  // actually exist (covers any backend drift).
   useEffect(() => {
     if (!cats.length) return;
     const valid = new Set(flattenMetrics(cats).map((m) => m.key));
@@ -466,15 +448,20 @@ export function ComparisonView() {
     });
   }, [cats]);
 
+  const stateArg = stateFilter === 'overall' ? undefined : [stateFilter];
+
   const values = useFetch(
-    () => (selected.length ? api.metricsValues(selected) : Promise.resolve({
-      states_focus: [], segments: [...SEGMENT_ORDER], metrics: [] as MetricValues[],
-    })),
-    [selected.join(',')],
+    () =>
+      selected.length
+        ? api.metricsValues(selected, stateArg)
+        : Promise.resolve({
+            states_focus: [],
+            segments: [...SEGMENT_CODES],
+            metrics: [] as MetricValues[],
+          }),
+    [selected.join(','), stateFilter],
   );
 
-  // Preserve column order matching `selected` (the backend doesn't guarantee
-  // input order on the response).
   const orderedMetrics: MetricValues[] = useMemo(() => {
     const map = new Map<string, MetricValues>();
     for (const m of values.data?.metrics ?? []) map.set(m.key, m);
@@ -487,23 +474,104 @@ export function ComparisonView() {
     setSelected(cat.metrics.slice(0, 5).map((m) => m.key));
   };
 
+  const toggleSegment = (code: SegmentCode) => {
+    setSegments((cur) => {
+      let next: SegmentCode[];
+      if (cur.includes(code)) {
+        if (cur.length <= MIN_SEGMENTS) return cur;
+        next = cur.filter((c) => c !== code);
+      } else {
+        next = cur.length >= MAX_SEGMENTS ? [...cur.slice(1), code] : [...cur, code];
+      }
+      writeArr(COMPARE_KEY, next);
+      return next;
+    });
+  };
+
+  // Pre-compute high/low per binary row for differential highlighting.
+  const rowExtremes = useMemo(() => {
+    const out = new Map<string, { hi: SegmentCode | null; lo: SegmentCode | null }>();
+    for (const m of orderedMetrics) {
+      if (m.type !== 'binary') continue;
+      const bm = m as BinaryMetricValues;
+      const vals: { code: SegmentCode; v: number }[] = segments
+        .map((c) => ({ code: c, v: bm.values.find((x) => x.segment === c)?.share_pct ?? 0 }));
+      if (!vals.length) continue;
+      const hi = vals.reduce((a, b) => (b.v > a.v ? b : a));
+      const lo = vals.reduce((a, b) => (b.v < a.v ? b : a));
+      out.set(m.key, {
+        hi: hi.v === lo.v ? null : hi.code,
+        lo: hi.v === lo.v ? null : lo.code,
+      });
+    }
+    return out;
+  }, [orderedMetrics, segments]);
+
+  // Build flat row list for PDF / CSV export.
+  const exportRows = useMemo(() => {
+    const rows: { label: string; values: { segment: string; value: string }[] }[] = [];
+    for (const m of orderedMetrics) {
+      if (m.type === 'binary') {
+        rows.push({
+          label: m.label,
+          values: segments.map((c) => ({
+            segment: c,
+            value: fmtPct((m as BinaryMetricValues).values.find((x) => x.segment === c)?.share_pct ?? 0),
+          })),
+        });
+      } else {
+        const cm = m as CategoricalMetricValues;
+        for (const cat of cm.categories) {
+          rows.push({
+            label: `${m.label} — ${cat.label}`,
+            values: segments.map((c) => {
+              const seg = cm.values.find((x) => x.segment === c);
+              const bk = seg?.breakdown.find((b) => b.category === cat.key)?.share_pct ?? 0;
+              return { segment: c, value: fmtPct(bk) };
+            }),
+          });
+        }
+      }
+    }
+    // Append readiness rows.
+    for (const pillar of ['need', 'access', 'slack'] as const) {
+      rows.push({
+        label: `Readiness · ${pillar.charAt(0).toUpperCase() + pillar.slice(1)}`,
+        values: segments.map((c) => ({
+          segment: c,
+          value: SEGMENT_BRIEF[c].readiness[pillar].rating,
+        })),
+      });
+    }
+    rows.push({
+      label: 'Lead product',
+      values: segments.map((c) => ({ segment: c, value: SEGMENT_BRIEF[c].product.headline })),
+    });
+    rows.push({
+      label: 'Channel',
+      values: segments.map((c) => ({ segment: c, value: SEGMENT_BRIEF[c].channel.headline })),
+    });
+    return rows;
+  }, [orderedMetrics, segments]);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: ui.color.text }}>
             Comparison tool
           </h1>
-          <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 640 }}>
-            Compare household indicators across the seven LCA segments. Browse by category or add
-            or remove data points individually. Values are weighted shares from the focus states
-            (Bihar, Jharkhand, Madhya Pradesh).
+          <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 720 }}>
+            Pick 2–3 segments to compare side-by-side across data indicators, readiness pillars,
+            product hypothesis and channel ladder. Highest value per row highlighted green;
+            lowest red.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
+            onClick={() => downloadPdfStub(exportRows, segments, stateFilter)}
             style={{
               padding: '8px 14px',
               border: `1px solid ${ui.color.border}`,
@@ -513,9 +581,9 @@ export function ComparisonView() {
               cursor: 'pointer',
               fontSize: 13,
             }}
-            title="Export not yet wired up"
+            title="Open print-ready view (Save as PDF in browser)"
           >
-            Export
+            Download as PDF
           </button>
           <button
             type="button"
@@ -531,8 +599,52 @@ export function ComparisonView() {
               fontWeight: 600,
             }}
           >
-            Add / remove data →
+            Add / remove indicators
           </button>
+        </div>
+      </div>
+
+      {/* Segment selector */}
+      <div
+        style={{
+          background: ui.color.surface,
+          border: `1px solid ${ui.color.border}`,
+          borderRadius: 10,
+          padding: '12px 14px',
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 700, color: ui.color.textMuted, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 8 }}>
+          Segments to compare ({segments.length}/{MAX_SEGMENTS})
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SEGMENT_CODES.map((c) => {
+            const on = segments.includes(c);
+            const meta = TIER_META[SEGMENT_BRIEF[c].tier];
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => toggleSegment(c)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  border: `1px solid ${on ? meta.badgeColor : ui.color.border}`,
+                  borderRadius: 999,
+                  background: on ? meta.badgeBg : ui.color.surface,
+                  color: on ? meta.badgeColor : ui.color.text,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: on ? 700 : 500,
+                  fontFamily: ui.font,
+                }}
+              >
+                {on ? '✓ ' : ''}
+                {c} · {SEGMENT_BRIEF[c].name}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -542,13 +654,13 @@ export function ComparisonView() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 16,
+          gap: 12,
           flexWrap: 'wrap',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <strong style={{ fontSize: 13, color: ui.color.text }}>Explore by category</strong>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {cats.map((c) => (
               <button
                 key={c.key}
@@ -558,7 +670,7 @@ export function ComparisonView() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 6,
-                  padding: '6px 12px',
+                  padding: '6px 10px',
                   border: `1px solid ${ui.color.border}`,
                   borderRadius: 8,
                   background: ui.color.surface,
@@ -574,33 +686,33 @@ export function ComparisonView() {
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: ui.color.textMuted, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={stdError}
-              onChange={(e) => setStdError(e.target.checked)}
-            />
-            Standard error {stdError ? 'on' : 'off'}
-          </label>
-          <button
-            type="button"
-            onClick={() => setSelected([])}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: ui.color.chipText,
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Clear all data
-          </button>
+        <div style={{ display: 'inline-flex', border: `1px solid ${ui.color.border}`, borderRadius: 6, overflow: 'hidden' }}>
+          {(['overall', ...FOCUS_STATES] as StateFilter[]).map((s, i) => {
+            const active = s === stateFilter;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStateFilter(s)}
+                style={{
+                  padding: '6px 12px',
+                  background: active ? ui.color.surfaceMuted : ui.color.surface,
+                  color: active ? ui.color.text : ui.color.chipText,
+                  border: 'none',
+                  borderLeft: i === 0 ? 'none' : `1px solid ${ui.color.border}`,
+                  fontFamily: ui.font,
+                  fontSize: 12,
+                  fontWeight: active ? 600 : 500,
+                  cursor: 'pointer',
+                }}
+              >
+                {s === 'overall' ? 'Overall' : s}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Errors */}
       {(catalog.error || values.error) && (
         <div
           style={{
@@ -616,7 +728,7 @@ export function ComparisonView() {
         </div>
       )}
 
-      {/* Matrix */}
+      {/* Comparison table — rows = indicators, columns = segments */}
       <div
         style={{
           border: `1px solid ${ui.color.border}`,
@@ -627,8 +739,8 @@ export function ComparisonView() {
       >
         {selected.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: ui.color.textMuted, fontSize: 13 }}>
-            No data points selected. Use <strong>Add / remove data</strong> or a category button
-            above to pick indicators.
+            No indicators selected. Use <strong>Add / remove indicators</strong> or pick a category
+            above.
           </div>
         ) : (
           <table
@@ -636,7 +748,7 @@ export function ComparisonView() {
               borderCollapse: 'separate',
               borderSpacing: 0,
               width: '100%',
-              minWidth: 200 + orderedMetrics.length * 200,
+              minWidth: 360 + segments.length * 220,
               fontFamily: ui.font,
             }}
           >
@@ -651,36 +763,53 @@ export function ComparisonView() {
                     padding: '14px 16px',
                     fontSize: 12,
                     color: ui.color.textMuted,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     borderBottom: `1px solid ${ui.color.border}`,
-                    minWidth: 220,
+                    minWidth: 280,
                     zIndex: 1,
                   }}
                 >
-                  Segment
+                  Indicator
                 </th>
-                {orderedMetrics.map((m) => (
-                  <th
-                    key={m.key}
-                    style={{
-                      textAlign: 'left',
-                      padding: '14px 16px',
-                      fontSize: 12,
-                      color: ui.color.chipText,
-                      fontWeight: 700,
-                      borderBottom: `1px solid ${ui.color.border}`,
-                      minWidth: 200,
-                    }}
-                    title={`${m.category_label} · ${m.type}`}
-                  >
-                    {m.label}
-                  </th>
-                ))}
+                {segments.map((c) => {
+                  const meta = TIER_META[SEGMENT_BRIEF[c].tier];
+                  return (
+                    <th
+                      key={c}
+                      style={{
+                        textAlign: 'left',
+                        padding: '14px 16px',
+                        fontSize: 12,
+                        color: ui.color.text,
+                        fontWeight: 700,
+                        borderBottom: `1px solid ${ui.color.border}`,
+                        minWidth: 200,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: meta.badgeBg,
+                            color: meta.badgeColor,
+                          }}
+                        >
+                          {c}
+                        </span>
+                        <span style={{ fontSize: 12 }}>{SEGMENT_BRIEF[c].name}</span>
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {SEGMENT_ORDER.map((seg, i) => (
-                <tr key={seg} style={{ background: i % 2 === 0 ? ui.color.surface : ui.color.surfaceMuted }}>
+              {/* Indicator rows */}
+              {orderedMetrics.map((m, i) => (
+                <tr key={m.key} style={{ background: i % 2 === 0 ? ui.color.surface : ui.color.surfaceMuted }}>
                   <td
                     style={{
                       position: 'sticky',
@@ -694,48 +823,212 @@ export function ComparisonView() {
                       zIndex: 1,
                     }}
                   >
-                    {SEGMENT_LABEL[seg]}
+                    <div>{m.label}</div>
+                    <div style={{ fontSize: 10, color: ui.color.textMuted }}>{m.category_label}</div>
+                    {m.type === 'categorical' && (
+                      <CategoricalLegend categories={(m as CategoricalMetricValues).categories} />
+                    )}
                   </td>
-                  {orderedMetrics.map((m) => (
-                    <td
-                      key={m.key}
-                      style={{
-                        padding: '14px 16px',
-                        borderBottom: `1px solid ${ui.color.border}`,
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      {m.type === 'binary' ? (
-                        <BinaryBar
-                          pct={
-                            m.values.find((v) => v.segment === seg)?.share_pct ?? 0
-                          }
-                        />
-                      ) : (
-                        <CategoricalBar
-                          breakdown={
-                            m.values.find((v) => v.segment === seg)?.breakdown ?? []
-                          }
-                          categories={m.categories}
-                        />
-                      )}
-                    </td>
-                  ))}
+                  {segments.map((c) => {
+                    const isBin = m.type === 'binary';
+                    const ext = rowExtremes.get(m.key);
+                    const highlight: 'high' | 'low' | null = ext
+                      ? c === ext.hi
+                        ? 'high'
+                        : c === ext.lo
+                          ? 'low'
+                          : null
+                      : null;
+                    return (
+                      <td
+                        key={c}
+                        style={{
+                          padding: '14px 16px',
+                          borderBottom: `1px solid ${ui.color.border}`,
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        {isBin ? (
+                          <ValueBar
+                            pct={(m as BinaryMetricValues).values.find((v) => v.segment === c)?.share_pct ?? 0}
+                            highlight={highlight}
+                          />
+                        ) : (
+                          <CategoricalBar
+                            breakdown={(m as CategoricalMetricValues).values.find((v) => v.segment === c)?.breakdown ?? []}
+                            categories={(m as CategoricalMetricValues).categories}
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
-              {/* Legends row for categorical columns */}
+
+              {/* Readiness divider */}
               <tr>
-                <td style={{ padding: '10px 16px', background: ui.color.surface }} />
-                {orderedMetrics.map((m) => (
+                <td
+                  colSpan={segments.length + 1}
+                  style={{
+                    padding: '12px 16px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: ui.color.textMuted,
+                    background: ui.color.surfaceMuted,
+                    letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    borderTop: `2px solid ${ui.color.text}`,
+                    borderBottom: `1px solid ${ui.color.border}`,
+                  }}
+                >
+                  Readiness pillars
+                </td>
+              </tr>
+
+              {(['need', 'access', 'slack'] as const).map((pillar, i) => (
+                <tr key={pillar} style={{ background: i % 2 === 0 ? ui.color.surface : ui.color.surfaceMuted }}>
                   <td
-                    key={m.key}
                     style={{
-                      padding: '10px 16px',
-                      background: ui.color.surface,
-                      verticalAlign: 'top',
+                      position: 'sticky',
+                      left: 0,
+                      background: 'inherit',
+                      padding: '14px 16px',
+                      fontSize: 13,
+                      color: ui.color.text,
+                      fontWeight: 600,
+                      borderBottom: `1px solid ${ui.color.border}`,
+                      zIndex: 1,
+                      textTransform: 'capitalize',
                     }}
                   >
-                    {m.type === 'categorical' && <CategoricalLegend categories={m.categories} />}
+                    {pillar}
+                  </td>
+                  {segments.map((c) => {
+                    const r = SEGMENT_BRIEF[c].readiness[pillar];
+                    return (
+                      <td
+                        key={c}
+                        style={{
+                          padding: '14px 16px',
+                          borderBottom: `1px solid ${ui.color.border}`,
+                          verticalAlign: 'top',
+                        }}
+                      >
+                        <ReadinessPill rating={r.rating} note={r.note} />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+
+              {/* Product / channel summary */}
+              <tr>
+                <td
+                  colSpan={segments.length + 1}
+                  style={{
+                    padding: '12px 16px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: ui.color.textMuted,
+                    background: ui.color.surfaceMuted,
+                    letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    borderTop: `2px solid ${ui.color.text}`,
+                    borderBottom: `1px solid ${ui.color.border}`,
+                  }}
+                >
+                  Product &amp; channel hypothesis
+                </td>
+              </tr>
+              <tr>
+                <td
+                  style={{
+                    position: 'sticky',
+                    left: 0,
+                    background: ui.color.surface,
+                    padding: '14px 16px',
+                    fontSize: 13,
+                    color: ui.color.text,
+                    fontWeight: 600,
+                    borderBottom: `1px solid ${ui.color.border}`,
+                    zIndex: 1,
+                  }}
+                >
+                  Lead product
+                </td>
+                {segments.map((c) => (
+                  <td
+                    key={c}
+                    style={{
+                      padding: '14px 16px',
+                      borderBottom: `1px solid ${ui.color.border}`,
+                      verticalAlign: 'top',
+                      fontSize: 12,
+                      color: ui.color.text,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong style={{ display: 'block', marginBottom: 4 }}>
+                      {SEGMENT_BRIEF[c].product.headline}
+                    </strong>
+                    <span style={{ color: ui.color.textMuted }}>{SEGMENT_BRIEF[c].product.body}</span>
+                  </td>
+                ))}
+              </tr>
+              <tr style={{ background: ui.color.surfaceMuted }}>
+                <td
+                  style={{
+                    position: 'sticky',
+                    left: 0,
+                    background: 'inherit',
+                    padding: '14px 16px',
+                    fontSize: 13,
+                    color: ui.color.text,
+                    fontWeight: 600,
+                    borderBottom: `1px solid ${ui.color.border}`,
+                    zIndex: 1,
+                  }}
+                >
+                  Channel
+                </td>
+                {segments.map((c) => (
+                  <td
+                    key={c}
+                    style={{
+                      padding: '14px 16px',
+                      borderBottom: `1px solid ${ui.color.border}`,
+                      verticalAlign: 'top',
+                      fontSize: 12,
+                      color: ui.color.text,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong style={{ display: 'block', marginBottom: 4 }}>
+                      {SEGMENT_BRIEF[c].channel.headline}
+                    </strong>
+                    <span style={{ color: ui.color.textMuted, display: 'block', marginBottom: 6 }}>
+                      {SEGMENT_BRIEF[c].channel.body}
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, fontSize: 10 }}>
+                      {SEGMENT_BRIEF[c].channelLadder.map((s, j, arr) => (
+                        <React.Fragment key={`${s}-${j}`}>
+                          <span
+                            style={{
+                              padding: '2px 6px',
+                              background: ui.color.surface,
+                              borderRadius: 999,
+                              border: `1px solid ${ui.color.border}`,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {s}
+                          </span>
+                          {j < arr.length - 1 && (
+                            <span style={{ color: ui.color.textMuted }}>→</span>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
                   </td>
                 ))}
               </tr>
