@@ -205,7 +205,7 @@ export function SegmentProfileView({
               color: ui.color.chipText, fontSize: 12, cursor: 'pointer', fontFamily: ui.font,
             }}
           >
-            ← All segments
+            ← Segment overview
           </button>
           <span>/</span>
           <span>{def.band}</span>

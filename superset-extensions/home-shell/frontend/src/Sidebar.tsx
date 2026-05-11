@@ -78,7 +78,7 @@ export function Sidebar({ active, onSelect }: {
       <nav style={{ display: 'flex', flexDirection: 'column' }}>
         {NAV_SECTIONS.map((section, sIdx) => (
           <div key={section.heading} style={{ marginTop: sIdx === 0 ? 0 : 18 }}>
-            {!collapsed && sIdx > 0 && (
+            {!collapsed && (
               <div style={{
                 padding: '0 20px 8px',
                 fontSize: 11,
@@ -93,6 +93,8 @@ export function Sidebar({ active, onSelect }: {
               const isActive = item.key === active;
               const share = item.badge ? shareByCode[item.badge] : undefined;
               const bs = item.badge ? badgeStyle(item.badge) : null;
+              const showCodePill =
+                !!item.badge && typeof item.key === 'string' && !item.key.startsWith('segment:');
               return (
                 <button
                   key={item.key}
@@ -122,7 +124,7 @@ export function Sidebar({ active, onSelect }: {
                     {item.icon}
                   </span>
                   {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-                  {!collapsed && bs && (
+                  {!collapsed && bs && showCodePill && (
                     <span
                       style={{
                         fontSize: 11,

@@ -302,11 +302,14 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 36 }}>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section>
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: ui.color.text }}>
+        <p style={{ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: ui.color.textMuted }}>
           CRM Segment Explorer
+        </p>
+        <h1 style={{ margin: '8px 0 0', fontSize: 26, fontWeight: 700, color: ui.color.text }}>
+          Segment overview
         </h1>
         <p style={{ margin: '12px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6 }}>
-          This dashboard turns the Customer Readiness Metric (CRM) segmentation into actionable
+          This view turns the Customer Readiness Metric (CRM) segmentation into actionable
           geography and segment shares for financial service providers in the focus states. Each
           household is assigned a code in <code>household.vw_hh_segments</code> using rules on{' '}
           <code>digital_score</code>, <code>asset_score</code>, <code>internet_access</code>, and{' '}
@@ -382,7 +385,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `2px solid ${ui.color.text}`, paddingTop: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: ui.color.text }}>
-            Customer segments (CRM)
+            All segments at a glance
           </h2>
           <ViewByToggle value={viewBy} onChange={setViewBy} />
         </div>
@@ -429,10 +432,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
         <p style={{ marginTop: 18, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.6 }}>
           Letter prefixes (R, U) mark rural vs urban; within each sector, larger numeric suffixes
           align with lower customer readiness on the signals above. R4 and U3 are the residual /
-          lowest-readiness groups in SQL.{' '}
-          <a href="#" style={{ color: ui.color.accent, textDecoration: 'underline' }}>
-            Rural/Urban definitions here
-          </a>
+          lowest-readiness groups in SQL.
         </p>
       </section>
 

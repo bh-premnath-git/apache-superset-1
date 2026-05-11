@@ -33,28 +33,41 @@ export type NavSection = { heading: string; items: NavItem[] };
 
 const SEGMENT_NAV: NavItem[] = SEGMENT_CODES.map((code) => {
   const isRural = code.startsWith('R');
+  const band = isRural ? 'Rural' : 'Urban';
   return {
     key: `segment:${code}` as ViewKey,
-    label: isRural ? 'Rural' : 'Urban',
+    label: `${code} · ${band}`,
     badge: code,
     icon: isRural ? <RuralIcon /> : <UrbanIcon />,
     render: (ctx) => <SegmentProfileView code={code} onNavigate={ctx.onNavigate} />,
   };
 });
 
+// IA: segment overview → segment profiles (7) → comparison → data browser → map
+// (matches CRM Segment Explorer spec; orphan scaffold pages removed from repo.)
 export const NAV_SECTIONS: NavSection[] = [
   {
-    heading: 'Dashboard',
+    heading: 'Segment overview',
     items: [
-      { key: 'overview',   label: 'Overview',        icon: <OverviewIcon />, render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} /> },
-      { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />,  render: () => <ComparisonView /> },
-      { key: 'data-browser', label: 'Data browser',  icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
-      { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
+      {
+        key: 'overview',
+        label: 'All segments',
+        icon: <OverviewIcon />,
+        render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} />,
+      },
     ],
   },
   {
-    heading: 'Customer segments',
+    heading: 'Segment profiles',
     items: SEGMENT_NAV,
+  },
+  {
+    heading: 'Analysis',
+    items: [
+      { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />, render: () => <ComparisonView /> },
+      { key: 'data-browser', label: 'Data browser', icon: <BrowserIcon />, render: () => <DataBrowserView /> },
+      { key: 'prevalence', label: 'Prevalence map', icon: <MapIcon />, render: () => <PrevalenceMapView /> },
+    ],
   },
 ];
 
