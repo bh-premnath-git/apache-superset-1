@@ -117,6 +117,23 @@ export interface MpceRow {
   overall_sector_mean: number;
 }
 
+export interface ReadinessDimension {
+  score_pct: number;
+  rating: 'High' | 'Medium' | 'Low';
+}
+
+export interface SegmentReadinessRow {
+  segment: string;
+  need: ReadinessDimension;
+  access: ReadinessDimension;
+  slack: ReadinessDimension;
+}
+
+export interface SegmentReadinessResponse {
+  states_focus: string[];
+  segments: SegmentReadinessRow[];
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'same-origin',
@@ -157,6 +174,10 @@ export const api = {
       `/states/${encodeURIComponent(state)}/districts/${encodeURIComponent(district)}`,
     ),
   mpce: () => getJson<{ segments: MpceRow[] }>('/mpce'),
+  readinessSegments: (states?: string[]) =>
+    getJson<SegmentReadinessResponse>(
+      `/readiness/segments${states ? `?states=${encodeURIComponent(states.join(','))}` : ''}`,
+    ),
   metricsCatalog: () => getJson<MetricsCatalogResponse>('/metrics/catalog'),
   metricsValues: (metrics: string[], states?: string[]) => {
     const params = new URLSearchParams();
