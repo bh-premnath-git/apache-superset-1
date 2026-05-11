@@ -5,7 +5,7 @@
 Replaces Superset's default Welcome page with a Pathways-style
 (`https://withpathways.org`) shell:
 
-- **Left sidebar** — three sections: Overview, Comparison tool, Prevalence map
+- **Left sidebar** — four sections: Overview, Comparison tool, Data browser, Prevalence map
 - **Top nav** — kept intact (we mount BELOW the Superset header bar)
 - **Login required** — the welcome route is already auth-gated by Superset
 
@@ -58,5 +58,10 @@ routes; otherwise it unmounts and hides.
 
 - Overview cards → `assets/charts/district_pie_unified.yaml`
 - Comparison tool → `three_state_comparison` plugin (already registered)
+- Data browser → reuses `/extensions/my-org/home-shell/metrics/{catalog,values}`
+  (already serving the Comparison tool); single-indicator focus with category
+  tabs, search, and a per-segment bar chart with a sample-average reference
+  line. Standard-error wedge is a placeholder until SE is exposed by the
+  backend.
 - Prevalence map → `india-districts.geojson` + `lca_state_district_segment_geo`
   dataset; toggle for state vs district granularity

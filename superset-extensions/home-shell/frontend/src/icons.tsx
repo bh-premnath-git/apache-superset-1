@@ -76,6 +76,18 @@ export function LayersIcon() {
   );
 }
 
+export function BrowserIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9h18" />
+      <path d="M9 9v11" />
+      <circle cx="6" cy="6.5" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function ChartIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"

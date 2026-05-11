@@ -1,8 +1,7 @@
 import * as React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { geoMercator, geoPath } from 'd3-geo';
 import { ui } from '../theme';
-import { Card } from '../components/Card';
 import { api, useFetch } from '../api';
 
 // India-districts GeoJSON is served by Superset alongside the
@@ -13,8 +12,27 @@ const GEOJSON_URL = '/static/assets/india-districts.geojson';
 const TARGET_STATES = ['Bihar', 'Madhya Pradesh', 'Jharkhand'] as const;
 type StateName = (typeof TARGET_STATES)[number];
 
-const SEGMENT_CODES = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
-type SegmentCode = (typeof SEGMENT_CODES)[number];
+// LCA segments. Rural = R1..R4; Urban = U1..U3.
+const URBAN_SEGMENTS = ['U1', 'U2', 'U3'] as const;
+const RURAL_SEGMENTS = ['R1', 'R2', 'R3', 'R4'] as const;
+type SegmentCode = (typeof URBAN_SEGMENTS)[number] | (typeof RURAL_SEGMENTS)[number];
+
+// Pathways-inspired palette: urban in greens/blues/lavenders, rural in
+// blue / purple / red. Order is the display order inside each sector group.
+const SEGMENT_META: Record<SegmentCode, { label: string; color: string; sector: 'Urban' | 'Rural' }> = {
+  U1: { label: 'U1 · Connected urban',        color: '#4ade80', sector: 'Urban' },
+  U2: { label: 'U2 · Digitally engaged urban', color: '#93c5fd', sector: 'Urban' },
+  U3: { label: 'U3 · Most constrained urban',  color: '#c4b5fd', sector: 'Urban' },
+  R1: { label: 'R1 · Connected rural',         color: '#fb923c', sector: 'Rural' },
+  R2: { label: 'R2 · Digitally engaged rural', color: '#60a5fa', sector: 'Rural' },
+  R3: { label: 'R3 · Low-connectivity rural',  color: '#a855f7', sector: 'Rural' },
+  R4: { label: 'R4 · Most constrained rural',  color: '#ef4444', sector: 'Rural' },
+};
+
+const SECTOR_STRIPE = {
+  Urban: '#9ca3af',
+  Rural: '#f59e0b',
+};
 
 interface GeoFeature {
   type: 'Feature';
@@ -26,7 +44,7 @@ interface GeoFC {
   features: GeoFeature[];
 }
 
-// Module-level cache so the 32MB geojson is only fetched once per page load.
+// Module-level cache so the geojson is only fetched once per page load.
 let GEO_CACHE: Promise<GeoFC> | null = null;
 function loadGeo(): Promise<GeoFC> {
   if (!GEO_CACHE) {
@@ -61,150 +79,26 @@ function useGeo(): { data?: GeoFC; error?: Error; loading: boolean } {
   return state;
 }
 
-type DrillLevel = 'states' | 'districts' | 'detail';
+// ─── India state map (left column) ──────────────────────────────────────────
 
-interface DrillState {
-  level: DrillLevel;
-  selectedState: StateName | null;
-  selectedDistrict: string | null;
-  goToStates: () => void;
-  goToDistricts: () => void;
-  onStateClick: (s: StateName) => void;
-  onDistrictClick: (d: string) => void;
-}
-
-function useDrillDown(): DrillState {
-  const [level, setLevel] = useState<DrillLevel>('states');
-  const [selectedState, setSelectedState] = useState<StateName | null>(null);
-  const [selectedDistrict, setSelectedDistrict] = useState<string | null>(null);
-
-  const goToStates = useCallback(() => {
-    setLevel('states');
-    setSelectedState(null);
-    setSelectedDistrict(null);
-  }, []);
-  const goToDistricts = useCallback(() => {
-    setLevel('districts');
-    setSelectedDistrict(null);
-  }, []);
-  const onStateClick = useCallback((s: StateName) => {
-    setSelectedState(s);
-    setLevel('districts');
-  }, []);
-  const onDistrictClick = useCallback((d: string) => {
-    setSelectedDistrict(d);
-    setLevel('detail');
-  }, []);
-
-  return {
-    level,
-    selectedState,
-    selectedDistrict,
-    goToStates,
-    goToDistricts,
-    onStateClick,
-    onDistrictClick,
-  };
-}
-
-function fillForShare(share: number, max: number): string {
-  const intensity = Math.min(1, Math.max(0.08, share / Math.max(max, 1)));
-  return `rgba(29, 78, 216, ${intensity})`;
-}
-
-function StateMap({
+function IndiaMap({
   features,
-  state,
-  segment,
-  shareByDistrict,
+  selected,
+  onToggle,
   width,
   height,
-  onClick,
+  zoom,
 }: {
   features: GeoFeature[];
-  state: StateName;
-  segment: SegmentCode;
-  shareByDistrict: Record<string, number>;
+  selected: Set<StateName>;
+  onToggle: (s: StateName) => void;
   width: number;
   height: number;
-  onClick?: () => void;
-}) {
-  const max = useMemo(
-    () => Math.max(0, ...Object.values(shareByDistrict)),
-    [shareByDistrict],
-  );
-  const { paths, outline } = useMemo(() => {
-    const fc: GeoFC = { type: 'FeatureCollection', features };
-    const projection = geoMercator().fitExtent(
-      [
-        [6, 6],
-        [Math.max(width - 6, 7), Math.max(height - 6, 7)],
-      ],
-      fc as unknown as GeoJSON.FeatureCollection,
-    );
-    const pathGen = geoPath(projection);
-    return {
-      paths: features.map((f) => ({
-        d: pathGen(f as unknown as GeoJSON.Feature) ?? '',
-        name: String(f.properties.NAME_2 ?? ''),
-      })),
-      outline: pathGen(fc as unknown as GeoJSON.Feature) ?? '',
-    };
-  }, [features, width, height]);
-
-  return (
-    <svg
-      width={width}
-      height={height}
-      role="img"
-      aria-label={`${state} ${segment} share`}
-      onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default', display: 'block' }}
-    >
-      {paths.map((p, i) => {
-        const share = shareByDistrict[p.name] ?? 0;
-        return (
-          <path
-            key={i}
-            d={p.d}
-            fill={fillForShare(share, max)}
-            stroke="#fff"
-            strokeWidth={0.4}
-          >
-            <title>{`${p.name} — ${segment}: ${share.toFixed(1)}%`}</title>
-          </path>
-        );
-      })}
-      <path d={outline} fill="none" stroke="#1f2937" strokeWidth={1} pointerEvents="none" />
-    </svg>
-  );
-}
-
-function DistrictMap({
-  features,
-  state,
-  segment,
-  shareByDistrict,
-  width,
-  height,
-  selectedDistrict,
-  onDistrictClick,
-}: {
-  features: GeoFeature[];
-  state: StateName;
-  segment: SegmentCode;
-  shareByDistrict: Record<string, number>;
-  width: number;
-  height: number;
-  selectedDistrict: string | null;
-  onDistrictClick: (d: string) => void;
+  zoom: number;
 }) {
   const [hover, setHover] = useState<string | null>(null);
-  const max = useMemo(
-    () => Math.max(0, ...Object.values(shareByDistrict)),
-    [shareByDistrict],
-  );
-  const paths = useMemo(() => {
+
+  const { paths } = useMemo(() => {
     const fc: GeoFC = { type: 'FeatureCollection', features };
     const projection = geoMercator().fitExtent(
       [
@@ -214,384 +108,851 @@ function DistrictMap({
       fc as unknown as GeoJSON.FeatureCollection,
     );
     const pathGen = geoPath(projection);
-    return features.map((f) => ({
-      d: pathGen(f as unknown as GeoJSON.Feature) ?? '',
-      name: String(f.properties.NAME_2 ?? ''),
-    }));
+    return {
+      paths: features.map((f) => ({
+        d: pathGen(f as unknown as GeoJSON.Feature) ?? '',
+        state: String(f.properties.NAME_1 ?? ''),
+        district: String(f.properties.NAME_2 ?? ''),
+      })),
+    };
   }, [features, width, height]);
 
   return (
-    <svg width={width} height={height} role="img" aria-label={`${state} district map`} style={{ display: 'block' }}>
-      {paths.map((p, i) => {
-        const share = shareByDistrict[p.name] ?? 0;
-        const isSelected = selectedDistrict === p.name;
-        const isHover = hover === p.name;
-        return (
-          <path
-            key={i}
-            d={p.d}
-            fill={fillForShare(share, max)}
-            stroke={isSelected ? '#0f172a' : '#fff'}
-            strokeWidth={isSelected ? 2 : isHover ? 1.2 : 0.5}
-            style={{ cursor: 'pointer' }}
-            onClick={() => onDistrictClick(p.name)}
-            onMouseEnter={() => setHover(p.name)}
-            onMouseLeave={() => setHover((h) => (h === p.name ? null : h))}
-          >
-            <title>{`${p.name} — ${segment}: ${share.toFixed(1)}%`}</title>
-          </path>
-        );
-      })}
+    <svg
+      width={width}
+      height={height}
+      role="img"
+      aria-label="India focus states"
+      viewBox={`0 0 ${width} ${height}`}
+      style={{ display: 'block' }}
+    >
+      <g transform={`translate(${(width * (1 - zoom)) / 2}, ${(height * (1 - zoom)) / 2}) scale(${zoom})`}>
+        {paths.map((p, i) => {
+          const isFocus = (TARGET_STATES as readonly string[]).includes(p.state);
+          const isSelected = isFocus && selected.has(p.state as StateName);
+          const isHover = hover === p.state;
+          const fill = !isFocus
+            ? '#e5e7eb'
+            : isSelected
+              ? '#94a3b8'
+              : isHover
+                ? '#cbd5e1'
+                : '#dbeafe';
+          return (
+            <path
+              key={i}
+              d={p.d}
+              fill={fill}
+              stroke="#fff"
+              strokeWidth={0.4}
+              style={{ cursor: isFocus ? 'pointer' : 'default' }}
+              onClick={() => isFocus && onToggle(p.state as StateName)}
+              onMouseEnter={() => isFocus && setHover(p.state)}
+              onMouseLeave={() => setHover((h) => (h === p.state ? null : h))}
+            >
+              <title>
+                {p.state}
+                {p.district ? ` · ${p.district}` : ''}
+                {isFocus ? (isSelected ? ' (selected)' : ' (click to select)') : ''}
+              </title>
+            </path>
+          );
+        })}
+      </g>
     </svg>
   );
 }
 
-function IntensityLegend() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 11, color: ui.color.textMuted }}>
-      <span>Low</span>
-      <div
-        style={{
-          flex: 1,
-          height: 6,
-          borderRadius: 3,
-          background: 'linear-gradient(90deg, rgba(29,78,216,0.1), rgba(29,78,216,1))',
-        }}
-      />
-      <span>High</span>
-    </div>
-  );
-}
+// ─── Stacked horizontal bar per state ───────────────────────────────────────
 
-function Breadcrumbs({ drill }: { drill: DrillState }) {
-  const crumbStyle = (clickable: boolean): React.CSSProperties => ({
-    background: 'none',
-    border: 'none',
-    padding: 0,
-    fontSize: 12,
-    fontWeight: 600,
-    color: clickable ? ui.color.textMuted : ui.color.text,
-    cursor: clickable ? 'pointer' : 'default',
-  });
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-      <button type="button" onClick={drill.goToStates} style={crumbStyle(drill.level !== 'states')}>
-        States
-      </button>
-      {drill.selectedState && (
-        <>
-          <span style={{ color: ui.color.textMuted }}>›</span>
-          <button type="button" onClick={drill.goToDistricts} style={crumbStyle(drill.level === 'detail')}>
-            {drill.selectedState}
-          </button>
-        </>
-      )}
-      {drill.selectedDistrict && (
-        <>
-          <span style={{ color: ui.color.textMuted }}>›</span>
-          <span style={crumbStyle(false)}>{drill.selectedDistrict}</span>
-        </>
-      )}
-    </div>
-  );
-}
-
-function StateCard({
-  state,
-  segment,
-  features,
-  shareByDistrict,
-  stateShare,
-  onClick,
-}: {
-  state: StateName;
-  segment: SegmentCode;
-  features: GeoFeature[];
-  shareByDistrict: Record<string, number>;
-  stateShare: number | undefined;
-  onClick: () => void;
-}) {
+function ScaleAxis() {
+  const ticks = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onClick();
-      }}
       style={{
-        textAlign: 'left',
-        background: ui.color.surface,
-        border: `1px solid ${ui.color.border}`,
-        borderRadius: 12,
-        padding: 14,
-        cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        position: 'relative',
+        height: 22,
+        marginBottom: 6,
+        marginLeft: 110,
+        marginRight: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: ui.color.text }}>{state}</span>
-        <span style={{ fontSize: 12, color: ui.color.textMuted }}>
-          {stateShare == null ? '—' : `${stateShare.toFixed(1)}% ${segment}`}
+      {ticks.map((t) => (
+        <span
+          key={t}
+          style={{
+            position: 'absolute',
+            left: `${t}%`,
+            transform: 'translateX(-50%)',
+            fontSize: 11,
+            color: ui.color.textMuted,
+          }}
+        >
+          {t}
         </span>
-      </div>
-      <StateMap
-        features={features}
-        state={state}
-        segment={segment}
-        shareByDistrict={shareByDistrict}
-        width={260}
-        height={220}
-      />
-      <span style={{ fontSize: 11, color: ui.color.textMuted }}>Click to drill into districts →</span>
+      ))}
     </div>
   );
+}
+
+function GridLines() {
+  const ticks = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+  return (
+    <>
+      {ticks.map((t) => (
+        <div
+          key={t}
+          style={{
+            position: 'absolute',
+            top: 6,
+            bottom: 6,
+            left: `${t}%`,
+            width: 0,
+            borderLeft: `1px dashed ${ui.color.border}`,
+            opacity: 0.7,
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+function StackedBarRow({
+  state,
+  segments,
+  sector,
+}: {
+  state: string;
+  segments: { segment: string; share_pct: number }[];
+  sector: 'both' | 'urban' | 'rural';
+}) {
+  const urban = segments.filter((s) => SEGMENT_META[s.segment as SegmentCode]?.sector === 'Urban');
+  const rural = segments.filter((s) => SEGMENT_META[s.segment as SegmentCode]?.sector === 'Rural');
+  const urbanTotal = urban.reduce((a, b) => a + b.share_pct, 0);
+  const ruralTotal = rural.reduce((a, b) => a + b.share_pct, 0);
+
+  // Apply sector filter: keep only one group, re-normalizing visually by
+  // hiding the other. The bar width still reflects 0..100 of the chosen
+  // sector's share of the population to keep cross-state comparisons honest.
+  const showUrban = sector !== 'rural';
+  const showRural = sector !== 'urban';
+
+  const orderedUrban = [...URBAN_SEGMENTS]
+    .map((k) => urban.find((s) => s.segment === k))
+    .filter((s): s is { segment: string; share_pct: number } => !!s);
+  const orderedRural = [...RURAL_SEGMENTS]
+    .map((k) => rural.find((s) => s.segment === k))
+    .filter((s): s is { segment: string; share_pct: number } => !!s);
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '110px 1fr',
+        alignItems: 'center',
+        gap: 0,
+        padding: '10px 0',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: ui.color.text,
+          paddingRight: 8,
+          textAlign: 'right',
+        }}
+      >
+        {state}
+      </div>
+      <div style={{ position: 'relative', height: 36, paddingRight: 12 }}>
+        <GridLines />
+        {/* Sector stripes (urban left, rural right) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 4,
+            left: 0,
+            height: 4,
+            display: 'flex',
+            width: '100%',
+          }}
+        >
+          {showUrban && (
+            <div style={{ width: `${urbanTotal}%`, background: SECTOR_STRIPE.Urban }} />
+          )}
+          {showRural && (
+            <div style={{ width: `${ruralTotal}%`, background: SECTOR_STRIPE.Rural }} />
+          )}
+        </div>
+        {/* Stacked segment row */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            bottom: 4,
+            left: 0,
+            display: 'flex',
+            width: '100%',
+            borderRadius: 3,
+            overflow: 'hidden',
+            border: `1px solid ${ui.color.surface}`,
+          }}
+        >
+          {showUrban &&
+            orderedUrban.map((s) => {
+              const meta = SEGMENT_META[s.segment as SegmentCode];
+              if (!meta || s.share_pct <= 0) return null;
+              return (
+                <div
+                  key={s.segment}
+                  title={`${meta.label} · ${s.share_pct.toFixed(1)}%`}
+                  style={{
+                    width: `${s.share_pct}%`,
+                    background: meta.color,
+                  }}
+                />
+              );
+            })}
+          {showRural &&
+            orderedRural.map((s) => {
+              const meta = SEGMENT_META[s.segment as SegmentCode];
+              if (!meta || s.share_pct <= 0) return null;
+              return (
+                <div
+                  key={s.segment}
+                  title={`${meta.label} · ${s.share_pct.toFixed(1)}%`}
+                  style={{
+                    width: `${s.share_pct}%`,
+                    background: meta.color,
+                  }}
+                />
+              );
+            })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Donut version ──────────────────────────────────────────────────────────
+
+function DonutChart({
+  state,
+  segments,
+  sector,
+}: {
+  state: string;
+  segments: { segment: string; share_pct: number }[];
+  sector: 'both' | 'urban' | 'rural';
+}) {
+  const filtered = segments.filter((s) => {
+    const meta = SEGMENT_META[s.segment as SegmentCode];
+    if (!meta) return false;
+    if (sector === 'urban') return meta.sector === 'Urban';
+    if (sector === 'rural') return meta.sector === 'Rural';
+    return true;
+  });
+
+  const total = filtered.reduce((a, b) => a + b.share_pct, 0) || 1;
+  const size = 140;
+  const r = 60;
+  const rInner = 38;
+  const cx = size / 2;
+  const cy = size / 2;
+  let acc = 0;
+
+  const arcs = filtered.map((s) => {
+    const meta = SEGMENT_META[s.segment as SegmentCode]!;
+    const start = (acc / total) * 2 * Math.PI;
+    acc += s.share_pct;
+    const end = (acc / total) * 2 * Math.PI;
+    const large = end - start > Math.PI ? 1 : 0;
+    const x1 = cx + r * Math.sin(start);
+    const y1 = cy - r * Math.cos(start);
+    const x2 = cx + r * Math.sin(end);
+    const y2 = cy - r * Math.cos(end);
+    const xi2 = cx + rInner * Math.sin(end);
+    const yi2 = cy - rInner * Math.cos(end);
+    const xi1 = cx + rInner * Math.sin(start);
+    const yi1 = cy - rInner * Math.cos(start);
+    const d = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${rInner} ${rInner} 0 ${large} 0 ${xi1} ${yi1} Z`;
+    return { d, color: meta.color, key: s.segment, title: `${meta.label} · ${s.share_pct.toFixed(1)}%` };
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 12 }}>
+      <svg width={size} height={size} role="img" aria-label={`${state} segment mix`}>
+        {arcs.map((a) => (
+          <path key={a.key} d={a.d} fill={a.color}>
+            <title>{a.title}</title>
+          </path>
+        ))}
+      </svg>
+      <div style={{ marginTop: 8, fontSize: 13, fontWeight: 600, color: ui.color.text }}>
+        {state}
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ───────────────────────────────────────────────────────────────────
+
+function downloadCsv(rows: { state: string; segment: string; share_pct: number }[]) {
+  const header = 'state,segment,share_pct';
+  const lines = rows.map((r) => `${JSON.stringify(r.state)},${r.segment},${r.share_pct.toFixed(2)}`);
+  const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'prevalence-map.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function PrevalenceMapView() {
-  const [segment, setSegment] = useState<SegmentCode>('R1');
-  const drill = useDrillDown();
   const geo = useGeo();
   const stateSegments = useFetch(() => api.statesSegments([...TARGET_STATES]), []);
 
-  // Fetch districts for the focus states up front so the state cards on the
-  // first level can shade by real district shares for the chosen segment.
-  // Three small queries in parallel; results are stable across segment toggles.
-  const districtsBihar = useFetch(() => api.stateDistricts('Bihar'), []);
-  const districtsMP = useFetch(() => api.stateDistricts('Madhya Pradesh'), []);
-  const districtsJharkhand = useFetch(() => api.stateDistricts('Jharkhand'), []);
-  const districtsByState: Record<StateName, Awaited<ReturnType<typeof api.stateDistricts>> | undefined> = {
-    Bihar: districtsBihar.data,
-    'Madhya Pradesh': districtsMP.data,
-    Jharkhand: districtsJharkhand.data,
+  const [selected, setSelected] = useState<Set<StateName>>(() => new Set(TARGET_STATES));
+  const [sector, setSector] = useState<'both' | 'urban' | 'rural'>('both');
+  const [view, setView] = useState<'bar' | 'donut'>('bar');
+  const [search, setSearch] = useState('');
+  const [zoom, setZoom] = useState(1);
+
+  const allFeatures = geo.data?.features ?? [];
+
+  const toggleState = (s: StateName) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
   };
 
-  const districtDetail = useFetch(
-    () =>
-      drill.selectedState && drill.selectedDistrict
-        ? api.districtDetail(drill.selectedState, drill.selectedDistrict)
-        : Promise.resolve(undefined as never),
-    [drill.selectedState, drill.selectedDistrict],
+  const selectAll = () => setSelected(new Set(TARGET_STATES));
+  const resetZoom = () => setZoom(1);
+
+  const searchFiltered = useMemo(() => {
+    if (!search.trim()) return [...TARGET_STATES];
+    const q = search.trim().toLowerCase();
+    return TARGET_STATES.filter((s) => s.toLowerCase().includes(q));
+  }, [search]);
+
+  // Show all selected states that match the search filter.
+  const visibleStates = useMemo(
+    () => searchFiltered.filter((s) => selected.has(s)),
+    [searchFiltered, selected],
   );
 
-  const featuresByState = useMemo(() => {
-    const map: Record<string, GeoFeature[]> = {};
-    if (!geo.data) return map;
-    for (const f of geo.data.features) {
-      const s = String(f.properties.NAME_1 ?? '');
-      if ((TARGET_STATES as readonly string[]).includes(s)) {
-        (map[s] ||= []).push(f);
-      }
-    }
-    return map;
-  }, [geo.data]);
-
-  const stateShareByCode = useMemo(() => {
-    const out: Record<string, Record<string, number>> = {};
+  const stateRows = useMemo(() => {
+    const byState: Record<string, { segment: string; share_pct: number }[]> = {};
     for (const row of stateSegments.data?.states ?? []) {
-      const inner: Record<string, number> = {};
-      for (const seg of row.segments) inner[seg.segment] = seg.share_pct;
-      out[row.state] = inner;
+      byState[row.state] = row.segments.map((s) => ({
+        segment: s.segment,
+        share_pct: s.share_pct,
+      }));
     }
-    return out;
+    return byState;
   }, [stateSegments.data]);
 
-  function shareMapForState(state: StateName, seg: SegmentCode): Record<string, number> {
-    const payload = districtsByState[state];
-    if (!payload) return {};
-    const out: Record<string, number> = {};
-    for (const d of payload.districts) {
-      const match = d.segments.find((s) => s.segment === seg);
-      out[d.district] = match ? match.share_pct : 0;
+  const downloadRows = useMemo(() => {
+    const out: { state: string; segment: string; share_pct: number }[] = [];
+    for (const s of visibleStates) {
+      for (const seg of stateRows[s] ?? []) {
+        const meta = SEGMENT_META[seg.segment as SegmentCode];
+        if (!meta) continue;
+        if (sector === 'urban' && meta.sector !== 'Urban') continue;
+        if (sector === 'rural' && meta.sector !== 'Rural') continue;
+        out.push({ state: s, segment: seg.segment, share_pct: seg.share_pct });
+      }
     }
     return out;
-  }
+  }, [visibleStates, stateRows, sector]);
 
-  const fetchError =
-    geo.error ?? stateSegments.error ?? districtsBihar.error ?? districtsMP.error ?? districtsJharkhand.error;
+  const fetchError = geo.error ?? stateSegments.error;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: ui.color.text }}>
-          Prevalence map
-        </h1>
-        <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13 }}>
-          LCA segment share across Bihar, Madhya Pradesh and Jharkhand. Districts shaded by
-          weighted household share for the selected segment (vw_state_district_segment_geo).
-          Click a state to drill into its districts.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Breadcrumbs drill={drill} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: ui.color.textMuted, marginLeft: 'auto' }}>
-          Segment
-          <select
-            value={segment}
-            onChange={(e) => setSegment(e.target.value as SegmentCode)}
-            style={{
-              padding: '6px 10px',
-              fontSize: 13,
-              border: `1px solid ${ui.color.border}`,
-              borderRadius: 6,
-              background: ui.color.surface,
-              color: ui.color.text,
-            }}
-          >
-            {SEGMENT_CODES.map((s) => (
-              <option key={s} value={s}>
-                {s} {s.startsWith('R') ? '(Rural)' : '(Urban)'}
-              </option>
-            ))}
-          </select>
-        </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: ui.color.text }}>
+            Prevalence map
+          </h1>
+          <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 720 }}>
+            Compare the prevalence of LCA segments across the three focus states.
+            Select one or more states on the map below or search for a specific area.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            navigator.clipboard?.writeText(window.location.href).catch(() => undefined)
+          }
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '8px 14px',
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 6,
+            background: ui.color.surface,
+            color: ui.color.text,
+            cursor: 'pointer',
+            fontSize: 13,
+          }}
+          title="Copy this page URL to your clipboard"
+        >
+          Share this view ↗
+        </button>
       </div>
 
       {fetchError && (
-        <div style={{ padding: 12, border: `1px solid ${ui.color.border}`, borderRadius: 8, color: '#b00020', fontSize: 12 }}>
-          Could not load segmentation data: {fetchError.message}
+        <div
+          style={{
+            padding: 12,
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 8,
+            color: '#b00020',
+            fontSize: 12,
+            background: '#fff5f5',
+          }}
+        >
+          Could not load prevalence data: {fetchError.message}
         </div>
       )}
 
-      {geo.loading && (
-        <div style={{ padding: 24, color: ui.color.textMuted, fontSize: 13 }}>Loading map…</div>
-      )}
+      {/* Two-column body */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '360px 1fr',
+          gap: 16,
+        }}
+      >
+        {/* Left column: search + map */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 10,
+            background: ui.color.surface,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: 12,
+              borderBottom: `1px solid ${ui.color.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div style={{ position: 'relative', flex: 1 }}>
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 10,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: ui.color.textMuted,
+                  fontSize: 14,
+                }}
+              >
+                ⌕
+              </span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search geographic areas"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px 8px 30px',
+                  fontSize: 13,
+                  border: `1px solid ${ui.color.border}`,
+                  borderRadius: 6,
+                  background: ui.color.surface,
+                  color: ui.color.text,
+                  fontFamily: ui.font,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
 
-      {!geo.loading && !geo.error && drill.level === 'states' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-          {TARGET_STATES.map((s) => (
-            <StateCard
-              key={s}
-              state={s}
-              segment={segment}
-              features={featuresByState[s] ?? []}
-              shareByDistrict={shareMapForState(s, segment)}
-              stateShare={stateShareByCode[s]?.[segment]}
-              onClick={() => drill.onStateClick(s)}
-            />
-          ))}
-        </div>
-      )}
+          <div style={{ position: 'relative', flex: 1, padding: 12 }}>
+            <button
+              type="button"
+              onClick={selectAll}
+              style={{
+                position: 'absolute',
+                top: 16,
+                left: 16,
+                padding: '6px 12px',
+                border: `1px solid ${ui.color.border}`,
+                borderRadius: 6,
+                background: ui.color.surface,
+                color: ui.color.text,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                zIndex: 2,
+              }}
+            >
+              Select all
+            </button>
+            <div
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                zIndex: 2,
+              }}
+            >
+              <button type="button" onClick={() => setZoom((z) => Math.min(3, z * 1.25))} style={mapBtnStyle}>
+                +
+              </button>
+              <button type="button" onClick={() => setZoom((z) => Math.max(0.5, z / 1.25))} style={mapBtnStyle}>
+                −
+              </button>
+              <button type="button" onClick={resetZoom} style={mapBtnStyle} title="Reset zoom">
+                ⟳
+              </button>
+            </div>
 
-      {!geo.loading && !geo.error && drill.level === 'districts' && drill.selectedState && (
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
-          <Card title={`${drill.selectedState} — ${segment} share by district`}>
-            <DistrictMap
-              features={featuresByState[drill.selectedState] ?? []}
-              state={drill.selectedState}
-              segment={segment}
-              shareByDistrict={shareMapForState(drill.selectedState, segment)}
-              width={620}
-              height={460}
-              selectedDistrict={null}
-              onDistrictClick={drill.onDistrictClick}
-            />
-            <IntensityLegend />
-          </Card>
+            {geo.loading && (
+              <div style={{ padding: 24, color: ui.color.textMuted, fontSize: 13 }}>
+                Loading map…
+              </div>
+            )}
+            {!geo.loading && !geo.error && (
+              <IndiaMap
+                features={allFeatures}
+                selected={selected}
+                onToggle={toggleState}
+                width={336}
+                height={360}
+                zoom={zoom}
+              />
+            )}
 
-          <Card title="Top districts" subtitle={`Highest ${segment} share`}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, maxHeight: 460, overflowY: 'auto' }}>
-              {(districtsByState[drill.selectedState]?.districts ?? [])
-                .map((d) => ({
-                  name: d.district,
-                  score: d.segments.find((s) => s.segment === segment)?.share_pct ?? 0,
-                }))
-                .sort((a, b) => b.score - a.score)
-                .map(({ name, score }) => (
+            {/* Selected chips */}
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                fontSize: 11,
+                color: ui.color.textMuted,
+              }}
+            >
+              {[...selected].map((s) => (
+                <span
+                  key={s}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '3px 8px',
+                    border: `1px solid ${ui.color.border}`,
+                    borderRadius: 999,
+                    color: ui.color.text,
+                    background: ui.color.surfaceMuted,
+                    fontWeight: 600,
+                  }}
+                >
+                  {s}
                   <button
-                    key={name}
                     type="button"
-                    onClick={() => drill.onDistrictClick(name)}
+                    onClick={() => toggleState(s)}
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 60px 50px',
-                      alignItems: 'center',
-                      gap: 8,
-                      background: 'none',
                       border: 'none',
-                      padding: '4px 0',
-                      textAlign: 'left',
+                      background: 'transparent',
+                      color: ui.color.textMuted,
                       cursor: 'pointer',
-                      color: ui.color.text,
+                      fontSize: 12,
                     }}
                   >
-                    <span>{name}</span>
-                    <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 6 }}>
-                      <div style={{ width: `${Math.min(100, score)}%`, height: '100%', background: '#1d4ed8', borderRadius: 4 }} />
-                    </div>
-                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>
-                      {score.toFixed(1)}%
-                    </span>
+                    ×
                   </button>
-                ))}
+                </span>
+              ))}
+              {selected.size === 0 && <span>No states selected</span>}
             </div>
-          </Card>
+          </div>
         </div>
-      )}
 
-      {!geo.loading && !geo.error && drill.level === 'detail' && drill.selectedState && drill.selectedDistrict && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Card title={`${drill.selectedDistrict}, ${drill.selectedState}`} subtitle={`${segment} share`}>
-            <DistrictMap
-              features={(featuresByState[drill.selectedState] ?? []).filter(
-                (f) => String(f.properties.NAME_2 ?? '') === drill.selectedDistrict,
-              )}
-              state={drill.selectedState}
-              segment={segment}
-              shareByDistrict={shareMapForState(drill.selectedState, segment)}
-              width={420}
-              height={320}
-              selectedDistrict={drill.selectedDistrict}
-              onDistrictClick={() => undefined}
-            />
-            <div style={{ marginTop: 10, fontSize: 36, fontWeight: 700, color: ui.color.text }}>
-              {(() => {
-                const seg = districtDetail.data?.segments?.find((s) => s.segment === segment);
-                return seg ? `${seg.share_pct.toFixed(1)}%` : '—';
-              })()}
+        {/* Right column: toolbar + chart */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            border: `1px solid ${ui.color.border}`,
+            borderRadius: 10,
+            background: ui.color.surface,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Toolbar */}
+          <div
+            style={{
+              padding: 12,
+              borderBottom: `1px solid ${ui.color.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                border: `1px solid ${ui.color.border}`,
+                borderRadius: 8,
+                overflow: 'hidden',
+                background: ui.color.surfaceMuted,
+              }}
+            >
+              {(['both', 'urban', 'rural'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSector(s)}
+                  style={{
+                    padding: '6px 14px',
+                    border: 'none',
+                    background: sector === s ? ui.color.surface : 'transparent',
+                    color: ui.color.text,
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: sector === s ? 700 : 500,
+                    textTransform: 'capitalize',
+                    fontFamily: ui.font,
+                  }}
+                >
+                  {s === 'both' ? 'Both' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
             </div>
-            <p style={{ marginTop: 6, fontSize: 12, color: ui.color.textMuted }}>
-              Sourced live from <code>household.vw_state_district_segment_geo</code> via the
-              home-shell backend (<code>/extensions/my-org/home-shell/states/{drill.selectedState}/districts/{drill.selectedDistrict}</code>).
-            </p>
-          </Card>
 
-          <Card title="Segment mix" subtitle={`${drill.selectedDistrict} households (weighted)`}>
-            {districtDetail.loading ? (
-              <div style={{ fontSize: 12, color: ui.color.textMuted }}>Loading…</div>
-            ) : districtDetail.error ? (
-              <div style={{ fontSize: 12, color: '#b00020' }}>{districtDetail.error.message}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  border: `1px solid ${ui.color.border}`,
+                  borderRadius: 8,
+                  overflow: 'hidden',
+                  background: ui.color.surface,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setView('bar')}
+                  aria-pressed={view === 'bar'}
+                  title="Stacked bars"
+                  style={{
+                    padding: '6px 10px',
+                    border: 'none',
+                    background: view === 'bar' ? ui.color.surfaceMuted : 'transparent',
+                    color: ui.color.text,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M3 12h12" />
+                    <path d="M3 18h16" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('donut')}
+                  aria-pressed={view === 'donut'}
+                  title="Donut"
+                  style={{
+                    padding: '6px 10px',
+                    border: 'none',
+                    background: view === 'donut' ? ui.color.surfaceMuted : 'transparent',
+                    color: ui.color.text,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="8" />
+                    <path d="M12 4v8h8" />
+                  </svg>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => downloadCsv(downloadRows)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: ui.color.text,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+                title="Download CSV"
+              >
+                Download ⬇
+              </button>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div style={{ padding: '16px 16px 0', flex: 1, minHeight: 320 }}>
+            {visibleStates.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  minHeight: 240,
+                  color: ui.color.textMuted,
+                  fontSize: 13,
+                }}
+              >
+                {search.trim()
+                  ? `No focus states match “${search}”.`
+                  : 'Pick at least one state from the map to see its segment mix.'}
+              </div>
+            ) : view === 'bar' ? (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <ScaleAxis />
+                {visibleStates.map((s) => (
+                  <StackedBarRow
+                    key={s}
+                    state={s}
+                    segments={stateRows[s] ?? []}
+                    sector={sector}
+                  />
+                ))}
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-                {(districtDetail.data?.segments ?? []).map((s) => (
-                  <div
-                    key={s.segment}
-                    style={{ display: 'grid', gridTemplateColumns: '40px 1fr 60px', alignItems: 'center', gap: 8 }}
-                  >
-                    <strong>{s.segment}</strong>
-                    <div style={{ background: ui.color.surfaceMuted, borderRadius: 4, height: 6 }}>
-                      <div
-                        style={{
-                          width: `${Math.min(100, s.share_pct)}%`,
-                          height: '100%',
-                          background: '#1d4ed8',
-                          borderRadius: 4,
-                        }}
-                      />
-                    </div>
-                    <span style={{ textAlign: 'right', color: ui.color.textMuted }}>
-                      {s.share_pct.toFixed(1)}%
-                    </span>
-                  </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${Math.min(visibleStates.length, 3)}, 1fr)`,
+                  gap: 8,
+                }}
+              >
+                {visibleStates.map((s) => (
+                  <DonutChart
+                    key={s}
+                    state={s}
+                    segments={stateRows[s] ?? []}
+                    sector={sector}
+                  />
                 ))}
               </div>
             )}
-          </Card>
+          </div>
+
+          {/* Legend */}
+          <div
+            style={{
+              borderTop: `1px solid ${ui.color.border}`,
+              padding: 16,
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 16,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: ui.color.text,
+                  marginBottom: 8,
+                }}
+              >
+                <span style={{ width: 28, height: 8, background: SECTOR_STRIPE.Urban, borderRadius: 2 }} />
+                Urban segments
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, color: ui.color.text }}>
+                {URBAN_SEGMENTS.map((k) => (
+                  <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 12, height: 12, background: SEGMENT_META[k].color, borderRadius: 2 }} />
+                    {SEGMENT_META[k].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: ui.color.text,
+                  marginBottom: 8,
+                }}
+              >
+                <span style={{ width: 28, height: 8, background: SECTOR_STRIPE.Rural, borderRadius: 2 }} />
+                Rural segments
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, fontSize: 12, color: ui.color.text }}>
+                {RURAL_SEGMENTS.map((k) => (
+                  <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 12, height: 12, background: SEGMENT_META[k].color, borderRadius: 2 }} />
+                    {SEGMENT_META[k].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
+
+const mapBtnStyle: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 6,
+  border: `1px solid ${ui.color.border}`,
+  background: ui.color.surface,
+  color: ui.color.chipText,
+  cursor: 'pointer',
+  fontSize: 14,
+  fontWeight: 700,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
