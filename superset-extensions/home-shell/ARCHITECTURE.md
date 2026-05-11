@@ -10,8 +10,10 @@ Replaces Superset's default Welcome page with a Pathways-style
 - **Login required** — the welcome route is already auth-gated by Superset
 
 The shell is mounted as a fixed-position overlay only on the welcome route
-(`/superset/welcome/` and `/`). It uses dummy data today and is wired to be
-replaced with calls to existing India-segmentation datasets/charts later.
+(`/superset/welcome/` and `/`). All page content is served by the extension
+backend at `/extensions/my-org/home-shell/` (see endpoints below); the
+PrevalenceMap additionally loads `india-districts.geojson` from Superset's
+static assets.
 
 ## Directory Structure
 
@@ -54,14 +56,26 @@ The shell registers a `popstate` + `pushState` interceptor to detect SPA
 navigation. It only renders when `location.pathname` matches the welcome
 routes; otherwise it unmounts and hides.
 
-## Future wiring (deferred)
+## Backend endpoints (all live)
 
-- Overview cards → `assets/charts/district_pie_unified.yaml`
-- Comparison tool → `three_state_comparison` plugin (already registered)
-- Data browser → reuses `/extensions/my-org/home-shell/metrics/{catalog,values}`
-  (already serving the Comparison tool); single-indicator focus with category
-  tabs, search, and a per-segment bar chart with a sample-average reference
-  line. Standard-error wedge is a placeholder until SE is exposed by the
-  backend.
-- Prevalence map → `india-districts.geojson` + `lca_state_district_segment_geo`
-  dataset; toggle for state vs district granularity
+All pages call the extension API mounted at `/extensions/my-org/home-shell/`:
+
+- `GET /summary` — weighted households, segments observed, states/districts covered, per-state totals
+- `GET /segments` — focus-state segment distribution (R1..U3)
+- `GET /states/segments` — per-state segment mix
+- `GET /states/<state>/districts` — per-district segment shares
+- `GET /states/<state>/districts/<district>` — district detail KPIs
+- `GET /mpce` — weighted mean MPCE per segment
+- `GET /metrics/catalog` — indicator groups available to Comparison / Data browser
+- `GET /metrics/values?metrics=…` — per-segment values for selected indicators
+
+All queries run against the Superset-registered `Analytics Warehouse`
+database against the `household` schema (`vw_hh_segments`,
+`vw_state_segment_distribution`, `vw_state_district_segment_geo`,
+`vw_mpce_by_segment`, `hh_master`).
+
+## Known placeholders
+
+- `DataBrowser` bar chart renders a symmetric error wedge derived from the
+  share value itself — replace once the backend exposes a real standard
+  error per segment.
