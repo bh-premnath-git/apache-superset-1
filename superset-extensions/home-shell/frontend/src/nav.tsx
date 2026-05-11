@@ -1,17 +1,23 @@
 import * as React from 'react';
 import {
   OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
+  RuralIcon, UrbanIcon,
 } from './icons';
 import { OverviewView } from './pages/Overview';
 import { ComparisonView } from './pages/Comparison';
 import { DataBrowserView } from './pages/DataBrowser';
 import { PrevalenceMapView } from './pages/PrevalenceMap';
+import { SegmentProfileView } from './pages/SegmentProfile';
+
+export const SEGMENT_CODES = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
+export type SegmentCode = typeof SEGMENT_CODES[number];
 
 export type ViewKey =
   | 'overview'
   | 'comparison'
   | 'data-browser'
-  | 'prevalence';
+  | 'prevalence'
+  | `segment:${SegmentCode}`;
 
 export type NavContext = { onNavigate: (k: ViewKey) => void };
 
@@ -19,10 +25,22 @@ export type NavItem = {
   key: ViewKey;
   label: string;
   icon: React.ReactNode;
+  badge?: string;
   render: (ctx: NavContext) => React.ReactElement;
 };
 
 export type NavSection = { heading: string; items: NavItem[] };
+
+const SEGMENT_NAV: NavItem[] = SEGMENT_CODES.map((code) => {
+  const isRural = code.startsWith('R');
+  return {
+    key: `segment:${code}` as ViewKey,
+    label: isRural ? 'Rural' : 'Urban',
+    badge: code,
+    icon: isRural ? <RuralIcon /> : <UrbanIcon />,
+    render: (ctx) => <SegmentProfileView code={code} onNavigate={ctx.onNavigate} />,
+  };
+});
 
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -33,6 +51,10 @@ export const NAV_SECTIONS: NavSection[] = [
       { key: 'data-browser', label: 'Data browser',  icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
       { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
     ],
+  },
+  {
+    heading: 'Population segments',
+    items: SEGMENT_NAV,
   },
 ];
 

@@ -88,6 +88,30 @@ export function BrowserIcon() {
   );
 }
 
+export function RuralIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 20h18" />
+      <path d="M5 20v-7l7-5 7 5v7" />
+      <path d="M10 20v-5h4v5" />
+    </svg>
+  );
+}
+
+export function UrbanIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 21V9l5-3 5 3v12" />
+      <path d="M13 21V13l4-2 4 2v8" />
+      <path d="M7 12h2" />
+      <path d="M7 16h2" />
+      <path d="M16 16h2" />
+    </svg>
+  );
+}
+
 export function ChartIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
