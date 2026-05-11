@@ -1,10 +1,11 @@
 import * as React from 'react';
 import {
-  OverviewIcon, CompareIcon, MapIcon,
+  OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
   StatusIcon, DoorIcon, PathIcon, LayersIcon, ChartIcon,
 } from './icons';
 import { OverviewView } from './pages/Overview';
 import { ComparisonView } from './pages/Comparison';
+import { DataBrowserView } from './pages/DataBrowser';
 import { PrevalenceMapView } from './pages/PrevalenceMap';
 import { CoverageView } from './pages/Coverage';
 import { EntryPointsView } from './pages/EntryPoints';
@@ -15,6 +16,7 @@ import { VizRoadmapView } from './pages/VizRoadmap';
 export type ViewKey =
   | 'overview'
   | 'comparison'
+  | 'data-browser'
   | 'prevalence'
   | 'coverage'
   | 'entry-points'
@@ -39,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { key: 'overview',   label: 'Overview',        icon: <OverviewIcon />, render: (ctx) => <OverviewView onNavigate={ctx.onNavigate} /> },
       { key: 'comparison', label: 'Comparison tool', icon: <CompareIcon />,  render: () => <ComparisonView /> },
+      { key: 'data-browser', label: 'Data browser',  icon: <BrowserIcon />,  render: () => <DataBrowserView /> },
       { key: 'prevalence', label: 'Prevalence map',  icon: <MapIcon />,      render: () => <PrevalenceMapView /> },
     ],
   },
