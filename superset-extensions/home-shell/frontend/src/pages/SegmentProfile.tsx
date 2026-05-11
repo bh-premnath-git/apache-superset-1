@@ -44,10 +44,10 @@ const DEFS: Record<SegmentCode, SegmentDef> = {
 };
 
 const LEVEL_META: Record<1 | 2 | 3 | 4, { name: string; tagColor: string; tagBg: string }> = {
-  4: { name: 'most vulnerable',  tagColor: '#9d174d', tagBg: '#fce7f3' },
-  3: { name: 'more vulnerable',  tagColor: '#6b21a8', tagBg: '#f3e8ff' },
-  2: { name: 'less vulnerable',  tagColor: '#1e3a8a', tagBg: '#dbeafe' },
-  1: { name: 'least vulnerable', tagColor: '#374151', tagBg: '#e5e7eb' },
+  4: { name: 'lowest readiness', tagColor: '#9d174d', tagBg: '#fce7f3' },
+  3: { name: 'limited readiness', tagColor: '#6b21a8', tagBg: '#f3e8ff' },
+  2: { name: 'moderate readiness', tagColor: '#1e3a8a', tagBg: '#dbeafe' },
+  1: { name: 'highest readiness', tagColor: '#374151', tagBg: '#e5e7eb' },
 };
 
 // Curated indicator set used on the profile. Drawn from METRIC_CATALOG in

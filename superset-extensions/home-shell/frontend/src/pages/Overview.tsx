@@ -5,12 +5,11 @@ import { api, useFetch } from '../api';
 import { ViewKey } from '../nav';
 import { CompareIcon, MapIcon, OverviewIcon } from '../icons';
 
-// Pathways-style overview for the Indian Living Conditions Approach (LCA)
-// segmentation. The underlying data model defines four rural segments
-// (R1–R4, best → most constrained) and three urban segments (U1–U3). We
-// re-group those into four vulnerability levels for the hero summary, so
-// the page reads like the Northern Nigeria reference design while still
-// being faithful to seed/pg/002_lca_segment_views.sql.
+// CRM Segment Explorer — overview aligned to the warehouse schema:
+// household.hh_master → household.vw_hh_segments (segment + scores) →
+// household.vw_state_segment_distribution (weighted shares for the API).
+// Tiers 1–4 group segments by customer readiness (digital + asset + connectivity
+// signals), not a “vulnerability” column in the database. See seed/pg/002_lca_segment_views.sql.
 
 type Band = 'Rural' | 'Urban';
 
@@ -77,10 +76,10 @@ const SEGMENT_DEFS: Record<string, SegmentDef> = {
 const SEGMENT_ORDER = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const;
 
 const LEVEL_META: Record<1 | 2 | 3 | 4, { name: string; tagColor: string; tagBg: string; chipColor: string }> = {
-  4: { name: 'most vulnerable',  tagColor: '#9d174d', tagBg: '#fce7f3', chipColor: '#ec4899' },
-  3: { name: 'more vulnerable',  tagColor: '#6b21a8', tagBg: '#f3e8ff', chipColor: '#a855f7' },
-  2: { name: 'less vulnerable',  tagColor: '#1e3a8a', tagBg: '#dbeafe', chipColor: '#3b82f6' },
-  1: { name: 'least vulnerable', tagColor: '#374151', tagBg: '#e5e7eb', chipColor: '#9ca3af' },
+  4: { name: 'Lowest readiness (tier 4)', tagColor: '#9d174d', tagBg: '#fce7f3', chipColor: '#ec4899' },
+  3: { name: 'Limited readiness (tier 3)', tagColor: '#6b21a8', tagBg: '#f3e8ff', chipColor: '#a855f7' },
+  2: { name: 'Moderate readiness (tier 2)', tagColor: '#1e3a8a', tagBg: '#dbeafe', chipColor: '#3b82f6' },
+  1: { name: 'Highest readiness (tier 1)', tagColor: '#374151', tagBg: '#e5e7eb', chipColor: '#9ca3af' },
 };
 
 type ViewBy = 'level' | 'band' | 'size';
@@ -154,7 +153,7 @@ function SegmentChip({
 
 function ViewByToggle({ value, onChange }: { value: ViewBy; onChange: (v: ViewBy) => void }) {
   const opts: { key: ViewBy; label: string }[] = [
-    { key: 'level', label: 'Vulnerability level' },
+    { key: 'level', label: 'Readiness tier' },
     { key: 'band', label: 'Urban / Rural' },
     { key: 'size', label: 'Segment size' },
   ];
@@ -304,22 +303,22 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: ui.color.text }}>
-          India household segmentation
+          CRM Segment Explorer
         </h1>
         <p style={{ margin: '12px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6 }}>
-          The India segmentation classifies households across focus states using the Living
-          Conditions Approach (LCA). Households are split by sector — rural and urban — and then
-          grouped into vulnerability-based segments built from digital, asset and connectivity
-          signals on <code>household.hh_master</code>. Rural households fall into four segments
-          (R1–R4) and urban households into three (U1–U3). R4 and U3 are the two most constrained
-          segments: R4 is the largest rural segment in the focus states and U3 covers the urban
-          households missing both digital and asset signals. R1 and U1 represent the
-          least-constrained ends, where households score on both digital engagement and household
-          assets. Segment shares on this page are weighted by the survey weight <code>wt</code>{' '}
-          aggregated from <code>vw_state_segment_distribution</code>. Counts come from{' '}
-          <code>hh_master</code>; geography from <code>vw_state_district_segment_geo</code>.
-          Sonder Collective has taken reasonable steps to assure the accuracy of the data, but
-          takes no responsibility for upstream survey accuracy.
+          This dashboard turns the Customer Readiness Metric (CRM) segmentation into actionable
+          geography and segment shares for financial service providers in the focus states. Each
+          household is assigned a code in <code>household.vw_hh_segments</code> using rules on{' '}
+          <code>digital_score</code>, <code>asset_score</code>, <code>internet_access</code>, and{' '}
+          <code>mobile_ownership</code> derived from NSSO HCES fields on{' '}
+          <code>household.hh_master</code> (see <code>seed/pg/002_lca_segment_views.sql</code>).
+          Rural codes are R1–R4 and urban codes U1–U3; higher numeric suffixes indicate lower
+          readiness for digital or asset-heavy offers within that sector. Weighted percentages on
+          this page sum <code>seg_weight</code> from{' '}
+          <code>household.vw_state_segment_distribution</code> with survey weight <code>wt</code>.
+          District geography for maps uses <code>household.vw_state_district_segment_geo</code>.
+          Treat figures as survey-weighted, directional estimates for strategy work—not a substitute
+          for your own credit or compliance review.
         </p>
 
         {fetchError && (
@@ -375,7 +374,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
           }}
         >
           <span>Refreshed nightly from PostgreSQL views</span>
-          <span>IND_LCA_2024_v1</span>
+          <span>CRM · LCA rules · NSSO HCES</span>
         </div>
       </section>
 
@@ -383,7 +382,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `2px solid ${ui.color.text}`, paddingTop: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: ui.color.text }}>
-            Population segments
+            Customer segments (CRM)
           </h2>
           <ViewByToggle value={viewBy} onChange={setViewBy} />
         </div>
@@ -428,9 +427,9 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
         </div>
 
         <p style={{ marginTop: 18, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.6 }}>
-          Letter prefixes (R, U) distinguish rural and urban segments; numeric suffixes (1–4)
-          increase with vulnerability. R4 and U3 are the most constrained groups within their
-          sector.{' '}
+          Letter prefixes (R, U) mark rural vs urban; within each sector, larger numeric suffixes
+          align with lower customer readiness on the signals above. R4 and U3 are the residual /
+          lowest-readiness groups in SQL.{' '}
           <a href="#" style={{ color: ui.color.accent, textDecoration: 'underline' }}>
             Rural/Urban definitions here
           </a>
@@ -443,14 +442,14 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
           Dive deeper into the data
         </h2>
         <p style={{ margin: '8px 0 16px', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
-          Go beyond the segment shares above with interactive tools that let you compare, map and
-          filter the India segmentation data for your specific needs.
+          Compare segments, browse indicator breakdowns, and map where each CRM code concentrates
+          across districts.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
           <DiveCard
             icon={<CompareIcon />}
             title="Comparison tool"
-            body="Explore patterns across population segments and health areas to inform your work."
+            body="Contrast segments on digital, education, and asset indicators to prioritize products and channels."
             cta="Compare segments"
             onClick={() => onNavigate?.('comparison')}
           />

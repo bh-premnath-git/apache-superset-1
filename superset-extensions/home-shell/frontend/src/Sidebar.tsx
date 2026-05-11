@@ -6,9 +6,8 @@ import { api, useFetch } from './api';
 
 const COLLAPSED_SIDEBAR_WIDTH = 72;
 
-// Per-segment badge color, keyed by vulnerability level encoded in the
-// segment code's numeric suffix. Mirrors LEVEL_META in pages/Overview.tsx so
-// the sidebar pills match the colors used on the Overview page.
+// Per-segment badge color, keyed by CRM readiness tier (code suffix).
+// Mirrors Overview segment styling.
 function badgeStyle(badge: string): { bg: string; fg: string } {
   if (badge === 'R1' || badge === 'U1') return { bg: '#e5e7eb', fg: '#374151' };
   if (badge === 'R2' || badge === 'U2') return { bg: '#dbeafe', fg: '#1e3a8a' };
@@ -73,7 +72,7 @@ export function Sidebar({ active, onSelect }: {
       </button>
       {!collapsed && (
         <div style={{ padding: '0 20px 16px', fontSize: 13, color: ui.color.sidebarTextMuted, letterSpacing: 1, textTransform: 'uppercase' }}>
-          India Segmentation
+          CRM Segment Explorer
         </div>
       )}
       <nav style={{ display: 'flex', flexDirection: 'column' }}>

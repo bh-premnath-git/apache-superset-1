@@ -53,7 +53,7 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    heading: 'Population segments',
+    heading: 'Customer segments',
     items: SEGMENT_NAV,
   },
 ];
