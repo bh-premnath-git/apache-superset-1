@@ -172,7 +172,7 @@ function ViewByToggle({ value, onChange }: { value: ViewBy; onChange: (v: ViewBy
               style={{
                 padding: '6px 10px',
                 background: active ? ui.color.surfaceMuted : ui.color.surface,
-                color: active ? ui.color.text : ui.color.chipText,
+                color: active ? ui.color.text : ui.color.textMuted,
                 border: 'none',
                 borderLeft: i === 0 ? 'none' : `1px solid ${ui.color.border}`,
                 fontFamily: ui.font,
@@ -247,7 +247,7 @@ function DiveCard({
       </span>
       <strong style={{ fontSize: 15, color: ui.color.text }}>{title}</strong>
       <p style={{ margin: 0, fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>{body}</p>
-      <span style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: ui.color.chipText }}>{cta} →</span>
+      <span style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: ui.color.accent }}>{cta} →</span>
     </button>
   );
 }
@@ -300,13 +300,13 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
   const states = summary.data?.states_focus ?? ['Bihar', 'Jharkhand', 'Madhya Pradesh'];
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 36 }}>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 36 }}>
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: ui.color.text }}>
           India household segmentation
         </h1>
-        <p style={{ margin: '12px 0 0', color: ui.color.chipText, fontSize: 13, lineHeight: 1.6 }}>
+        <p style={{ margin: '12px 0 0', color: ui.color.textMuted, fontSize: 13, lineHeight: 1.6 }}>
           The India segmentation classifies households across focus states using the Living
           Conditions Approach (LCA). Households are split by sector — rural and urban — and then
           grouped into vulnerability-based segments built from digital, asset and connectivity
@@ -359,7 +359,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
           </MetaCell>
           <MetaCell label="Geographic coverage">
             <span>{states.join(', ')}</span>
-            <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: ui.color.chipText }}>
+            <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: ui.color.textMuted }}>
               {summary.loading ? '…' : fmtInt(summary.data?.districts_covered)} districts
             </span>
           </MetaCell>
@@ -392,7 +392,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
           {groups.map((g) => {
             const meta = viewBy === 'level'
               ? LEVEL_META[Number(g.tag) as 1 | 2 | 3 | 4]
-              : { tagColor: ui.color.text, tagBg: ui.color.surfaceMuted, chipColor: ui.color.chipText, name: g.title };
+              : { tagColor: ui.color.text, tagBg: ui.color.surfaceMuted, chipColor: ui.color.textMuted, name: g.title };
             return (
               <div key={g.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -427,11 +427,11 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
           })}
         </div>
 
-        <p style={{ marginTop: 18, fontSize: 12, color: ui.color.chipText, lineHeight: 1.6 }}>
+        <p style={{ marginTop: 18, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.6 }}>
           Letter prefixes (R, U) distinguish rural and urban segments; numeric suffixes (1–4)
           increase with vulnerability. R4 and U3 are the most constrained groups within their
           sector.{' '}
-          <a href="#" style={{ color: ui.color.chipText, textDecoration: 'underline' }}>
+          <a href="#" style={{ color: ui.color.accent, textDecoration: 'underline' }}>
             Rural/Urban definitions here
           </a>
         </p>
@@ -442,7 +442,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: ui.color.text, borderTop: `2px solid ${ui.color.text}`, paddingTop: 12 }}>
           Dive deeper into the data
         </h2>
-        <p style={{ margin: '8px 0 16px', fontSize: 13, color: ui.color.chipText, lineHeight: 1.5 }}>
+        <p style={{ margin: '8px 0 16px', fontSize: 13, color: ui.color.textMuted, lineHeight: 1.5 }}>
           Go beyond the segment shares above with interactive tools that let you compare, map and
           filter the India segmentation data for your specific needs.
         </p>
