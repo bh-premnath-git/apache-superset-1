@@ -79,27 +79,36 @@ function useGeo(): { data?: GeoFC; error?: Error; loading: boolean } {
   return state;
 }
 
-// ─── India state map (left column) ──────────────────────────────────────────
+// ─── Selected-state district map (left column) ──────────────────────────────
 
-function IndiaMap({
+function StateMap({
   features,
-  selected,
-  onToggle,
+  drilledDistrict,
+  onDistrictClick,
   width,
   height,
   zoom,
 }: {
   features: GeoFeature[];
-  selected: Set<StateName>;
-  onToggle: (s: StateName) => void;
+  drilledDistrict: string | null;
+  onDistrictClick: (district: string) => void;
   width: number;
   height: number;
   zoom: number;
 }) {
   const [hover, setHover] = useState<string | null>(null);
 
+  const visibleFeatures = useMemo(
+    () =>
+      drilledDistrict
+        ? features.filter((f) => String(f.properties.NAME_2 ?? '') === drilledDistrict)
+        : features,
+    [features, drilledDistrict],
+  );
+
   const { paths } = useMemo(() => {
-    const fc: GeoFC = { type: 'FeatureCollection', features };
+    if (visibleFeatures.length === 0) return { paths: [] as { d: string; state: string; district: string }[] };
+    const fc: GeoFC = { type: 'FeatureCollection', features: visibleFeatures };
     const projection = geoMercator().fitExtent(
       [
         [8, 8],
@@ -109,51 +118,44 @@ function IndiaMap({
     );
     const pathGen = geoPath(projection);
     return {
-      paths: features.map((f) => ({
+      paths: visibleFeatures.map((f) => ({
         d: pathGen(f as unknown as GeoJSON.Feature) ?? '',
         state: String(f.properties.NAME_1 ?? ''),
         district: String(f.properties.NAME_2 ?? ''),
       })),
     };
-  }, [features, width, height]);
+  }, [visibleFeatures, width, height]);
 
   return (
     <svg
       width={width}
       height={height}
       role="img"
-      aria-label="India focus states"
+      aria-label="State districts"
       viewBox={`0 0 ${width} ${height}`}
       style={{ display: 'block' }}
     >
       <g transform={`translate(${(width * (1 - zoom)) / 2}, ${(height * (1 - zoom)) / 2}) scale(${zoom})`}>
         {paths.map((p, i) => {
-          const isFocus = (TARGET_STATES as readonly string[]).includes(p.state);
-          const isSelected = isFocus && selected.has(p.state as StateName);
-          const isHover = hover === p.state;
-          const fill = !isFocus
-            ? '#e5e7eb'
-            : isSelected
-              ? '#94a3b8'
-              : isHover
-                ? '#cbd5e1'
-                : '#dbeafe';
+          const isDrilled = drilledDistrict !== null && drilledDistrict === p.district;
+          const isHover = hover === p.district;
+          const fill = isDrilled ? '#94a3b8' : isHover ? '#cbd5e1' : '#dbeafe';
           return (
             <path
-              key={i}
+              key={`${p.district}-${i}`}
               d={p.d}
               fill={fill}
               stroke="#fff"
               strokeWidth={0.4}
-              style={{ cursor: isFocus ? 'pointer' : 'default' }}
-              onClick={() => isFocus && onToggle(p.state as StateName)}
-              onMouseEnter={() => isFocus && setHover(p.state)}
-              onMouseLeave={() => setHover((h) => (h === p.state ? null : h))}
+              style={{ cursor: 'pointer' }}
+              onClick={() => onDistrictClick(p.district)}
+              onMouseEnter={() => setHover(p.district)}
+              onMouseLeave={() => setHover((h) => (h === p.district ? null : h))}
             >
               <title>
                 {p.state}
                 {p.district ? ` · ${p.district}` : ''}
-                {isFocus ? (isSelected ? ' (selected)' : ' (click to select)') : ''}
+                {isDrilled ? ' (drilled in)' : ' (click to drill in)'}
               </title>
             </path>
           );
@@ -417,37 +419,27 @@ export function PrevalenceMapView() {
   const geo = useGeo();
   const stateSegments = useFetch(() => api.statesSegments([...TARGET_STATES]), []);
 
-  const [selected, setSelected] = useState<Set<StateName>>(() => new Set(TARGET_STATES));
+  const [selectedState, setSelectedState] = useState<StateName>(TARGET_STATES[0]);
+  const [drilledDistrict, setDrilledDistrict] = useState<string | null>(null);
   const [sector, setSector] = useState<'both' | 'urban' | 'rural'>('both');
   const [view, setView] = useState<'bar' | 'donut'>('bar');
-  const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(1);
 
   const allFeatures = geo.data?.features ?? [];
+  const stateFeatures = useMemo(
+    () => allFeatures.filter((f) => String(f.properties.NAME_1 ?? '') === selectedState),
+    [allFeatures, selectedState],
+  );
 
-  const toggleState = (s: StateName) => {
-    setSelected((cur) => {
-      const next = new Set(cur);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  };
+  // Reset drill and zoom whenever the chosen state changes.
+  useEffect(() => {
+    setDrilledDistrict(null);
+    setZoom(1);
+  }, [selectedState]);
 
-  const selectAll = () => setSelected(new Set(TARGET_STATES));
   const resetZoom = () => setZoom(1);
 
-  const searchFiltered = useMemo(() => {
-    if (!search.trim()) return [...TARGET_STATES];
-    const q = search.trim().toLowerCase();
-    return TARGET_STATES.filter((s) => s.toLowerCase().includes(q));
-  }, [search]);
-
-  // Show all selected states that match the search filter.
-  const visibleStates = useMemo(
-    () => searchFiltered.filter((s) => selected.has(s)),
-    [searchFiltered, selected],
-  );
+  const visibleStates = useMemo(() => [selectedState], [selectedState]);
 
   const stateRows = useMemo(() => {
     const byState: Record<string, { segment: string; share_pct: number }[]> = {};
@@ -492,8 +484,8 @@ export function PrevalenceMapView() {
             Prevalence map
           </h1>
           <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 720 }}>
-            Compare the prevalence of LCA segments across the three focus states.
-            Select one or more states on the map below or search for a specific area.
+            Compare the prevalence of LCA segments within a focus state.
+            Pick a state from the dropdown and click any district on the map to drill in.
           </p>
         </div>
         <button
@@ -542,7 +534,7 @@ export function PrevalenceMapView() {
           gap: 16,
         }}
       >
-        {/* Left column: search + map */}
+        {/* Left column: state picker + map */}
         <div
           style={{
             display: 'flex',
@@ -563,26 +555,27 @@ export function PrevalenceMapView() {
             }}
           >
             <div style={{ position: 'relative', flex: 1 }}>
-              <span
-                aria-hidden
+              <label
+                htmlFor="prevalence-state-select"
                 style={{
-                  position: 'absolute',
-                  left: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
+                  display: 'block',
+                  fontSize: 11,
+                  fontWeight: 600,
                   color: ui.color.textMuted,
-                  fontSize: 14,
+                  marginBottom: 4,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.4,
                 }}
               >
-                ⌕
-              </span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search geographic areas"
+                State
+              </label>
+              <select
+                id="prevalence-state-select"
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value as StateName)}
                 style={{
                   width: '100%',
-                  padding: '8px 12px 8px 30px',
+                  padding: '8px 12px',
                   fontSize: 13,
                   border: `1px solid ${ui.color.border}`,
                   borderRadius: 6,
@@ -590,32 +583,41 @@ export function PrevalenceMapView() {
                   color: ui.color.text,
                   fontFamily: ui.font,
                   boxSizing: 'border-box',
+                  cursor: 'pointer',
                 }}
-              />
+              >
+                {TARGET_STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div style={{ position: 'relative', flex: 1, padding: 12 }}>
-            <button
-              type="button"
-              onClick={selectAll}
-              style={{
-                position: 'absolute',
-                top: 16,
-                left: 16,
-                padding: '6px 12px',
-                border: `1px solid ${ui.color.border}`,
-                borderRadius: 6,
-                background: ui.color.surface,
-                color: ui.color.text,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                zIndex: 2,
-              }}
-            >
-              Select all
-            </button>
+            {drilledDistrict && (
+              <button
+                type="button"
+                onClick={() => setDrilledDistrict(null)}
+                style={{
+                  position: 'absolute',
+                  top: 16,
+                  left: 16,
+                  padding: '6px 12px',
+                  border: `1px solid ${ui.color.border}`,
+                  borderRadius: 6,
+                  background: ui.color.surface,
+                  color: ui.color.text,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  zIndex: 2,
+                }}
+              >
+                ← Back to {selectedState}
+              </button>
+            )}
             <div
               style={{
                 position: 'absolute',
@@ -644,17 +646,18 @@ export function PrevalenceMapView() {
               </div>
             )}
             {!geo.loading && !geo.error && (
-              <IndiaMap
-                features={allFeatures}
-                selected={selected}
-                onToggle={toggleState}
+              <StateMap
+                features={stateFeatures}
+                drilledDistrict={drilledDistrict}
+                onDistrictClick={(d) =>
+                  setDrilledDistrict((cur) => (cur === d ? null : d))
+                }
                 width={336}
                 height={360}
                 zoom={zoom}
               />
             )}
 
-            {/* Selected chips */}
             <div
               style={{
                 marginTop: 8,
@@ -665,38 +668,25 @@ export function PrevalenceMapView() {
                 color: ui.color.textMuted,
               }}
             >
-              {[...selected].map((s) => (
-                <span
-                  key={s}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    padding: '3px 8px',
-                    border: `1px solid ${ui.color.border}`,
-                    borderRadius: 999,
-                    color: ui.color.text,
-                    background: ui.color.surfaceMuted,
-                    fontWeight: 600,
-                  }}
-                >
-                  {s}
-                  <button
-                    type="button"
-                    onClick={() => toggleState(s)}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      color: ui.color.textMuted,
-                      cursor: 'pointer',
-                      fontSize: 12,
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-              {selected.size === 0 && <span>No states selected</span>}
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 8px',
+                  border: `1px solid ${ui.color.border}`,
+                  borderRadius: 999,
+                  color: ui.color.text,
+                  background: ui.color.surfaceMuted,
+                  fontWeight: 600,
+                }}
+              >
+                {selectedState}
+                {drilledDistrict ? ` · ${drilledDistrict}` : ''}
+              </span>
+              {!drilledDistrict && (
+                <span>Click a district to drill in.</span>
+              )}
             </div>
           </div>
         </div>
@@ -841,9 +831,7 @@ export function PrevalenceMapView() {
                   fontSize: 13,
                 }}
               >
-                {search.trim()
-                  ? `No focus states match “${search}”.`
-                  : 'Pick at least one state from the map to see its segment mix.'}
+                Pick a state from the dropdown to see its segment mix.
               </div>
             ) : view === 'bar' ? (
               <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -459,7 +459,7 @@ export function OverviewView({ onNavigate }: { onNavigate?: (k: ViewKey) => void
             title="Data browser"
             body="Browse individual data points and segment definitions from this segmentation."
             cta="Browse data"
-            onClick={() => onNavigate?.('coverage')}
+            onClick={() => onNavigate?.('data-browser')}
           />
           <DiveCard
             icon={<MapIcon />}

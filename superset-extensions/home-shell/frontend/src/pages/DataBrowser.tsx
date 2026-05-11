@@ -468,7 +468,15 @@ export function DataBrowserView() {
   const currentValues = values.data?.metrics?.[0];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        height: '100%',
+        minHeight: 0,
+      }}
+    >
       {/* Header */}
       <div
         style={{
@@ -652,7 +660,8 @@ export function DataBrowserView() {
           borderRadius: 10,
           background: ui.color.surface,
           overflow: 'hidden',
-          minHeight: 520,
+          flex: 1,
+          minHeight: 0,
         }}
       >
         {/* Left: search + grouped list */}
@@ -662,6 +671,7 @@ export function DataBrowserView() {
             flexDirection: 'column',
             borderRight: `1px solid ${ui.color.border}`,
             minWidth: 0,
+            minHeight: 0,
           }}
         >
           <div style={{ padding: 14, borderBottom: `1px solid ${ui.color.border}` }}>
@@ -787,6 +797,8 @@ export function DataBrowserView() {
             flexDirection: 'column',
             justifyContent: 'flex-start',
             minWidth: 0,
+            minHeight: 0,
+            overflow: 'auto',
           }}
         >
           {!selectedMetric && (
