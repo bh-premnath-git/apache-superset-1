@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ui } from '../theme';
+import { CRM_FOCUS_STATES } from '../crm';
 import {
   api,
   useFetch,
@@ -24,8 +25,7 @@ const TAB_ICON: Record<string, string> = {
   food: 'F',
 };
 
-const FOCUS_DENOMINATOR =
-  'Households in Bihar, Jharkhand and Madhya Pradesh (NSS-weighted).';
+const FOCUS_DENOMINATOR = `Households in ${CRM_FOCUS_STATES.join(', ')} (NSS-weighted).`;
 
 function fmtPct(n: number | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -456,9 +456,9 @@ export function DataBrowserView() {
   const values = useFetch(
     () =>
       selectedKey
-        ? api.metricsValues([selectedKey])
+        ? api.metricsValues([selectedKey], [...CRM_FOCUS_STATES])
         : Promise.resolve({
-            states_focus: [],
+            states_focus: [...CRM_FOCUS_STATES],
             segments: [...SEGMENT_ORDER],
             metrics: [] as MetricValues[],
           }),
@@ -491,10 +491,16 @@ export function DataBrowserView() {
             Data browser
           </h1>
           <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 720 }}>
-            Explore how LCA segments differ on individual household indicators.
-            Browse by category below or search for a specific indicator to see
-            its segment-by-segment share.
+            Explore how CRM segments differ on individual household indicators. Every bar is an
+            NSS-weighted share computed only for{' '}
+            <strong style={{ color: ui.color.text }}>{CRM_FOCUS_STATES.join(', ')}</strong>
+            — browse by category or search for an indicator to see its segment-by-segment split.
           </p>
+          {!values.loading && values.data?.states_focus?.length ? (
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: ui.color.textMuted }}>
+              Active geography: {values.data.states_focus.join(' · ')}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"

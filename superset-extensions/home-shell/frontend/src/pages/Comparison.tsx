@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ui } from '../theme';
+import { CRM_FOCUS_STATES } from '../crm';
 import {
   api,
   useFetch,
@@ -467,9 +468,13 @@ export function ComparisonView() {
   }, [cats]);
 
   const values = useFetch(
-    () => (selected.length ? api.metricsValues(selected) : Promise.resolve({
-      states_focus: [], segments: [...SEGMENT_ORDER], metrics: [] as MetricValues[],
-    })),
+    () => (selected.length
+      ? api.metricsValues(selected, [...CRM_FOCUS_STATES])
+      : Promise.resolve({
+        states_focus: [...CRM_FOCUS_STATES],
+        segments: [...SEGMENT_ORDER],
+        metrics: [] as MetricValues[],
+      })),
     [selected.join(',')],
   );
 
@@ -496,10 +501,16 @@ export function ComparisonView() {
             Comparison tool
           </h1>
           <p style={{ margin: '6px 0 0', color: ui.color.textMuted, fontSize: 13, maxWidth: 640 }}>
-            Compare household indicators across the seven LCA segments. Browse by category or add
-            or remove data points individually. Values are weighted shares from the focus states
-            (Bihar, Jharkhand, Madhya Pradesh).
+            Compare household indicators across the seven CRM segments. Browse by category or add
+            or remove data points individually. All values are NSS-weighted shares computed only for{' '}
+            <strong style={{ color: ui.color.text }}>{CRM_FOCUS_STATES.join(', ')}</strong>
+            — households outside these states are excluded from every row.
           </p>
+          {!values.loading && values.data?.states_focus?.length ? (
+            <p style={{ margin: '8px 0 0', fontSize: 11, color: ui.color.textMuted }}>
+              Active filter: {values.data.states_focus.join(' · ')}
+            </p>
+          ) : null}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button

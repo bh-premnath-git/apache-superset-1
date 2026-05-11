@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { ui, SIDEBAR_WIDTH } from './theme';
 import { NAV_SECTIONS, ViewKey } from './nav';
 import { api, useFetch } from './api';
+import { CRM_DATA_VERSION_LABEL } from './crm';
 
 const COLLAPSED_SIDEBAR_WIDTH = 72;
 
@@ -75,7 +76,7 @@ export function Sidebar({ active, onSelect }: {
           CRM Segment Explorer
         </div>
       )}
-      <nav style={{ display: 'flex', flexDirection: 'column' }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
         {NAV_SECTIONS.map((section, sIdx) => (
           <div key={section.heading} style={{ marginTop: sIdx === 0 ? 0 : 18 }}>
             {!collapsed && (
@@ -146,6 +147,20 @@ export function Sidebar({ active, onSelect }: {
           </div>
         ))}
       </nav>
+      {!collapsed && (
+        <div
+          style={{
+            marginTop: 'auto',
+            padding: '14px 16px 18px',
+            fontSize: 9,
+            lineHeight: 1.35,
+            color: ui.color.sidebarTextMuted,
+            borderTop: `1px solid rgba(148,163,184,0.25)`,
+          }}
+        >
+          {CRM_DATA_VERSION_LABEL}
+        </div>
+      )}
     </aside>
   );
 }

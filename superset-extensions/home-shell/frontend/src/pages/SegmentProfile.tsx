@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useMemo } from 'react';
 import { ui } from '../theme';
+import { CRM_FOCUS_STATES } from '../crm';
 import { api, useFetch, MetricValues, BinaryMetricValues, CategoricalMetricValues } from '../api';
 import { ViewKey, SegmentCode } from '../nav';
 import { Card } from '../components/Card';
@@ -160,9 +161,9 @@ export function SegmentProfileView({
   const summary = useFetch(() => api.summary(), []);
   const segments = useFetch(() => api.segments(), []);
   const mpce = useFetch(() => api.mpce(), []);
-  const states = useFetch(() => api.statesSegments(), []);
+  const states = useFetch(() => api.statesSegments([...CRM_FOCUS_STATES]), []);
   const metrics = useFetch(
-    () => api.metricsValues(PROFILE_METRICS),
+    () => api.metricsValues(PROFILE_METRICS, [...CRM_FOCUS_STATES]),
     [],
   );
 

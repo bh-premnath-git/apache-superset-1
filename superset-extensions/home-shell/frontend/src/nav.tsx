@@ -1,8 +1,9 @@
 import * as React from 'react';
 import {
-  OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
+  HomeIcon, OverviewIcon, CompareIcon, MapIcon, BrowserIcon,
   RuralIcon, UrbanIcon,
 } from './icons';
+import { DashboardHomeView } from './pages/DashboardHome';
 import { OverviewView } from './pages/Overview';
 import { ComparisonView } from './pages/Comparison';
 import { DataBrowserView } from './pages/DataBrowser';
@@ -13,6 +14,7 @@ export const SEGMENT_CODES = ['R1', 'R2', 'R3', 'R4', 'U1', 'U2', 'U3'] as const
 export type SegmentCode = typeof SEGMENT_CODES[number];
 
 export type ViewKey =
+  | 'home'
   | 'overview'
   | 'comparison'
   | 'data-browser'
@@ -46,6 +48,17 @@ const SEGMENT_NAV: NavItem[] = SEGMENT_CODES.map((code) => {
 // IA: segment overview → segment profiles (7) → comparison → data browser → map
 // (matches CRM Segment Explorer spec; orphan scaffold pages removed from repo.)
 export const NAV_SECTIONS: NavSection[] = [
+  {
+    heading: 'Dashboard',
+    items: [
+      {
+        key: 'home',
+        label: 'Home',
+        icon: <HomeIcon />,
+        render: (ctx) => <DashboardHomeView onNavigate={ctx.onNavigate} />,
+      },
+    ],
+  },
   {
     heading: 'Segment overview',
     items: [

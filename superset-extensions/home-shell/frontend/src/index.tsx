@@ -30,7 +30,7 @@ function isWelcomeRoute(pathname: string): boolean {
 
 // ── Shell ────────────────────────────────────────────────────────────────────
 function HomeShell() {
-  const [view, setView] = useState<ViewKey>('overview');
+  const [view, setView] = useState<ViewKey>('home');
   const active = findNavItem(view);
 
   return (
