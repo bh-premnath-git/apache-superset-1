@@ -12,13 +12,16 @@ from keycloak_oidc_dynamic import (
     DynamicKeycloakAuthOAuthView,
     OidcTenantConfig,
     dynamic_enabled,
+    normalize_keycloak_base,
 )
 
 logger = logging.getLogger(__name__)
 
 _INTERNAL_BASE = (
-    os.getenv("KEYCLOAK_API_BASE_URL") or os.getenv("KEYCLOAK_SERVER_URL", "")
-).rstrip("/")
+    normalize_keycloak_base(
+        os.getenv("KEYCLOAK_API_BASE_URL") or os.getenv("KEYCLOAK_SERVER_URL", "")
+    )
+)
 _REALM = os.getenv("KEYCLOAK_REALM", "master")
 _USERINFO_URL = f"{_INTERNAL_BASE}/realms/{_REALM}/protocol/openid-connect/userinfo"
 
@@ -49,7 +52,7 @@ class CustomSsoSecurityManager(SupersetSecurityManager):
                 if blob:
                     cfg = OidcTenantConfig.from_session_blob(blob)
                     role_claim = cfg.role_claim or role_claim
-                    internal = (cfg.api_base_url or _INTERNAL_BASE).rstrip("/")
+                    internal = normalize_keycloak_base(cfg.api_base_url or _INTERNAL_BASE)
                     userinfo_url = (
                         f"{internal}/realms/{cfg.realm}/protocol/openid-connect/userinfo"
                     )

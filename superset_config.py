@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from celery.schedules import crontab
 from flask_appbuilder.security.manager import AUTH_OAUTH
-from keycloak_oidc_dynamic import dynamic_enabled
+from keycloak_oidc_dynamic import dynamic_enabled, normalize_keycloak_base
 from custom_sso_security_manager import CustomSsoSecurityManager
 
 
@@ -130,7 +130,8 @@ THEME_DARK = {
 
 # Optional Keycloak OAuth integration.
 # KEYCLOAK_SERVER_URL: browser-facing URL (e.g., http://localhost:8080 for local dev)
-# KEYCLOAK_API_BASE_URL: internal URL for server-to-server calls (e.g., http://keycloak:8080)
+# KEYCLOAK_API_BASE_URL: internal URL for server-to-server calls (e.g., http://nginx:8080).
+# Both values may be host-root or full realm/OIDC URLs; they are normalized to host-root.
 #
 # Multi-realm / multi-tenant (bh-keycloak): ON by default (see keycloak_oidc_dynamic.py).
 # Set KEYCLOAK_DYNAMIC_TENANTS=false for a single fixed realm from KEYCLOAK_REALM only.
@@ -166,8 +167,8 @@ if _keycloak_static_ready or _keycloak_dynamic_ready:
     _client_secret = KEYCLOAK_CLIENT_SECRET or "unused"
 
     # Use internal URL for server-to-server calls, browser URL for authorize redirect
-    internal_base = (KEYCLOAK_API_BASE_URL or KEYCLOAK_SERVER_URL).rstrip("/")
-    browser_base = KEYCLOAK_SERVER_URL.rstrip("/")
+    internal_base = normalize_keycloak_base(KEYCLOAK_API_BASE_URL or KEYCLOAK_SERVER_URL)
+    browser_base = normalize_keycloak_base(KEYCLOAK_SERVER_URL)
 
     OAUTH_PROVIDERS = [
         {

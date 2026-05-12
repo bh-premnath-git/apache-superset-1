@@ -1,7 +1,7 @@
 # Superset Control Plane
 
-> **A GitOps-native, declarative orchestration engine for Apache Superset.**  
-> Assets are defined in Git (`assets/*.yaml`), reconciled into Superset via API, and continuously re-applied for convergence.
+> **A GitOps-native, declarative orchestration engine for Apache Superset.**
+> Authentication is provided by an external **`bh-keycloak`** identity provider; assets are defined in Git (`assets/*.yaml`) and continuously reconciled into Superset via API.
 
 ---
 
@@ -11,27 +11,42 @@
 
 - Docker + Docker Compose v2
 - Git LFS (for `seed/pg/HH.master.csv`)
-- Open ports: `8088` (Superset), `8080/8443` (Keycloak proxy), `5008` (MCP), `5433` (analytics Postgres)
+- The `bh-keycloak` stack running and reachable on a shared Docker network (default network name: `shared_network`)
+- Open host ports: `8088` (Superset), `5008` (MCP), `5433` (analytics Postgres)
+
+`bh-keycloak` already publishes its login UI on host `8080`/`8443`; this stack does not provide its own Keycloak.
 
 ### Steps
 
-1. Copy env file and set secrets:
+1. Ensure the external Docker network exists (created by `bh-keycloak` stack, or manually):
+
+```bash
+docker network create shared_network 2>/dev/null || true
+```
+
+2. Start `bh-keycloak` first (separate repo). Confirm it is healthy:
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}' | grep -E 'bh-keycloak|nginx'
+```
+
+3. Copy env file and set secrets:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Build and start:
+4. Build and start Superset:
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-3. Open services:
+5. Open services:
 
 - Superset: `http://localhost:8088`
-- Keycloak proxy: `http://localhost:8080`
 - MCP HTTP endpoint: `http://localhost:5008`
+- Login flow (forces tenant resolution): `http://localhost:8088/login/keycloak?tenant=master`
 
 ### Common operations
 
@@ -45,217 +60,135 @@ docker compose up -d superset-runtime-seed
 # Inspect init errors
 docker compose logs superset-init --tail 200
 
+# Tail Superset web logs
+docker compose logs -f superset
+
 # Stop stack
 docker compose down
 ```
 
 ---
 
-## Documentation Status (Updated 2026-04-28)
+## External Identity (`bh-keycloak`)
 
-- This README reflects the **current repository state** (files/directories/services verified).
-- `wiki/` is now fully populated with architecture, runtime, research, and asset documentation.
-- Official documentation references included for all external data sources (see `wiki/research/geojson-sources.md`).
+Superset uses external `bh-keycloak` as its only IdP. The Superset stack joins the external `${KEYCLOAK_EXTERNAL_NETWORK:-shared_network}` Docker network so it can reach Keycloak directly by container hostname.
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `KEYCLOAK_SERVER_URL` | Browser-facing URL used in the OAuth `authorize` redirect | `http://localhost:8080` |
+| `KEYCLOAK_API_BASE_URL` | Container-reachable URL for token / userinfo / JWKS | `http://nginx:8080` |
+| `KEYCLOAK_REALM` | Realm name when not using dynamic tenants (or fallback) | `master` |
+| `KEYCLOAK_CLIENT_ID` | OIDC client ID configured in Keycloak | `bighammer-admin` |
+| `KEYCLOAK_CLIENT_SECRET` | Set only for confidential clients; ignored for public | `` |
+| `KEYCLOAK_REDIRECT_URI` | Optional explicit callback URL | `http://localhost:8088/oauth-authorized/keycloak` |
+| `KEYCLOAK_ROLE_CLAIM` | Token claim that carries Superset role keys | `role_keys` |
+| `KEYCLOAK_EXTERNAL_NETWORK` | External Docker network name to join | `shared_network` |
+| `KEYCLOAK_DYNAMIC_TENANTS` | Multi-realm per-tenant resolution (default on) | `true` |
+
+Both `KEYCLOAK_SERVER_URL` and `KEYCLOAK_API_BASE_URL` may be either host-root URLs or full realm/OIDC URLs — they are normalized by `keycloak_oidc_dynamic.normalize_keycloak_base()` so they cannot accidentally double-append `/realms/.../protocol/openid-connect`.
+
+### Keycloak client prerequisite
+
+In each realm Superset needs to log into, the OIDC client must include this redirect URI:
+
+```text
+http://localhost:8088/oauth-authorized/keycloak
+```
+
+The `bh-keycloak` setup script reads its allowed list from `KEYCLOAK_REDIRECT_URIS` in that repo's `.env`. Add `http://localhost:8088/*` there (or to the live client in the Keycloak Admin UI) before testing login.
+
+### Access policy
+
+`custom_sso_security_manager.CustomSsoSecurityManager._oauth_calculate_user_roles` intentionally grants **Superset `Admin`** to every Keycloak-authenticated user. This is by design for the current single-organization-per-tenant model; do not change it without an explicit roles design.
+
+See [wiki/runtime/identity-and-auth.md](wiki/runtime/identity-and-auth.md) for the full flow, sequence diagram, and per-tenant onboarding steps.
 
 ---
 
-## Architecture & Design Pattern Highlights
+## Architecture & Design Highlights
 
 - **Declarative desired state** in `assets/` (`Database`, `Dataset`, `Chart`, `Dashboard`, `Extension`).
 - **Dependency-aware reconciliation** via registry + topological ordering in `docker/scripts/seed_dashboard.py`.
 - **Idempotent updates** using find-or-create / put semantics against Superset REST APIs.
-- **Separation of concerns**:
-  - Runtime orchestration: `docker-compose.yml`
-  - Superset image customization: `Dockerfile`
-  - Reconcile logic: `docker/scripts/seed_dashboard.py`
-  - Data bootstrap: `seed/pg/*.sql`
-  - Asset declarations: `assets/**/*.yaml`
+- **External identity boundary** — no Keycloak runtime here; auth lives in `bh-keycloak`.
 - **Pluggability**:
-  - Viz plugin: statically compiled into SPA from `superset-plugins/`
-  - Extensions: `.supx` discovery from `extensions/bundles/` (development lifecycle in upstream)
+  - Viz plugins are statically compiled into the SPA from `superset-plugins/`.
+  - Extensions are discovered as `.supx` bundles under `extensions/bundles/` (upstream lifecycle: development).
+
+```mermaid
+flowchart LR
+    user[UserBrowser] --> superset[SupersetUI]
+    superset --> mcp[MCPServer]
+    superset --> meta[MetadataPostgres]
+    superset --> redis[Redis]
+    superset --> analytics[AnalyticsPostgres]
+    superset --> seed[RuntimeSeed]
+    superset -->|"redirect to login"| bhKc[bh_keycloak]
+    bhKc -->|"auth code"| superset
+    superset -->|"token / userinfo"| bhKc
+```
 
 ---
 
-## Table of Contents
-
-- [1. Why This Exists](#1-why-this-exists)
-- [2. Design Philosophy](#2-design-philosophy)
-- [3. System Architecture](#3-system-architecture)
-- [4. Core Engine Design](#4-core-engine-design)
-- [5. Superset Integration Layer](#5-superset-integration-layer)
-- [6. MCP Layer](#6-mcp-layer)
-- [7. Identity and Auth Layer](#7-identity-and-auth-layer)
-- [8. Asset Model](#8-asset-model)
-- [9. Runtime Modes](#9-runtime-modes)
-- [10. Current Project Structure (Verified)](#10-current-project-structure-verified)
-- [11. Reference Docs](#11-reference-docs)
-- [License](#license)
-
----
-
-## 1. Why This Exists
-
-Superset is strong as an analytics UI, but operating it across teams/environments becomes hard when assets are managed manually. This project treats analytics infrastructure like GitOps:
-
-- Git is source-of-truth
-- runtime state is reconciled from declarative YAML
-- drift is corrected through repeated idempotent applies
-
----
-
-## 2. Design Philosophy
-
-### 2.1 Principles
-
-| Principle | Meaning |
-|---|---|
-| Declarative over imperative | Assets are authored as YAML manifests. |
-| Idempotent by design | Re-running reconciliation converges safely. |
-| Dependency-aware ordering | Kinds apply in deterministic order. |
-| No static runtime IDs | IDs are discovered and resolved dynamically. |
-| Extensible architecture | Plugins/extensions/SSO/MCP are first-class. |
-
-### 2.2 Non-Goals
-
-- Replacing Superset internals
-- Storing secrets in source YAML
-- Coupling runtime to one platform only
-
----
-
-## 3. System Architecture
-
-### 3.1 Runtime services (`docker-compose.yml`)
+## Runtime Services (`docker-compose.yml`)
 
 - `superset` (web)
-- `superset-init` (one-shot DB migrate/init/admin creation)
+- `superset-init` (one-shot DB migrate / init / admin creation)
 - `celery-worker`, `celery-beat`
 - `metadata-db` (Superset Postgres)
 - `analytics-db` (seeded sample analytics DB)
 - `redis`
 - `mcp` (`superset mcp run`)
-- Keycloak path: `keycloak-db`, `keycloak`, `keycloak-nginx`, `keycloak-bootstrap`
-- Extension build path: `extension-builder`
-- Runtime reconciliation loop: `superset-runtime-seed`
+- `superset-runtime-seed` (continuous reconcile loop)
+- `extension-builder`, `extension-builder-home-shell` (one-shot `.supx` bundle builders)
 
-### 3.2 High-level flow
+External dependency (NOT in this compose): `bh-keycloak` stack on `shared_network`.
 
-1. `superset` image builds from `Dockerfile`.
-2. `superset-init` upgrades metadata DB and runs `superset init`.
-3. `superset` starts and serves UI/API.
-4. `superset-runtime-seed` runs reconcile loop from `assets/` into Superset API.
-5. Optional extension bundles (`.supx`) are auto-discovered and exported as env vars.
+### Deprecated (kept on disk, no longer wired)
 
----
+These are vestigial from the previous embedded-Keycloak setup. They are not referenced by the current `docker-compose.yml` and can be removed in a follow-up cleanup:
 
-## 4. Core Engine Design
-
-Implemented in `docker/scripts/seed_dashboard.py`.
-
-### 4.1 Asset loader
-
-- Recursively scans `assets/**/*.yaml`
-- Reads `apiVersion`, `kind`, `metadata.key`, `spec`
-
-### 4.2 Reconciler registry
-
-Current registered reconcilers:
-
-1. `DatabaseReconciler`
-2. `DatasetReconciler`
-3. `ChartReconciler`
-4. `DashboardReconciler`
-5. `PluginReconciler`
-6. `ExtensionReconciler`
-
-Execution order is dependency-sorted (topological).
-
-### 4.3 Runtime behavior
-
-- Health wait + login + CSRF bootstrap
-- Find-by-field matching for idempotent upserts
-- Partial failure handling through `SkipAsset` vs hard fail
-- Dashboard layout sync including native filters and cross-filters metadata
+- `docker/scripts/bootstrap_keycloak.py`
+- `docker/keycloak-nginx/`
 
 ---
 
-## 5. Superset Integration Layer
+## Identity & Auth (Summary)
 
-### 5.1 Static viz plugin integration
+- `AUTH_TYPE = AUTH_OAUTH` enabled in `superset_config.py` whenever Keycloak envs are present.
+- `CUSTOM_SECURITY_MANAGER = CustomSsoSecurityManager` (in `custom_sso_security_manager.py`).
+- `DynamicKeycloakAuthOAuthView` (in `keycloak_oidc_dynamic.py`) resolves the tenant per request and patches the OAuth client to use that tenant's realm/client.
+- All authenticated users receive Superset `Admin` (intentional).
 
-- Custom viz plugin source: `superset-plugins/plugin-chart-state-district-pies/`
-- Plugin is **compiled into SPA** during Docker build via `docker/frontend-build/register-plugin.mjs`
-- `FEATURE_FLAGS["DYNAMIC_PLUGINS"] = False` in `superset_config.py`
+Tenant resolver order (configurable via `KEYCLOAK_TENANT_RESOLVERS`):
 
-### 5.2 Extension integration
-
-- Extension source: `superset-extensions/dashboard-chatbot/`
-- Built bundle output: `extensions/bundles/*.supx`
-- Runtime discovery bridge: `docker/scripts/reconciler_entrypoint.sh`
-- Upstream extension lifecycle remains development-stage; API availability may vary.
-
-### 5.3 Dependency compatibility
-
-- Base image is Superset `6.1.0rc2` line.
-- Runtime Python deps in Dockerfile are pinned with `sqlalchemy<2.0,>=1.4` to stay compatible with Superset imports.
+1. `query`  — `?tenant=<key>`
+2. `header` — `X-Tenant-Key`
+3. `subdomain` — `<key>.<KEYCLOAK_TENANT_SUBDOMAIN_BASE_HOST>`
+4. `cookie` — `tenant_key`
+5. `fallback` — `KEYCLOAK_DEFAULT_TENANT_KEY` then `KEYCLOAK_REALM`
 
 ---
 
-## 6. MCP Layer
+## Asset Model
 
-- Service: `mcp` in `docker-compose.yml`
-- Command: `superset mcp run --host 0.0.0.0 --port ${MCP_PORT}`
-- Config in `superset_config.py`:
-  - `MCP_DEV_USERNAME`
-  - `MCP_AUTH_ENABLED`
-  - `MCP_JWT_*` settings
+| Kind | Source | Count |
+|---|---|---|
+| Database | `assets/databases/` | 1 |
+| Dataset | `assets/datasets/` | 9 |
+| Chart | `assets/charts/` | 2 |
+| Dashboard | `assets/dashboards/` | 1 |
+| Extension | `assets/extensions/` | 2 |
 
----
-
-## 7. Identity and Auth Layer
-
-- Optional Keycloak OAuth via `custom_sso_security_manager.py`
-- Core config in `superset_config.py`:
-  - `AUTH_TYPE = AUTH_OAUTH` (when Keycloak envs are set)
-  - role mapping via `AUTH_ROLES_MAPPING`
-  - `KEYCLOAK_ROLE_CLAIM` passthrough
+The reconciler in `docker/scripts/seed_dashboard.py` registers these reconciler kinds: `Database`, `Dataset`, `Chart`, `Dashboard`, `Plugin`, `Extension`. Execution order is dependency-sorted (topological).
 
 ---
 
-## 8. Asset Model
-
-### 8.1 Current declared assets
-
-- `assets/databases/`: 1
-- `assets/datasets/`: 8
-- `assets/charts/`: 10
-- `assets/dashboards/`: 1
-- `assets/extensions/`: 1
-
-### 8.2 Supported kinds in reconciler
-
-- `Database`
-- `Dataset`
-- `Chart`
-- `Dashboard`
-- `Plugin` (kept in engine for optional metadata DB path)
-- `Extension`
-
----
-
-## 9. Runtime Modes
-
-- **Bootstrap**: `superset-init` + `keycloak-bootstrap`
-- **Serve**: `superset`, `celery-worker`, `celery-beat`, `mcp`
-- **Reconcile**: `superset-runtime-seed` continuously applies YAML desired state
-
----
-
-## 10. Current Project Structure (Verified)
+## Repo Layout
 
 ```text
 apache-superset-1/
-├── assets/
+├── assets/                  # Declarative YAML manifests reconciled into Superset
 │   ├── charts/
 │   ├── dashboards/
 │   ├── databases/
@@ -263,182 +196,42 @@ apache-superset-1/
 │   └── extensions/
 ├── config/
 ├── docker/
-│   ├── assets/
-│   ├── frontend-build/
-│   ├── keycloak-nginx/
+│   ├── assets/              # Static branding files
+│   ├── frontend-build/      # SPA build helpers (plugin registration)
+│   ├── keycloak-nginx/      # DEPRECATED (was used by embedded Keycloak)
 │   └── scripts/
+│       ├── bootstrap.sh
+│       ├── bootstrap_keycloak.py    # DEPRECATED
+│       ├── init.sh
+│       ├── reconciler_entrypoint.sh
+│       └── seed_dashboard.py
 ├── env/
-├── extensions/
-│   └── bundles/
-├── seed/
-│   └── pg/
-├── superset-extensions/
-│   └── dashboard-chatbot/
-│       ├── backend/
-│       └── frontend/
-├── superset-plugins/
-│   └── plugin-chart-state-district-pies/
-│       ├── src/
-│       │   ├── components/
-│       │   ├── geo/
-│       │   ├── hooks/
-│       │   └── plugin/
-│       └── test/
-├── wiki/
-│   ├── architecture/
-│   ├── assets/
-│   │   ├── chart/
-│   │   ├── dashboard/
-│   │   ├── dataset/
-│   │   ├── extension/
-│   │   └── plugin/
-│   ├── reference/
-│   ├── research/
-│   ├── runtime/
-│   └── troubleshooting/
+├── extensions/bundles/      # Built .supx packages auto-discovered at runtime
+├── seed/pg/                 # Sample analytics DB seed SQL/CSV
+├── superset-extensions/     # Source for .supx extensions
+├── superset-plugins/        # Source for viz plugins compiled into SPA
+├── wiki/                    # Documentation
 ├── docker-compose.yml
 ├── Dockerfile
 ├── superset_config.py
 ├── custom_sso_security_manager.py
+├── keycloak_oidc_dynamic.py
 └── README.md
 ```
 
 ---
 
-### 10.1 Verified inventory snapshot
+## Documentation Map
 
-#### Root files
-
-- `.env`
-- `.env.example`
-- `.gitattributes`
-- `.gitignore`
-- `Dockerfile`
-- `docker-compose.yml`
-- `superset_config.py`
-- `custom_sso_security_manager.py`
-- `india-districts.geojson`
-- `README.md`
-
-#### Assets (`assets/`)
-
-- `assets/databases/analytics.yaml`
-- `assets/datasets/`
-  - `hh_master.yaml`
-  - `lca_district_segment_pie.yaml`
-  - `lca_mpce_by_segment.yaml`
-  - `lca_segment_distribution.yaml`
-  - `lca_segment_minor_bucket.yaml`
-  - `lca_state_district_segment.yaml`
-  - `lca_state_district_segment_geo.yaml`
-  - `lca_state_segment_distribution.yaml`
-- `assets/charts/district_pie_unified.yaml` — Unified India state choropleth + district pies
-- `assets/dashboards/household_survey.yaml`
-- `assets/extensions/chatbot_assistant.yaml`
-
-#### Docker (`docker/`)
-
-- `docker/assets/`
-  - `loader.gif`
-  - `logo.svg`
-  - `service-worker.js`
-- `docker/frontend-build/register-plugin.mjs`
-- `docker/keycloak-nginx/`
-  - `Dockerfile`
-  - `entrypoint.sh`
-  - `nginx.conf`
-- `docker/scripts/`
-  - `bootstrap.sh`
-  - `bootstrap_keycloak.py`
-  - `init.sh`
-  - `reconciler_entrypoint.sh`
-  - `scaffold_chatbot_extension.sh`
-  - `seed_dashboard.py`
-
-#### Data and env
-
-- `seed/pg/`
-  - `001_household_hh_master.sql`
-  - `002_lca_segment_views.sql`
-  - `003_district_centroids.sql`
-  - `005_mpce_by_segment.sql`
-  - `HH.master.csv`
-- `config/base.yaml`
-- `env/dev.yaml`, `env/staging.yaml`, `env/prod.yaml`
-
-#### Plugin and extension source
-
-- `superset-plugins/`
-  - `README.md` — plugins directory guide
-  - `plugin-chart-state-district-pies/`
-    - `ARCHITECTURE.md` — component structure and design
-    - `src/components/` — React components
-    - `src/geo/` — Geographic utilities
-    - `src/hooks/` — React hooks
-    - `src/plugin/` — Superset integration
-- `superset-extensions/`
-  - `README.md` — extensions directory guide
-  - `dashboard-chatbot/`
-    - `ARCHITECTURE.md` — extension structure and build
-    - `backend/` — Python backend
-    - `frontend/` — React frontend
-    - `extension.json` — Extension manifest
-    - `Dockerfile.builder` — Build configuration
-
-#### Wiki (`wiki/`)
-
-- `wiki/index.md` — wiki navigation and entry point
-- `wiki/overview.md` — orientation and update policy
-- `wiki/log.md` — changelog template
-- `wiki/architecture/README.md` — system architecture
-- `wiki/assets/`
-  - `README.md` — assets section index
-  - `db.analytics.md`
-  - `chart/chart.household.district_pie_unified.md`
-  - `dashboard/dashboard.household.survey.md`
-  - `dataset/dataset.household.district_segment_pie.md`
-  - `extension/extension.ext.my_org.dashboard_chatbot.md`
-  - `plugin/plugin.chart.state_district_pies.md`
-- `wiki/reference/docs-cross-reference.md` — documentation index
-- `wiki/research/`
-  - `plugin-development-guide.md` — detailed plugin architecture
-  - `extension-development-guide.md` — extension build workflow
-  - `plugins-vs-extensions.md`
-  - `state_district_pies-plugin.md`
-  - `dashboard-chatbot-extension.md`
-  - `geojson-sources.md` — India districts data sources with official references
-- `wiki/runtime/`
-  - `database-seeding.md`
-  - `seed-database.md` — complete seed reference
-- `wiki/troubleshooting/chart-visibility-in-ui.md`
-
----
-
-## 11. Reference Docs
-
-### Official Documentation
-
-- [Superset Docker Compose](https://superset.apache.org/docs/installation/docker-compose)
-- [Superset Configuration](https://superset.apache.org/docs/configuration/configuring-superset)
-- [Superset Database Configuration](https://superset.apache.org/docs/configuration/databases/)
-- [SQLAlchemy Engine URLs](https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls)
-- [PostgreSQL COPY](https://www.postgresql.org/docs/current/sql-copy.html)
-- [Git LFS](https://git-lfs.github.com/)
-
-### Data Sources (with official references)
-
-- [Census of India 2011](https://censusindia.gov.in/2011census/hlo/pca/pdfs) — Official demographic data
-- [Survey of India](https://www.surveyofindia.gov.in/) — National mapping agency
-- [NSSO Methodology](https://mospi.gov.in/national-sample-survey-office-nsso) — Household survey standards
-- [World Bank LSMS](https://www.worldbank.org/en/programs/lsms) — Living standards methodology
-
-### Community/Research Data
-
-- [udit-001/india-maps-data](https://github.com/udit-001/india-maps-data) — CC BY 2.5 IN
-- [Datameet Maps](https://github.com/datameet/maps) — ODbL
-- [geo2day.com/india](https://geo2day.com/asia/india.html) — Geographic reference
-
-See `wiki/research/geojson-sources.md` for complete licensing and attribution details.
+- [wiki/index.md](wiki/index.md) — top-level navigation
+- [wiki/overview.md](wiki/overview.md) — orientation
+- [wiki/architecture/README.md](wiki/architecture/README.md) — services, networks, dependency graph
+- [wiki/runtime/README.md](wiki/runtime/README.md) — runbook and operations
+- [wiki/runtime/identity-and-auth.md](wiki/runtime/identity-and-auth.md) — bh-keycloak integration details
+- [wiki/troubleshooting/README.md](wiki/troubleshooting/README.md) — common issues
+- [wiki/troubleshooting/keycloak-login.md](wiki/troubleshooting/keycloak-login.md) — login-specific failures
+- [wiki/reference/README.md](wiki/reference/README.md) — env var reference and links
+- [wiki/log.md](wiki/log.md) — change log
 
 ---
 

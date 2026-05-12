@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -32,6 +33,25 @@ logger = logging.getLogger(__name__)
 SESSION_KEY = "kc_oidc_ctx"
 
 _FALSEY = frozenset({"0", "false", "no", "off"})
+
+
+def normalize_keycloak_base(url: str | None) -> str:
+    """
+    Normalize Keycloak base URL to host/root form.
+
+    Accepts either:
+      - https://kc.example.com
+      - https://kc.example.com/realms/<realm>
+      - https://kc.example.com/realms/<realm>/protocol/openid-connect
+    and always returns:
+      - https://kc.example.com
+    """
+    base = (url or "").strip().rstrip("/")
+    if not base:
+        return ""
+    base = re.sub(r"/realms/[^/]+/protocol/openid-connect/?$", "", base)
+    base = re.sub(r"/realms/[^/]+/?$", "", base)
+    return base.rstrip("/")
 
 
 def dynamic_enabled() -> bool:
@@ -74,15 +94,13 @@ class OidcTenantConfig:
 
 
 def _global_browser_base() -> str:
-    return (os.getenv("KEYCLOAK_SERVER_URL") or "").rstrip("/")
+    return normalize_keycloak_base(os.getenv("KEYCLOAK_SERVER_URL"))
 
 
 def _global_internal_base() -> str:
-    return (
-        os.getenv("KEYCLOAK_API_BASE_URL")
-        or os.getenv("KEYCLOAK_SERVER_URL")
-        or ""
-    ).rstrip("/")
+    return normalize_keycloak_base(
+        os.getenv("KEYCLOAK_API_BASE_URL") or os.getenv("KEYCLOAK_SERVER_URL") or ""
+    )
 
 
 _registry_cache: dict[str, Any] = {"data": None, "mtime": 0.0, "loaded_at": 0.0}
@@ -274,8 +292,8 @@ def _tenant_required() -> bool:
 
 def apply_keycloak_remote_patch(remote: Any, cfg: OidcTenantConfig) -> None:
     """Patch Authlib Flask OAuth2 client in place for this realm/client."""
-    browser = (cfg.browser_base_url or _global_browser_base()).rstrip("/")
-    internal = (cfg.api_base_url or _global_internal_base()).rstrip("/")
+    browser = normalize_keycloak_base(cfg.browser_base_url or _global_browser_base())
+    internal = normalize_keycloak_base(cfg.api_base_url or _global_internal_base())
     if not browser or not internal:
         raise ValueError("KEYCLOAK_SERVER_URL (and API base) must be set")
     realm = cfg.realm

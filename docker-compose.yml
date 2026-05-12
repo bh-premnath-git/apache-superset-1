@@ -2,6 +2,9 @@
 networks:
   superset-net:
     driver: bridge
+  bh-keycloak-net:
+    external: true
+    name: ${KEYCLOAK_EXTERNAL_NETWORK:-shared_network}
 
 # ── Named volumes ─────────────────────────────────────────────────────────────
 volumes:
@@ -9,8 +12,6 @@ volumes:
   redis-data:
   analytics-db-data:
   superset-home:
-  keycloak-db-data:
-  keycloak-ssl:
 
 # ── Re-usable anchor: MCP-specific env (merged on top of *superset-env) ──────
 x-mcp-env: &mcp-env
@@ -55,25 +56,6 @@ x-superset-env: &superset-env
   PYTHONPATH:               /app/pythonpath
   SUPERSET_URL:             ${SUPERSET_URL:-http://superset:8088}
   SUPERSET_API_TIMEOUT:     ${SUPERSET_API_TIMEOUT:-120}
-
-x-keycloak-env: &keycloak-env
-  KEYCLOAK_ADMIN:                 ${KEYCLOAK_ADMIN:-admin}
-  KEYCLOAK_ADMIN_PASSWORD:        ${KEYCLOAK_ADMIN_PASSWORD:-password}
-  KC_DB:                          postgres
-  KC_DB_URL:                      jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB_NAME:-keycloak}
-  KC_DB_USERNAME:                 ${KEYCLOAK_DB_USER:-keycloak}
-  KC_DB_PASSWORD:                 ${KEYCLOAK_DB_PASS:-keycloak}
-  KC_PROXY_HEADERS:               xforwarded
-  KC_HTTP_ENABLED:                true
-  KC_HEALTH_ENABLED:              true
-  KC_HOSTNAME:                    http://${KEYCLOAK_HOSTNAME:-localhost}:8080
-  KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
-  KEYCLOAK_INTERNAL_URL:          http://keycloak:8080
-  KEYCLOAK_BOOTSTRAP_USERNAME:    ${KEYCLOAK_BOOTSTRAP_USERNAME:-superset-user}
-  KEYCLOAK_BOOTSTRAP_PASSWORD:    ${KEYCLOAK_BOOTSTRAP_PASSWORD:-superset123}
-  KEYCLOAK_BOOTSTRAP_EMAIL:       ${KEYCLOAK_BOOTSTRAP_EMAIL:-superset@example.com}
-  KEYCLOAK_BOOTSTRAP_ROLE:        ${KEYCLOAK_BOOTSTRAP_ROLE:-superset_admin}
-  KEYCLOAK_ROLE_CLAIM:            ${KEYCLOAK_ROLE_CLAIM:-role_keys}
 
 services:
 
@@ -155,86 +137,6 @@ services:
     networks:
       - superset-net
 
-  # ── Keycloak metadata DB ────────────────────────────────────────────────────
-  keycloak-db:
-    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
-    container_name: superset-keycloak-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER:     ${KEYCLOAK_DB_USER:-keycloak}
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASS:-keycloak}
-      POSTGRES_DB:       ${KEYCLOAK_DB_NAME:-keycloak}
-    volumes:
-      # Postgres 18+ requires mount at /var/lib/postgresql (not /data subdir)
-      - keycloak-db-data:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak} -d ${KEYCLOAK_DB_NAME:-keycloak}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - superset-net
-
-  # ── Keycloak ────────────────────────────────────────────────────────────────
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.6.1
-    container_name: superset-keycloak
-    restart: unless-stopped
-    depends_on:
-      keycloak-db:
-        condition: service_healthy
-    environment:
-      <<: *keycloak-env
-    command: ["start-dev"]
-    networks:
-      - superset-net
-
-  # ── Keycloak nginx proxy ────────────────────────────────────────────────────
-  keycloak-nginx:
-    build:
-      context: .
-      dockerfile: docker/keycloak-nginx/Dockerfile
-    container_name: superset-keycloak-nginx
-    restart: unless-stopped
-    depends_on:
-      keycloak:
-        condition: service_started
-    ports:
-      - "8080:8080"
-      - "8443:8443"
-    volumes:
-      - keycloak-ssl:/etc/nginx/ssl
-    networks:
-      - superset-net
-
-  # ── Keycloak bootstrap ──────────────────────────────────────────────────────
-  #
-  # All services below that need the Superset+plugin image reference
-  # ``apache-superset-1-superset:local`` (built once by the ``superset``
-  # service). Without this consolidation, ``docker compose build`` would
-  # treat each service as an independent bake target and run the same
-  # heavy frontend build in parallel — multiplexing buildx output until
-  # the bake driver bails with ``read |0: file already closed`` and
-  # swallows the real error text.
-  #
-  # ``pull_policy: never`` is required on every consumer of the local tag.
-  # Compose's default ``missing`` policy races the ``superset`` build by
-  # attempting a registry pull for the local-only tag at ``up`` time,
-  # producing ``pull access denied for apache-superset-1-superset``.
-  keycloak-bootstrap:
-    image: apache-superset-1-superset:local
-    pull_policy: never
-    container_name: superset-keycloak-bootstrap
-    restart: "no"
-    depends_on:
-      keycloak:
-        condition: service_started
-    environment:
-      <<: [*superset-env, *keycloak-env]
-    entrypoint: ["python", "/app/docker/scripts/bootstrap_keycloak.py"]
-    networks:
-      - superset-net
-
   # ── Superset web ───────────────────────────────────────────────────────────
   superset-init:
     image: apache-superset-1-superset:local
@@ -248,8 +150,6 @@ services:
         condition: service_healthy
       analytics-db:
         condition: service_healthy
-      keycloak-bootstrap:
-        condition: service_completed_successfully
     environment:
       <<: *superset-env
     entrypoint: ["/app/init.sh"]
@@ -261,6 +161,7 @@ services:
       - ./seed:/app/seed:ro
     networks:
       - superset-net
+      - bh-keycloak-net
 
   # ── Superset web ───────────────────────────────────────────────────────────
   #
@@ -300,6 +201,7 @@ services:
       start_period: 60s
     networks:
       - superset-net
+      - bh-keycloak-net
 
   # ── Celery worker ──────────────────────────────────────────────────────────
   celery-worker:
@@ -323,6 +225,7 @@ services:
       - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
     networks:
       - superset-net
+      - bh-keycloak-net
 
   # ── Celery beat (scheduled tasks) ─────────────────────────────────────────
   celery-beat:
@@ -346,6 +249,7 @@ services:
       - ./keycloak_oidc_dynamic.py:/app/pythonpath/keycloak_oidc_dynamic.py:ro
     networks:
       - superset-net
+      - bh-keycloak-net
 
   # ── Sample Analytics Postgres DB ───────────────────────────────────────────
   analytics-db:
@@ -423,6 +327,7 @@ services:
       start_period: 30s
     networks:
       - superset-net
+      - bh-keycloak-net
 
   # ── Runtime REST seeding ───────────────────────────────────────────────────
   superset-runtime-seed:
@@ -452,3 +357,4 @@ services:
       - ./extensions/bundles:/app/extensions:ro
     networks:
       - superset-net
+      - bh-keycloak-net

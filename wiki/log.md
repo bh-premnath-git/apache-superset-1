@@ -1,38 +1,37 @@
-# Wiki Change Log
+# Change Log
 
-## 2026-04-29
+Significant changes to the Superset Control Plane stack. Newest first.
 
-- `state_district_pies` plugin detail page now stacks Rural and Urban comparison tables vertically rather than rendering them side-by-side at wide widths.
-- Implemented Option B (rich per-segment metrics): when `metrics_datasource` is configured the detail page issues a runtime `POST /api/v1/chart/data` (via `SupersetClient`) scoped to the selected (state, district) and renders a wide grouped per-segment metrics table with colour-banded column headers (size / econ / digi / cap / wel). Defaults reproduce the SQL from the previously-deleted `rural_segment_comparison.yaml` so it works out of the box.
-- Added segment description modal: clicking any segment label (R1/R2/U1/...) on either detail table opens a plain overlay modal with title, summary, classification criteria, and suggested interventions. Content is operator-supplied JSON via the `segment_descriptions` control; missing codes render a stub note instead of breaking.
-- Both metric definitions and segment descriptions parse with safe fallbacks — invalid JSON cannot brick the chart.
-- New module surface: `src/data/buildMetricsQuery.ts`, `src/data/segmentDescriptions.ts`, `src/hooks/useDetailMetrics.ts`, `src/components/DetailMetricsTable.tsx`, `src/components/SegmentModal.tsx`. Updated `controlPanel.ts`, `transformProps.ts`, `types.ts`, `constants.ts`, `DistrictDetailView.tsx`, `SegmentComparisonTable.tsx`.
+---
 
-## 2026-04-28
+## 2026-05-12 — External `bh-keycloak` cutover
 
-- Initialized wiki content from current repository state.
-- Added architecture, runtime, troubleshooting, research, and asset pages.
-- Documented static plugin registration path and extension lifecycle caveats.
-- Refactored `state_district_pies` plugin: extracted `useDrillDown`, `useResolvedFeatureProps`, `data/normalize`, `data/splitWedges`, and `format.ts` so the orchestrator stays focused on layout. No behaviour change.
-- Redesigned the in-plugin district detail view as side-by-side rural/urban comparison tables with per-segment count, intra-section share, share-of-district, and proportional bar. Replaced hand-rolled stacked SVG bars.
-- Made rural/urban segment groups configurable via `rural_categories` and `urban_categories` control-panel fields (defaults remain `R1–R4` / `U1–U3`). Removed hard-coded regex from `transformProps`.
+Superset auth was migrated from an embedded Keycloak (in this compose project) to the external `bh-keycloak` stack.
 
-- Removed 9 unused chart assets from `assets/charts/` that were not referenced by `household_survey.yaml` dashboard:
-  - `district_helper_text.yaml`
-  - `district_segment_distribution_bar.yaml`
-  - `household_minor_structure.yaml`
-  - `mpce_by_segment.yaml`
-  - `rural_district_segments.yaml`
-  - `rural_segment_comparison.yaml`
-  - `segment_distribution_pie.yaml`
-  - `state_segment_distribution_bar.yaml`
-  - `urban_district_segments.yaml`
+### Changes
 
-## Template for future entries
+- Removed embedded Keycloak services from `docker-compose.yml`:
+  - `keycloak-db`, `keycloak`, `keycloak-nginx`, `keycloak-bootstrap`.
+  - Dropped `superset-init` dependency on `keycloak-bootstrap`.
+  - Removed `x-keycloak-env` anchor and Keycloak named volumes.
+- Added an external Docker network `bh-keycloak-net` mapped to `${KEYCLOAK_EXTERNAL_NETWORK:-shared_network}`.
+- Attached every Superset runtime service (`superset-init`, `superset`, `celery-worker`, `celery-beat`, `mcp`, `superset-runtime-seed`) to that external network.
+- Normalized Keycloak base URL handling via `keycloak_oidc_dynamic.normalize_keycloak_base()` so accidental `/realms/.../protocol/openid-connect` suffixes are tolerated.
+- Updated `.env.example`:
+  - `KEYCLOAK_API_BASE_URL=http://nginx:8080`
+  - `KEYCLOAK_EXTERNAL_NETWORK=shared_network`
+  - Removed embedded Keycloak DB/admin/bootstrap envs.
+- Updated docs (`README.md`, `wiki/`).
 
-```markdown
-## YYYY-MM-DD
-- What changed
-- Why it changed
-- Which files/features it affects
-```
+### Deferred / deprecated (not deleted)
+
+- `docker/scripts/bootstrap_keycloak.py`
+- `docker/keycloak-nginx/`
+
+These are vestigial and can be removed in a follow-up cleanup.
+
+### Operational impact
+
+- `bh-keycloak` must be running on the shared Docker network before Superset will accept logins.
+- Each tenant realm in `bh-keycloak` must list `http://localhost:8088/oauth-authorized/keycloak` in its OIDC client's Valid Redirect URIs.
+- All authenticated users still land as Superset `Admin` — no change to access policy.
