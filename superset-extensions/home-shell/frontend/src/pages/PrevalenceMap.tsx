@@ -424,6 +424,13 @@ export function PrevalenceMapView() {
   const [sector, setSector] = useState<'both' | 'urban' | 'rural'>('both');
   const [view, setView] = useState<'bar' | 'donut'>('bar');
   const [zoom, setZoom] = useState(1);
+  const districtDetail = useFetch(
+    () =>
+      drilledDistrict
+        ? api.districtDetail(selectedState, drilledDistrict)
+        : Promise.resolve(undefined),
+    [selectedState, drilledDistrict ?? ''],
+  );
 
   const allFeatures = geo.data?.features ?? [];
   const stateFeatures = useMemo(
@@ -467,6 +474,10 @@ export function PrevalenceMapView() {
   }, [visibleStates, stateRows, sector]);
 
   const fetchError = geo.error ?? stateSegments.error;
+  const chartSegments = drilledDistrict
+    ? (districtDetail.data?.segments ?? [])
+    : (stateRows[selectedState] ?? []);
+  const chartLabel = drilledDistrict ? `${drilledDistrict}, ${selectedState}` : selectedState;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -592,6 +603,27 @@ export function PrevalenceMapView() {
                   </option>
                 ))}
               </select>
+              {drilledDistrict && (
+                <button
+                  type="button"
+                  onClick={() => setDrilledDistrict(null)}
+                  style={{
+                    marginTop: 8,
+                    width: '100%',
+                    padding: '7px 10px',
+                    fontSize: 12,
+                    border: `1px solid ${ui.color.border}`,
+                    borderRadius: 6,
+                    background: ui.color.surfaceMuted,
+                    color: ui.color.text,
+                    cursor: 'pointer',
+                    fontFamily: ui.font,
+                    fontWeight: 600,
+                  }}
+                >
+                  Clear district drill
+                </button>
+              )}
             </div>
           </div>
 
@@ -836,14 +868,12 @@ export function PrevalenceMapView() {
             ) : view === 'bar' ? (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <ScaleAxis />
-                {visibleStates.map((s) => (
-                  <StackedBarRow
-                    key={s}
-                    state={s}
-                    segments={stateRows[s] ?? []}
-                    sector={sector}
-                  />
-                ))}
+                <StackedBarRow
+                  key={chartLabel}
+                  state={chartLabel}
+                  segments={chartSegments}
+                  sector={sector}
+                />
               </div>
             ) : (
               <div
@@ -853,14 +883,25 @@ export function PrevalenceMapView() {
                   gap: 8,
                 }}
               >
-                {visibleStates.map((s) => (
-                  <DonutChart
-                    key={s}
-                    state={s}
-                    segments={stateRows[s] ?? []}
-                    sector={sector}
-                  />
-                ))}
+                <DonutChart
+                  key={chartLabel}
+                  state={chartLabel}
+                  segments={chartSegments}
+                  sector={sector}
+                />
+              </div>
+            )}
+            {drilledDistrict && districtDetail.data && (
+              <div style={{ marginTop: 10, fontSize: 12, color: ui.color.textMuted, lineHeight: 1.6 }}>
+                <strong style={{ color: ui.color.text }}>District segmentation detail</strong>
+                <br />
+                Weighted households: {Math.round(districtDetail.data.weighted_households).toLocaleString('en-IN')}
+                <br />
+                Top 3 segments: {[...districtDetail.data.segments]
+                  .sort((a, b) => b.share_pct - a.share_pct)
+                  .slice(0, 3)
+                  .map((s) => `${s.segment} ${s.share_pct.toFixed(1)}%`)
+                  .join(' · ')}
               </div>
             )}
           </div>
